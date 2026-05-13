@@ -15,8 +15,8 @@ export function TopHeader() {
   useEffect(() => {
     const fetchNotifs = async () => {
       try {
-        const res = await api.get<any>("/notifications")
-        setNotifications(res.data || [])
+       const res = await api.get<any>("/notifications")
+        setNotifications(res.data?.notifications || res.data || [])
       } catch {
         // silent fail
       }

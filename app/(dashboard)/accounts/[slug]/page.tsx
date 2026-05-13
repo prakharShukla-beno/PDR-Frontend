@@ -1,30 +1,79 @@
 "use client"
 
+// ─────────────────────────────────────────────
+// Account Detail Page
+// APIs:
+//   GET /api/prospects/:id              → account data
+//   GET /api/interactions/prospect/:id  → interactions list (Activity tab)
+//   POST /api/interactions              → log new interaction
+//   POST /api/enrichment/:id            → AI enrich
+// ─────────────────────────────────────────────
+
 import { useEffect, useState } from "react"
-import { useParams, useRouter } from "next/navigation"
-import { ArrowLeft, Loader2, Sparkles, Plus } from "lucide-react"
+import { useParams } from "next/navigation"
+import Link from "next/link"
+import {
+  ArrowLeft, Users, Mail, MessageSquare, Sparkles,
+  Plus, Loader2, CheckCircle
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Progress } from "@/components/ui/progress"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import {
+  Dialog, DialogContent, DialogHeader,
+  DialogTitle, DialogFooter
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  Select, SelectContent, SelectItem,
+  SelectTrigger, SelectValue
+} from "@/components/ui/select"
 import { api } from "@/lib/api"
-import type { Prospect, Interaction, Enrichment } from "@/types"
+import type { Prospect, Interaction, InteractionType, InteractionOutcome } from "@/types"
+
+// ── Interaction types aur outcomes — backend enum se match ──
+const INTERACTION_TYPES: InteractionType[] = [
+  "Email", "Call", "Meeting", "LinkedIn DM", "Demo", "Follow-Up", "Event"
+]
+const INTERACTION_OUTCOMES: InteractionOutcome[] = [
+  "Positive", "Neutral", "Negative", "No Response"
+]
 
 export default function AccountDetailPage() {
   const { slug } = useParams()
-  const router = useRouter()
+  const id = Array.isArray(slug) ? slug[0] : slug
+
+  // ── Data state ──────────────────────────────
   const [prospect, setProspect] = useState<Prospect | null>(null)
   const [interactions, setInteractions] = useState<Interaction[]>([])
-  const [enrichment, setEnrichment] = useState<Enrichment | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+
+  // ── Enrich state ────────────────────────────
   const [isEnriching, setIsEnriching] = useState(false)
   const [enrichMsg, setEnrichMsg] = useState("")
 
+  // ── Log Interaction modal state ─────────────
+  const [showLogModal, setShowLogModal] = useState(false)
+  const [logType, setLogType] = useState<InteractionType>("Call")
+  const [logDate, setLogDate] = useState(new Date().toISOString().split("T")[0])
+  const [logNotes, setLogNotes] = useState("")
+  const [logOutcome, setLogOutcome] = useState<InteractionOutcome>("Positive")
+  const [isLogging, setIsLogging] = useState(false)
+  const [logMsg, setLogMsg] = useState("")
+
+  // ── GET prospect + interactions ─────────────
   useEffect(() => {
     const fetchAll = async () => {
+      if (!id) return
       try {
         const [prospectRes, interactionsRes] = await Promise.all([
-          api.get<any>(`/prospects/${slug}`),
-          api.get<any>(`/interactions/prospect/${slug}`),
+          api.get<any>(`/prospects/${id}`),
+          api.get<any>(`/interactions/prospect/${id}`),
         ])
         setProspect(prospectRes.data)
         setInteractions(interactionsRes.data || [])
@@ -34,21 +83,63 @@ export default function AccountDetailPage() {
         setIsLoading(false)
       }
     }
-    if (slug) fetchAll()
-  }, [slug])
+    fetchAll()
+  }, [id])
 
+  // ── POST /api/enrichment/:id ────────────────
   const handleEnrich = async () => {
     setIsEnriching(true)
     setEnrichMsg("")
     try {
-      const res = await api.post<any>(`/enrichment/${slug}`)
-      setEnrichment(res.data)
+      await api.post<any>(`/enrichment/${id}`)
       setEnrichMsg("✅ AI enrichment complete!")
-    } catch (err) {
+      // Prospect data refresh karo
+      const res = await api.get<any>(`/prospects/${id}`)
+      setProspect(res.data)
+    } catch {
       setEnrichMsg("❌ Enrichment fail ho gayi.")
     } finally {
       setIsEnriching(false)
     }
+  }
+
+  // ── POST /api/interactions ──────────────────
+  // Log Interaction form submit
+  const handleLogInteraction = async () => {
+    if (!logType || !logDate) return
+    setIsLogging(true)
+    setLogMsg("")
+    try {
+      await api.post("/interactions", {
+        prospectId: id,
+        type: logType,
+        interactedAt: new Date(logDate).toISOString(),
+        notes: logNotes,
+        outcome: logOutcome,
+      })
+      setLogMsg("✅ Interaction logged!")
+      // Interactions list refresh karo
+      const res = await api.get<any>(`/interactions/prospect/${id}`)
+      setInteractions(res.data || [])
+      // 1 second baad modal band karo
+      setTimeout(() => {
+        setShowLogModal(false)
+        setLogNotes("")
+        setLogMsg("")
+      }, 1000)
+    } catch {
+      setLogMsg("❌ Log nahi ho saka.")
+    } finally {
+      setIsLogging(false)
+    }
+  }
+
+  // ── Outcome badge color ─────────────────────
+  const getOutcomeColor = (outcome?: string) => {
+    if (outcome === "Positive") return "bg-green-100 text-green-700"
+    if (outcome === "Negative") return "bg-red-100 text-red-700"
+    if (outcome === "No Response") return "bg-gray-100 text-gray-600"
+    return "bg-yellow-100 text-yellow-700"
   }
 
   if (isLoading) {
@@ -63,192 +154,400 @@ export default function AccountDetailPage() {
     return (
       <div className="p-6">
         <p className="text-muted-foreground">Prospect nahi mila.</p>
-        <Button variant="outline" onClick={() => router.back()} className="mt-4">
-          Back
-        </Button>
+        <Link href="/accounts"><Button variant="outline" className="mt-4">Back</Button></Link>
       </div>
     )
   }
 
+  // Account naam ke initials
+  const initials = prospect.accountName?.slice(0, 2).toUpperCase() ?? "NA"
+
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => router.back()}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold">{prospect.accountName}</h1>
-          <p className="text-muted-foreground">{prospect.website}</p>
-        </div>
-        <Button
-          className="gap-2"
-          onClick={handleEnrich}
-          disabled={isEnriching}
-        >
-          {isEnriching ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Sparkles className="h-4 w-4" />
-          )}
-          Enrich with AI
-        </Button>
-      </div>
 
-      {enrichMsg && (
-        <div className="rounded-lg border px-4 py-2 text-sm">{enrichMsg}</div>
-      )}
+      {/* ── Back button ── */}
+      <Link href="/accounts" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+        <ArrowLeft className="h-4 w-4" />
+        Back to accounts
+      </Link>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left — Details */}
-        <div className="lg:col-span-2 space-y-4">
-          {/* Basic Info */}
-          <Card>
-            <CardContent className="p-4 space-y-3">
-              <h3 className="font-semibold">Account Details</h3>
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                {[
-                  { label: "Industry", value: prospect.primaryIndustry },
-                  { label: "Business Model", value: prospect.businessModel },
-                  { label: "Country", value: prospect.country },
-                  { label: "City", value: prospect.hqLocationCity },
-                  { label: "Revenue", value: prospect.annualRevenue },
-                  { label: "Employees", value: prospect.noOfEmployees },
-                  { label: "Sales Priority", value: prospect.salesPriority },
-                  { label: "CLV Ranking", value: prospect.clvRanking },
-                  { label: "Tech Fit Score", value: prospect.techFitScore },
-                  { label: "Intent Signal", value: prospect.intentSignal },
-                  { label: "Source", value: prospect.source },
-                ].map(({ label, value }) => (
-                  <div key={label}>
-                    <p className="text-muted-foreground">{label}</p>
-                    <p className="font-medium">{value ?? "—"}</p>
-                  </div>
-                ))}
+      {/* ── Account Header Card ── */}
+      <Card>
+        <CardContent className="p-6">
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-4">
+              <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-primary text-white text-2xl font-bold">
+                {initials}
               </div>
+              <div>
+                <div className="flex items-center gap-3">
+                  <h1 className="text-2xl font-bold">{prospect.accountName}</h1>
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-primary" />
+                    <span className="text-sm text-muted-foreground">
+                      {prospect.salesPriority === "P1" ? "Sales-Ready" : prospect.salesPriority ?? "Active"}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 text-muted-foreground mt-1">
+                  {prospect.website && <span className="text-sm">{prospect.website}</span>}
+                  {prospect.hqLocationCity && <><span>·</span><span className="text-sm">{prospect.hqLocationCity}, {prospect.country}</span></>}
+                </div>
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {prospect.primaryIndustry && <Badge variant="outline">{prospect.primaryIndustry}</Badge>}
+                  {prospect.noOfEmployees && <Badge variant="outline" className="flex items-center gap-1"><Users className="h-3 w-3" />{prospect.noOfEmployees}</Badge>}
+                  {prospect.annualRevenue && <Badge variant="outline">$ {prospect.annualRevenue}</Badge>}
+                  {prospect.source && <Badge variant="outline">Source: {prospect.source}</Badge>}
+                </div>
+              </div>
+            </div>
+
+            {/* ── Action buttons ── */}
+            <div className="flex items-center gap-3">
+              <Button variant="outline" className="gap-2">
+                <Users className="h-4 w-4" />Assign
+              </Button>
+              <Button variant="outline" className="gap-2">
+                <Mail className="h-4 w-4" />Email POC
+              </Button>
+              {/* Log Interaction button — modal kholega */}
+              <Button variant="outline" className="gap-2" onClick={() => setShowLogModal(true)}>
+                <Plus className="h-4 w-4" />Log Interaction
+              </Button>
+              <Button className="gap-2">
+                <MessageSquare className="h-4 w-4" />Add to Campaign
+              </Button>
+            </div>
+          </div>
+
+          {enrichMsg && <div className="mt-3 text-sm px-3 py-2 rounded-lg border">{enrichMsg}</div>}
+        </CardContent>
+      </Card>
+
+      {/* ── Main Content Grid ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        {/* ── Left — Tabs ── */}
+        <div className="lg:col-span-2 space-y-6">
+          <Tabs defaultValue="ai-insights">
+            <TabsList className="bg-muted/50 p-1">
+              <TabsTrigger value="ai-insights">AI Insights</TabsTrigger>
+              <TabsTrigger value="firmographics">Firmographics</TabsTrigger>
+              <TabsTrigger value="technographics">Technographics</TabsTrigger>
+              <TabsTrigger value="activity">
+                Activity
+                {interactions.length > 0 && (
+                  <span className="ml-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] text-white">
+                    {interactions.length}
+                  </span>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="sources">Sources</TabsTrigger>
+            </TabsList>
+
+            {/* AI Insights Tab */}
+            <TabsContent value="ai-insights" className="mt-4 space-y-6">
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="font-semibold">Buyer Intent Signals</h2>
+                    <Badge className="bg-primary text-white">
+                      <Sparkles className="h-3 w-3 mr-1" />
+                      AI {prospect.techFitScore ?? "—"}%
+                    </Badge>
+                  </div>
+                  {prospect.intentSignal ? (
+                    <div className="flex items-center justify-between p-3 border rounded-lg">
+                      <span>{prospect.intentSignal}</span>
+                      <Badge variant="outline">Source: {prospect.source ?? "—"}</Badge>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Koi intent signals nahi hain. AI Enrich karo.</p>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-4">
+                  <h2 className="font-semibold mb-4">Strategic Value</h2>
+                  <p className="text-sm text-muted-foreground">
+                    {prospect.strategicValue ?? "AI enrichment ke baad strategic value yahan dikhegi."}
+                  </p>
+                  {prospect.servicePitch && (
+                    <div className="mt-3 p-3 bg-muted/50 rounded-lg">
+                      <p className="text-xs text-muted-foreground mb-1">Service Pitch</p>
+                      <p className="text-sm">{prospect.servicePitch}</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Firmographics Tab */}
+            <TabsContent value="firmographics" className="mt-4">
+              <Card>
+                <CardContent className="p-4">
+                  <h2 className="font-semibold mb-4">Company Details</h2>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    {[
+                      { label: "Industry", value: prospect.primaryIndustry },
+                      { label: "Business Model", value: prospect.businessModel },
+                      { label: "Country", value: prospect.country },
+                      { label: "City", value: prospect.hqLocationCity },
+                      { label: "Annual Revenue", value: prospect.annualRevenue },
+                      { label: "Employees", value: prospect.noOfEmployees },
+                      { label: "CLV Ranking", value: prospect.clvRanking },
+                      { label: "Sales Priority", value: prospect.salesPriority },
+                    ].map(({ label, value }) => (
+                      <div key={label}>
+                        <p className="text-muted-foreground">{label}</p>
+                        <p className="font-medium">{value ?? "—"}</p>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Technographics Tab */}
+            <TabsContent value="technographics" className="mt-4">
+              <Card>
+                <CardContent className="p-4">
+                  <h2 className="font-semibold mb-4">Tech Stack</h2>
+                  {prospect.primaryTechStack && Array.isArray(prospect.primaryTechStack) && prospect.primaryTechStack.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {prospect.primaryTechStack.map((tech) => (
+                        <Badge key={tech} variant="outline">{tech}</Badge>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Tech stack data nahi hai. AI Enrich karo.</p>
+                  )}
+                  {prospect.techFitScore && (
+                    <div className="mt-4 space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Tech Fit Score</span>
+                        <span className="font-medium">{prospect.techFitScore}%</span>
+                      </div>
+                      <Progress value={prospect.techFitScore} className="h-2" />
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* ── Activity Tab — Interactions yahan hain ── */}
+            <TabsContent value="activity" className="mt-4">
+              <Card>
+                <CardContent className="p-0">
+                  <div className="flex items-center justify-between p-4 border-b">
+                    <h2 className="font-semibold">Interaction History ({interactions.length})</h2>
+                    {/* Log Interaction button — tab ke andar bhi ── */}
+                    <Button size="sm" className="gap-2" onClick={() => setShowLogModal(true)}>
+                      <Plus className="h-4 w-4" />Log Interaction
+                    </Button>
+                  </div>
+
+                  {interactions.length === 0 ? (
+                    <div className="p-8 text-center space-y-3">
+                      <p className="text-muted-foreground">Koi interactions nahi hain abhi.</p>
+                      <Button variant="outline" size="sm" className="gap-2" onClick={() => setShowLogModal(true)}>
+                        <Plus className="h-4 w-4" />First interaction log karo
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="divide-y">
+                      {interactions.map((interaction) => (
+                        <div key={interaction._id} className="p-4">
+                          <div className="flex items-start justify-between">
+                            <div className="flex items-center gap-3">
+                              {/* Interaction type badge */}
+                              <Badge variant="outline">{interaction.type}</Badge>
+                              {interaction.outcome && (
+                                <span className={`px-2 py-0.5 rounded text-xs font-medium ${getOutcomeColor(interaction.outcome)}`}>
+                                  {interaction.outcome}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(interaction.interactedAt).toLocaleDateString("en-IN", {
+                                day: "numeric", month: "short", year: "numeric"
+                              })}
+                            </span>
+                          </div>
+                          {interaction.notes && (
+                            <p className="mt-2 text-sm text-muted-foreground">{interaction.notes}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Sources Tab */}
+            <TabsContent value="sources" className="mt-4">
+              <Card>
+                <CardContent className="p-4">
+                  <h2 className="font-semibold mb-4">Data Sources</h2>
+                  <div className="p-3 border rounded-lg flex items-center justify-between">
+                    <span className="text-sm font-medium">{prospect.source ?? "Unknown"}</span>
+                    <Badge variant="secondary">Primary</Badge>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </div>
+
+        {/* ── Right Column ── */}
+        <div className="space-y-6">
+          {/* Lead Score */}
+          <Card>
+            <CardContent className="p-6 text-center">
+              <p className="text-sm text-muted-foreground uppercase tracking-wide mb-4">Lead Score</p>
+              <div className="flex items-center justify-center">
+                <div className="relative flex h-32 w-32 items-center justify-center rounded-full border-4 border-primary">
+                  <span className="text-4xl font-bold text-primary">
+                    {prospect.techFitScore ?? "—"}
+                  </span>
+                </div>
+              </div>
+              <p className="mt-4 text-sm">
+                Intent: <span className="font-medium">
+                  {prospect.techFitScore && prospect.techFitScore >= 80 ? "High" :
+                   prospect.techFitScore && prospect.techFitScore >= 60 ? "Medium" : "Low"}
+                </span>
+              </p>
             </CardContent>
           </Card>
 
-          {/* Contacts */}
+          {/* Primary Contact */}
           {prospect.contacts && prospect.contacts.length > 0 && (
             <Card>
-              <CardContent className="p-4 space-y-3">
-                <h3 className="font-semibold">Contacts ({prospect.contacts.length})</h3>
-                <div className="space-y-3">
-                  {prospect.contacts.map((contact, i) => (
-                    <div key={i} className="flex items-start justify-between border rounded-lg p-3">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="font-semibold">Right POC</h2>
+                  <Badge className="bg-primary text-white">
+                    <Sparkles className="h-3 w-3 mr-1" />AI
+                  </Badge>
+                </div>
+                {prospect.contacts.filter(c => c.isPrimary).slice(0, 1).map((contact, i) => (
+                  <div key={i}>
+                    <div className="flex items-center gap-3 mb-3">
+                      <Avatar className="h-10 w-10">
+                        <AvatarFallback className="bg-primary text-white">
+                          {contact.name?.slice(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
                       <div>
                         <p className="font-medium">{contact.name}</p>
-                        <p className="text-sm text-muted-foreground">{contact.designation} — {contact.department}</p>
-                        <p className="text-sm text-muted-foreground">{contact.email}</p>
-                        {contact.phone && <p className="text-sm text-muted-foreground">{contact.phone}</p>}
-                      </div>
-                      <div className="flex gap-2">
-                        {contact.isPrimary && <Badge variant="secondary">Primary</Badge>}
-                        <Badge variant="outline">{contact.seniority}</Badge>
+                        <p className="text-sm text-muted-foreground">{contact.designation}</p>
                       </div>
                     </div>
-                  ))}
-                </div>
+                    {contact.email && (
+                      <Button variant="outline" className="w-full gap-2 text-xs">
+                        <Mail className="h-4 w-4" />{contact.email}
+                      </Button>
+                    )}
+                  </div>
+                ))}
               </CardContent>
             </Card>
           )}
 
-          {/* Interactions */}
+          {/* AI Enrich button */}
           <Card>
-            <CardContent className="p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold">Interactions ({interactions.length})</h3>
-              </div>
-              {interactions.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Koi interactions nahi hain abhi.</p>
-              ) : (
-                <div className="space-y-2">
-                  {interactions.map((interaction) => (
-                    <div key={interaction._id} className="border rounded-lg p-3 text-sm">
-                      <div className="flex items-center justify-between">
-                        <Badge variant="outline">{interaction.type}</Badge>
-                        <span className="text-muted-foreground text-xs">
-                          {new Date(interaction.interactedAt).toLocaleDateString()}
-                        </span>
-                      </div>
-                      {interaction.notes && (
-                        <p className="mt-2 text-muted-foreground">{interaction.notes}</p>
-                      )}
-                      {interaction.outcome && (
-                        <Badge
-                          className="mt-1"
-                          variant={interaction.outcome === "Positive" ? "default" : "secondary"}
-                        >
-                          {interaction.outcome}
-                        </Badge>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Right — AI Enrichment */}
-        <div className="space-y-4">
-          <Card>
-            <CardContent className="p-4 space-y-3">
-              <h3 className="font-semibold flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-primary" />
-                AI Enrichment
-              </h3>
-              {enrichment ? (
-                <div className="space-y-3 text-sm">
-                  <div>
-                    <p className="text-muted-foreground">Priority Score</p>
-                    <p className="font-bold text-2xl">{enrichment.priorityScore ?? "—"}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Strategic Category</p>
-                    <Badge>{enrichment.strategicCategory}</Badge>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">ICP Match</p>
-                    <Badge variant={enrichment.icpMatch ? "default" : "secondary"}>
-                      {enrichment.icpMatch ? "Yes" : "No"}
-                    </Badge>
-                  </div>
-                  {enrichment.techStack && enrichment.techStack.length > 0 && (
-                    <div>
-                      <p className="text-muted-foreground mb-1">Tech Stack</p>
-                      <div className="flex flex-wrap gap-1">
-                        {enrichment.techStack.map((tech) => (
-                          <Badge key={tech} variant="outline" className="text-xs">{tech}</Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {enrichment.intentSignals && enrichment.intentSignals.length > 0 && (
-                    <div>
-                      <p className="text-muted-foreground mb-1">Intent Signals</p>
-                      <div className="flex flex-wrap gap-1">
-                        {enrichment.intentSignals.map((signal) => (
-                          <Badge key={signal} variant="secondary" className="text-xs">{signal}</Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-sm text-muted-foreground space-y-2">
-                  <p>Abhi tak enrichment nahi ki gayi.</p>
-                  <Button size="sm" className="gap-2 w-full" onClick={handleEnrich} disabled={isEnriching}>
-                    <Sparkles className="h-3 w-3" />
-                    Enrich Now
-                  </Button>
-                </div>
-              )}
+            <CardContent className="p-4">
+              <h2 className="font-semibold mb-3 flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-primary" />AI Enrichment
+              </h2>
+              <p className="text-sm text-muted-foreground mb-3">
+                AI se prospect ko enrich karo — tech stack, intent signals, strategic value.
+              </p>
+              <Button className="w-full gap-2" onClick={handleEnrich} disabled={isEnriching}>
+                {isEnriching
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <Sparkles className="h-4 w-4" />
+                }
+                {isEnriching ? "Enriching..." : "Enrich with AI"}
+              </Button>
             </CardContent>
           </Card>
         </div>
       </div>
+
+      {/* ── Log Interaction Modal ── */}
+      <Dialog open={showLogModal} onOpenChange={setShowLogModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Log Interaction</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Type */}
+            <div className="space-y-2">
+              <Label>Interaction Type *</Label>
+              <Select value={logType} onValueChange={(v) => setLogType(v as InteractionType)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {INTERACTION_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Date */}
+            <div className="space-y-2">
+              <Label>Date *</Label>
+              <Input
+                type="date"
+                value={logDate}
+                onChange={(e) => setLogDate(e.target.value)}
+              />
+            </div>
+
+            {/* Outcome */}
+            <div className="space-y-2">
+              <Label>Outcome</Label>
+              <Select value={logOutcome} onValueChange={(v) => setLogOutcome(v as InteractionOutcome)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {INTERACTION_OUTCOMES.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Notes */}
+            <div className="space-y-2">
+              <Label>Notes</Label>
+              <Textarea
+                placeholder="Kya hua is interaction mein..."
+                value={logNotes}
+                onChange={(e) => setLogNotes(e.target.value)}
+                rows={3}
+              />
+            </div>
+
+            {/* Message */}
+            {logMsg && (
+              <div className="flex items-center gap-2 text-sm px-3 py-2 rounded-lg border">
+                {logMsg.startsWith("✅") && <CheckCircle className="h-4 w-4 text-green-600" />}
+                {logMsg}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowLogModal(false)}>Cancel</Button>
+            <Button onClick={handleLogInteraction} disabled={isLogging} className="gap-2">
+              {isLogging ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              {isLogging ? "Saving..." : "Save Interaction"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   )
 }
