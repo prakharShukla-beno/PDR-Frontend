@@ -1,47 +1,86 @@
+"use client"
+
+import { useEffect, useState } from "react"
 import Link from "next/link"
-import { TrendingUp, Users, Sparkles, DollarSign, ArrowUpRight } from "lucide-react"
+import { TrendingUp, Users, Sparkles, DollarSign, ArrowUpRight, Loader2 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-
-const statsCards = [
-  { title: "Sales-Ready", value: "6", subtext: "+3 today", icon: TrendingUp, iconBg: "bg-accent" },
-  { title: "My Accounts", value: "18", subtext: "12 active", icon: Users, iconBg: "bg-accent" },
-  { title: "AI Insights", value: "24", subtext: "new", icon: Sparkles, iconBg: "bg-accent" },
-  { title: "Pipeline Value", value: "$1.2M", subtext: "+8% MoM", icon: DollarSign, iconBg: "bg-accent" },
-]
-
-const salesReadyAccounts = [
-  { name: "Lumen Labs", type: "SaaS", score: 76, tags: ["Funding announced", "Visited pricing page"], status: "Sales-Ready" },
-  { name: "Northwind Cloud", type: "Fintech", score: 98, tags: ["Hiring for Data role", "Funding announced"], status: "Sales-Ready" },
-  { name: "Helios Pay", type: "E-commerce", score: 92, tags: ["Visited pricing page", "Published RFP"], status: "Sales-Ready" },
-  { name: "Quanta AI", type: "Logistics", score: 89, tags: ["Funding announced", "Visited pricing page"], status: "Sales-Ready" },
-  { name: "Mosaic Commerce", type: "Manufacturing", score: 99, tags: ["Hiring for Data role", "Published RFP"], status: "Sales-Ready" },
-  { name: "Kestrel Bank", type: "SaaS", score: 8, tags: ["Funding announced", "Visited pricing page"], status: "Sales-Ready" },
-]
-
-const topMovers = [
-  { name: "Mosaic Commerce", change: "+12" },
-  { name: "Cobalt Security", change: "+12" },
-  { name: "Loop Fitness", change: "+12" },
-  { name: "Umbra Print", change: "+12" },
-]
-
-const campaigns = [
-  { id: "CMP-01", name: "Q2 APAC Outbound", status: "Active", sent: 124, open: "68%", conv: 8 },
-  { id: "CMP-02", name: "Fintech CTO Warmup", status: "Active", sent: 87, open: "71%", conv: 12 },
-  { id: "CMP-03", name: "Healthtech Cloud Pitch", status: "Draft", sent: 0, open: "0%", conv: 0 },
-  { id: "CMP-04", name: "Hiring Signal Nurture", status: "Completed", sent: 211, open: "54%", conv: 6 },
-]
+import { api } from "@/lib/api"
+import { useAuth } from "@/context/AuthContext"
+import type { DashboardSummary, Prospect } from "@/types"
 
 export default function DashboardPage() {
+  const { user } = useAuth()
+  const [summary, setSummary] = useState<DashboardSummary | null>(null)
+  const [topProspects, setTopProspects] = useState<Prospect[]>([])
+  const [campaigns, setCampaigns] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchAll = async () => {
+      try {
+        const [summaryRes, prospectsRes, campaignsRes] = await Promise.all([
+          api.get<any>("/dashboard/summary"),
+          api.get<any>("/dashboard/top-prospects"),
+          api.get<any>("/campaigns"),
+        ])
+        setSummary(summaryRes.data)
+        setTopProspects(prospectsRes.data || [])
+        setCampaigns(campaignsRes.data || campaignsRes.campaigns || [])
+      } catch (err) {
+        console.error("Dashboard load error:", err)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchAll()
+  }, [])
+
+  const firstName = user?.name?.split(" ")[0] ?? "there"
+
+  const statsCards = [
+    {
+      title: "Total Prospects",
+      value: summary ? String(summary.totalProspects) : "—",
+      subtext: `${summary?.enrichmentCoverage ?? 0}% enriched`,
+      icon: TrendingUp,
+    },
+    {
+      title: "ICP Matches",
+      value: summary ? String(summary.icpMatchCount) : "—",
+      subtext: "matched to ICP",
+      icon: Users,
+    },
+    {
+      title: "Enriched",
+      value: summary ? String(summary.enrichedCount) : "—",
+      subtext: "AI enriched",
+      icon: Sparkles,
+    },
+    {
+      title: "Pending Duplicates",
+      value: summary ? String(summary.pendingDuplicates) : "—",
+      subtext: "need review",
+      icon: DollarSign,
+    },
+  ]
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm text-muted-foreground uppercase tracking-wide">Sales Rep - Dashboard</p>
-          <h1 className="text-2xl font-bold text-foreground">Good morning, Rajat</h1>
+          <h1 className="text-2xl font-bold text-foreground">Good morning, {firstName}</h1>
           <p className="text-muted-foreground">Here&apos;s what&apos;s happening across your prospect workspace.</p>
         </div>
         <div className="flex gap-3">
@@ -63,7 +102,7 @@ export default function DashboardPage() {
                 <p className="text-2xl font-bold">{stat.value}</p>
                 <p className="text-xs text-muted-foreground">{stat.subtext}</p>
               </div>
-              <div className={`p-2 rounded-lg ${stat.iconBg}`}>
+              <div className="p-2 rounded-lg bg-accent">
                 <stat.icon className="h-5 w-5 text-primary" />
               </div>
             </CardContent>
@@ -71,9 +110,9 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* Main Content Grid */}
+      {/* Main Content */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Sales-Ready Accounts */}
+        {/* Top Prospects */}
         <div className="lg:col-span-2">
           <Card>
             <CardContent className="p-0">
@@ -87,120 +126,108 @@ export default function DashboardPage() {
                 </Link>
               </div>
               <div className="divide-y">
-                {salesReadyAccounts.map((account) => (
-                  <Link 
-                    key={account.name} 
-                    href={`/accounts/${encodeURIComponent(account.name.toLowerCase().replace(/\s+/g, "-"))}`}
-                    className="flex items-center gap-4 p-4 hover:bg-muted/50 transition-colors"
-                  >
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-white text-sm font-medium">
-                      {account.score}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{account.name}</span>
-                        <span className="text-sm text-muted-foreground">{account.type}</span>
+                {topProspects.length === 0 ? (
+                  <div className="p-8 text-center text-muted-foreground">
+                    Koi prospects nahi mile. Pehle data import karo.
+                  </div>
+                ) : (
+                  topProspects.map((prospect) => (
+                    <Link
+                      key={prospect._id}
+                      href={`/accounts/${prospect._id}`}
+                      className="flex items-center gap-4 p-4 hover:bg-muted/50 transition-colors"
+                    >
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-white text-sm font-medium">
+                        {prospect.techFitScore ?? "—"}
                       </div>
-                      <div className="flex flex-wrap gap-2 mt-1">
-                        {account.tags.map((tag) => (
-                          <Badge key={tag} variant="secondary" className="text-xs bg-accent text-accent-foreground">
-                            {tag}
-                          </Badge>
-                        ))}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{prospect.accountName}</span>
+                          <span className="text-xs text-muted-foreground">{prospect.primaryIndustry}</span>
+                        </div>
+                        <div className="flex gap-2 mt-1">
+                          {prospect.intentSignal && (
+                            <Badge variant="secondary" className="text-xs">
+                              {prospect.intentSignal}
+                            </Badge>
+                          )}
+                          {prospect.salesPriority && (
+                            <Badge variant="outline" className="text-xs">
+                              {prospect.salesPriority}
+                            </Badge>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="h-2 w-2 rounded-full bg-primary" />
-                      <span className="text-sm text-muted-foreground">{account.status}</span>
-                    </div>
-                  </Link>
-                ))}
+                      <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50">
+                        Sales-Ready
+                      </Badge>
+                    </Link>
+                  ))
+                )}
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* AI Insight + Top Movers */}
+        {/* Right Side */}
         <div className="space-y-6">
-          {/* AI Insight of the Day */}
+          {/* Summary Stats */}
           <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="font-semibold">AI Insight of the Day</h2>
-                <Badge className="bg-primary text-white">
-                  <Sparkles className="h-3 w-3 mr-1" /> AI 92%
-                </Badge>
-              </div>
-              <div className="bg-primary rounded-lg p-4 text-white space-y-3">
-                <p className="text-sm text-primary-foreground/80">Trend detected</p>
-                <p className="font-semibold">7 Fintech accounts in APAC just announced Series B funding.</p>
-                <p className="text-sm text-primary-foreground/80">Strong signal for outbound — historically converts 3.2x better.</p>
-                <Button variant="secondary" size="sm" className="mt-2">
-                  Review accounts
-                </Button>
+            <CardContent className="p-4 space-y-3">
+              <h3 className="font-semibold">Quick Stats</h3>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Total Interactions</span>
+                  <span className="font-medium">{summary?.totalInteractions ?? 0}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Duplicate Count</span>
+                  <span className="font-medium">{summary?.duplicateCount ?? 0}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Enrichment Coverage</span>
+                  <span className="font-medium">{summary?.enrichmentCoverage ?? 0}%</span>
+                </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Top Movers */}
+          {/* Campaigns */}
           <Card>
-            <CardContent className="p-4">
-              <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-4">Top Movers This Week</h3>
-              <div className="space-y-3">
-                {topMovers.map((mover) => (
-                  <div key={mover.name} className="flex items-center justify-between">
-                    <span className="text-sm">{mover.name}</span>
-                    <span className="text-sm font-medium text-primary">{mover.change}</span>
-                  </div>
-                ))}
+            <CardContent className="p-0">
+              <div className="p-4 border-b">
+                <h3 className="font-semibold">Campaigns</h3>
+              </div>
+              <div className="divide-y">
+                {campaigns.length === 0 ? (
+                  <div className="p-4 text-sm text-muted-foreground">Koi campaigns nahi hain.</div>
+                ) : (
+                  campaigns.slice(0, 4).map((campaign) => (
+                    <div key={campaign._id} className="flex items-center justify-between p-3">
+                      <div>
+                        <p className="text-sm font-medium">{campaign.name}</p>
+                        <p className="text-xs text-muted-foreground">{campaign.status}</p>
+                      </div>
+                      <Badge
+                        variant={
+                          campaign.status === "active"
+                            ? "default"
+                            : campaign.status === "completed"
+                            ? "secondary"
+                            : "outline"
+                        }
+                        className="text-xs"
+                      >
+                        {campaign.status}
+                      </Badge>
+                    </div>
+                  ))
+                )}
               </div>
             </CardContent>
           </Card>
         </div>
       </div>
-
-      {/* Active Campaigns */}
-      <Card>
-        <CardContent className="p-0">
-          <div className="flex items-center justify-between p-4 border-b">
-            <h2 className="font-semibold">Active Campaigns</h2>
-            <Link href="/campaigns" className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-              All campaigns <ArrowUpRight className="h-4 w-4" />
-            </Link>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 divide-y md:divide-y-0 md:divide-x">
-            {campaigns.map((campaign) => (
-              <div key={campaign.id} className="p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs text-muted-foreground font-mono">{campaign.id}</span>
-                  <div className="flex items-center gap-1.5">
-                    <span className={`h-2 w-2 rounded-full ${
-                      campaign.status === "Active" ? "bg-primary" : 
-                      campaign.status === "Draft" ? "bg-orange-400" : "bg-muted-foreground"
-                    }`} />
-                    <span className="text-xs text-muted-foreground">{campaign.status}</span>
-                  </div>
-                </div>
-                <p className="font-medium mb-3">{campaign.name}</p>
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  <div>
-                    <p className="text-xs text-muted-foreground">Sent</p>
-                    <p className="font-semibold">{campaign.sent}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Open</p>
-                    <p className="font-semibold">{campaign.open}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Conv</p>
-                    <p className="font-semibold text-primary">{campaign.conv}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
     </div>
   )
 }

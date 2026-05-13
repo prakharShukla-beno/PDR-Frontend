@@ -1,235 +1,250 @@
-import Link from "next/link"
-import { ArrowLeft, Users, Mail, MessageSquare, Sparkles } from "lucide-react"
+"use client"
+
+import { useEffect, useState } from "react"
+import { useParams, useRouter } from "next/navigation"
+import { ArrowLeft, Loader2, Sparkles, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Progress } from "@/components/ui/progress"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Card, CardContent } from "@/components/ui/card"
+import { api } from "@/lib/api"
+import type { Prospect, Interaction, Enrichment } from "@/types"
 
-const intentSignals = [
-  { signal: "Hiring for Data role", source: "Apollo" },
-  { signal: "Published RFP", source: "Apollo" },
-  { signal: "New CTO appointed", source: "Apollo" },
-]
+export default function AccountDetailPage() {
+  const { slug } = useParams()
+  const router = useRouter()
+  const [prospect, setProspect] = useState<Prospect | null>(null)
+  const [interactions, setInteractions] = useState<Interaction[]>([])
+  const [enrichment, setEnrichment] = useState<Enrichment | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isEnriching, setIsEnriching] = useState(false)
+  const [enrichMsg, setEnrichMsg] = useState("")
 
-const scoreBreakdown = [
-  { label: "Icp Match", value: 87 },
-  { label: "Intent Match", value: 66 },
-  { label: "Tech Match", value: 99 },
-  { label: "Recency Match", value: 58 },
-]
+  useEffect(() => {
+    const fetchAll = async () => {
+      try {
+        const [prospectRes, interactionsRes] = await Promise.all([
+          api.get<any>(`/prospects/${slug}`),
+          api.get<any>(`/interactions/prospect/${slug}`),
+        ])
+        setProspect(prospectRes.data)
+        setInteractions(interactionsRes.data || [])
+      } catch (err) {
+        console.error("Account detail error:", err)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    if (slug) fetchAll()
+  }, [slug])
 
-const recommendedActions = [
-  "Send personalized intro email",
-  "Add to \"Series B Fintech\" segment",
-  "Schedule discovery call",
-]
+  const handleEnrich = async () => {
+    setIsEnriching(true)
+    setEnrichMsg("")
+    try {
+      const res = await api.post<any>(`/enrichment/${slug}`)
+      setEnrichment(res.data)
+      setEnrichMsg("✅ AI enrichment complete!")
+    } catch (err) {
+      setEnrichMsg("❌ Enrichment fail ho gayi.")
+    } finally {
+      setIsEnriching(false)
+    }
+  }
 
-export default async function AccountDetailPage({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params
-  const accountName = slug.split("-").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ")
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  if (!prospect) {
+    return (
+      <div className="p-6">
+        <p className="text-muted-foreground">Prospect nahi mila.</p>
+        <Button variant="outline" onClick={() => router.back()} className="mt-4">
+          Back
+        </Button>
+      </div>
+    )
+  }
 
   return (
     <div className="p-6 space-y-6">
-      {/* Back Button */}
-      <Link href="/accounts" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="h-4 w-4" />
-        Back to accounts
-      </Link>
-
-      {/* Account Header */}
-      <Card>
-        <CardContent className="p-6">
-          <div className="flex items-start justify-between">
-            <div className="flex items-center gap-4">
-              <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-primary text-white text-2xl font-bold">
-                M
-              </div>
-              <div>
-                <div className="flex items-center gap-3">
-                  <h1 className="text-2xl font-bold">{accountName}</h1>
-                  <div className="flex items-center gap-1.5">
-                    <span className="h-2 w-2 rounded-full bg-primary" />
-                    <span className="text-sm text-muted-foreground">Sales-Ready</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 text-muted-foreground mt-1">
-                  <span className="text-sm">mosaiccommerce.com</span>
-                  <span>·</span>
-                  <span className="text-sm">Sydney, Australia</span>
-                </div>
-                <div className="flex flex-wrap gap-2 mt-3">
-                  <Badge variant="outline">Manufacturing</Badge>
-                  <Badge variant="outline" className="flex items-center gap-1">
-                    <Users className="h-3 w-3" /> 9,488
-                  </Badge>
-                  <Badge variant="outline">$ $478M</Badge>
-                  <Badge variant="outline">Source: Apollo</Badge>
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <Button variant="outline" className="gap-2">
-                <Users className="h-4 w-4" />
-                Assign
-              </Button>
-              <Button variant="outline" className="gap-2">
-                <Mail className="h-4 w-4" />
-                Email POC
-              </Button>
-              <Button className="gap-2">
-                <MessageSquare className="h-4 w-4" />
-                Add to Campaign
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column - Tabs Content */}
-        <div className="lg:col-span-2 space-y-6">
-          <Tabs defaultValue="ai-insights">
-            <TabsList className="bg-muted/50 p-1">
-              <TabsTrigger value="ai-insights">AI Insights</TabsTrigger>
-              <TabsTrigger value="firmographics">Firmographics</TabsTrigger>
-              <TabsTrigger value="technographics">Technographics</TabsTrigger>
-              <TabsTrigger value="activity">Activity</TabsTrigger>
-              <TabsTrigger value="sources">Sources</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="ai-insights" className="mt-4 space-y-6">
-              {/* Buyer Intent Signals */}
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="font-semibold">Buyer Intent Signals</h2>
-                    <Badge className="bg-primary text-white">
-                      <Sparkles className="h-3 w-3 mr-1" /> AI 99%
-                    </Badge>
-                  </div>
-                  <div className="space-y-3">
-                    {intentSignals.map((item, i) => (
-                      <div key={i} className="flex items-center justify-between p-3 border rounded-lg">
-                        <span>{item.signal}</span>
-                        <Badge variant="outline">Source: {item.source}</Badge>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Why this score? */}
-              <Card>
-                <CardContent className="p-4">
-                  <h2 className="font-semibold mb-4">Why this score?</h2>
-                  <div className="space-y-4">
-                    {scoreBreakdown.map((item) => (
-                      <div key={item.label} className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-muted-foreground">{item.label}</span>
-                          <span className="text-sm font-medium">{item.value}%</span>
-                        </div>
-                        <Progress value={item.value} className="h-2" />
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="firmographics">
-              <Card>
-                <CardContent className="p-6">
-                  <p className="text-muted-foreground">Firmographic data will appear here.</p>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="technographics">
-              <Card>
-                <CardContent className="p-6">
-                  <p className="text-muted-foreground">Technology stack information will appear here.</p>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="activity">
-              <Card>
-                <CardContent className="p-6">
-                  <p className="text-muted-foreground">Activity timeline will appear here.</p>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="sources">
-              <Card>
-                <CardContent className="p-6">
-                  <p className="text-muted-foreground">Data sources will appear here.</p>
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
+      {/* Header */}
+      <div className="flex items-center gap-4">
+        <Button variant="ghost" size="icon" onClick={() => router.back()}>
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <div className="flex-1">
+          <h1 className="text-2xl font-bold">{prospect.accountName}</h1>
+          <p className="text-muted-foreground">{prospect.website}</p>
         </div>
+        <Button
+          className="gap-2"
+          onClick={handleEnrich}
+          disabled={isEnriching}
+        >
+          {isEnriching ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Sparkles className="h-4 w-4" />
+          )}
+          Enrich with AI
+        </Button>
+      </div>
 
-        {/* Right Column - Score & Actions */}
-        <div className="space-y-6">
-          {/* Lead Score */}
-          <Card>
-            <CardContent className="p-6 text-center">
-              <p className="text-sm text-muted-foreground uppercase tracking-wide mb-4">Lead Score</p>
-              <div className="flex items-center justify-center">
-                <div className="relative flex h-32 w-32 items-center justify-center rounded-full border-4 border-primary">
-                  <span className="text-4xl font-bold text-primary">99</span>
-                </div>
-              </div>
-              <p className="mt-4 text-sm">Intent: <span className="font-medium">High</span></p>
-            </CardContent>
-          </Card>
+      {enrichMsg && (
+        <div className="rounded-lg border px-4 py-2 text-sm">{enrichMsg}</div>
+      )}
 
-          {/* Right POC */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left — Details */}
+        <div className="lg:col-span-2 space-y-4">
+          {/* Basic Info */}
           <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="font-semibold">Right POC</h2>
-                <Badge className="bg-primary text-white">
-                  <Sparkles className="h-3 w-3 mr-1" /> AI 88%
-                </Badge>
-              </div>
-              <div className="flex items-center gap-3 mb-3">
-                <Avatar className="h-10 w-10">
-                  <AvatarFallback className="bg-primary text-white">AR</AvatarFallback>
-                </Avatar>
-                <div>
-                  <p className="font-medium">Anjali Rao</p>
-                  <p className="text-sm text-muted-foreground">VP Sales</p>
-                </div>
-              </div>
-              <Button variant="outline" className="w-full gap-2">
-                <Mail className="h-4 w-4" />
-                contact@mosaiccommerce.com
-              </Button>
-              <p className="text-xs text-muted-foreground mt-3">AI suggested based on title, recency & engagement.</p>
-            </CardContent>
-          </Card>
-
-          {/* Recommended Actions */}
-          <Card>
-            <CardContent className="p-4">
-              <h2 className="font-semibold mb-4">Recommended Actions</h2>
-              <div className="space-y-3">
-                {recommendedActions.map((action, i) => (
-                  <button 
-                    key={i} 
-                    className="flex items-center gap-2 w-full text-left text-sm hover:text-primary transition-colors"
-                  >
-                    <span className="text-primary">→</span>
-                    {action}
-                  </button>
+            <CardContent className="p-4 space-y-3">
+              <h3 className="font-semibold">Account Details</h3>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                {[
+                  { label: "Industry", value: prospect.primaryIndustry },
+                  { label: "Business Model", value: prospect.businessModel },
+                  { label: "Country", value: prospect.country },
+                  { label: "City", value: prospect.hqLocationCity },
+                  { label: "Revenue", value: prospect.annualRevenue },
+                  { label: "Employees", value: prospect.noOfEmployees },
+                  { label: "Sales Priority", value: prospect.salesPriority },
+                  { label: "CLV Ranking", value: prospect.clvRanking },
+                  { label: "Tech Fit Score", value: prospect.techFitScore },
+                  { label: "Intent Signal", value: prospect.intentSignal },
+                  { label: "Source", value: prospect.source },
+                ].map(({ label, value }) => (
+                  <div key={label}>
+                    <p className="text-muted-foreground">{label}</p>
+                    <p className="font-medium">{value ?? "—"}</p>
+                  </div>
                 ))}
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Contacts */}
+          {prospect.contacts && prospect.contacts.length > 0 && (
+            <Card>
+              <CardContent className="p-4 space-y-3">
+                <h3 className="font-semibold">Contacts ({prospect.contacts.length})</h3>
+                <div className="space-y-3">
+                  {prospect.contacts.map((contact, i) => (
+                    <div key={i} className="flex items-start justify-between border rounded-lg p-3">
+                      <div>
+                        <p className="font-medium">{contact.name}</p>
+                        <p className="text-sm text-muted-foreground">{contact.designation} — {contact.department}</p>
+                        <p className="text-sm text-muted-foreground">{contact.email}</p>
+                        {contact.phone && <p className="text-sm text-muted-foreground">{contact.phone}</p>}
+                      </div>
+                      <div className="flex gap-2">
+                        {contact.isPrimary && <Badge variant="secondary">Primary</Badge>}
+                        <Badge variant="outline">{contact.seniority}</Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Interactions */}
+          <Card>
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold">Interactions ({interactions.length})</h3>
+              </div>
+              {interactions.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Koi interactions nahi hain abhi.</p>
+              ) : (
+                <div className="space-y-2">
+                  {interactions.map((interaction) => (
+                    <div key={interaction._id} className="border rounded-lg p-3 text-sm">
+                      <div className="flex items-center justify-between">
+                        <Badge variant="outline">{interaction.type}</Badge>
+                        <span className="text-muted-foreground text-xs">
+                          {new Date(interaction.interactedAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                      {interaction.notes && (
+                        <p className="mt-2 text-muted-foreground">{interaction.notes}</p>
+                      )}
+                      {interaction.outcome && (
+                        <Badge
+                          className="mt-1"
+                          variant={interaction.outcome === "Positive" ? "default" : "secondary"}
+                        >
+                          {interaction.outcome}
+                        </Badge>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Right — AI Enrichment */}
+        <div className="space-y-4">
+          <Card>
+            <CardContent className="p-4 space-y-3">
+              <h3 className="font-semibold flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-primary" />
+                AI Enrichment
+              </h3>
+              {enrichment ? (
+                <div className="space-y-3 text-sm">
+                  <div>
+                    <p className="text-muted-foreground">Priority Score</p>
+                    <p className="font-bold text-2xl">{enrichment.priorityScore ?? "—"}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Strategic Category</p>
+                    <Badge>{enrichment.strategicCategory}</Badge>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">ICP Match</p>
+                    <Badge variant={enrichment.icpMatch ? "default" : "secondary"}>
+                      {enrichment.icpMatch ? "Yes" : "No"}
+                    </Badge>
+                  </div>
+                  {enrichment.techStack && enrichment.techStack.length > 0 && (
+                    <div>
+                      <p className="text-muted-foreground mb-1">Tech Stack</p>
+                      <div className="flex flex-wrap gap-1">
+                        {enrichment.techStack.map((tech) => (
+                          <Badge key={tech} variant="outline" className="text-xs">{tech}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {enrichment.intentSignals && enrichment.intentSignals.length > 0 && (
+                    <div>
+                      <p className="text-muted-foreground mb-1">Intent Signals</p>
+                      <div className="flex flex-wrap gap-1">
+                        {enrichment.intentSignals.map((signal) => (
+                          <Badge key={signal} variant="secondary" className="text-xs">{signal}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground space-y-2">
+                  <p>Abhi tak enrichment nahi ki gayi.</p>
+                  <Button size="sm" className="gap-2 w-full" onClick={handleEnrich} disabled={isEnriching}>
+                    <Sparkles className="h-3 w-3" />
+                    Enrich Now
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

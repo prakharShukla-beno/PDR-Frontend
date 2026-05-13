@@ -14,6 +14,7 @@ import {
   Copy,
   FileText,
   UserCog,
+  LogOut,
 } from "lucide-react"
 import {
   Sidebar,
@@ -28,6 +29,8 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Button } from "@/components/ui/button"
+import { useAuth } from "@/context/AuthContext"
 
 const workspaceItems = [
   { title: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
@@ -46,8 +49,22 @@ const adminItems = [
   { title: "Users & Roles", icon: UserCog, href: "/users-roles" },
 ]
 
+function getInitials(name: string): string {
+  return name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2)
+}
+
 export function AppSidebar() {
   const pathname = usePathname()
+  const { user, logout } = useAuth()
+
+  const displayName = user?.name ?? "User"
+  const displayEmail = user?.email ?? ""
+  const initials = getInitials(displayName)
 
   return (
     <Sidebar collapsible="icon">
@@ -116,12 +133,23 @@ export function AppSidebar() {
       <SidebarFooter className="p-4">
         <div className="flex items-center gap-3 group-data-[collapsible=icon]:justify-center">
           <Avatar className="h-8 w-8 bg-primary">
-            <AvatarFallback className="bg-primary text-white text-xs">RS</AvatarFallback>
+            <AvatarFallback className="bg-primary text-white text-xs">
+              {initials}
+            </AvatarFallback>
           </Avatar>
-          <div className="flex flex-col group-data-[collapsible=icon]:hidden">
-            <span className="text-sm font-medium text-white">Rajat Sharma</span>
-            <span className="text-xs text-white/70">Sales Rep</span>
+          <div className="flex flex-col flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
+            <span className="text-sm font-medium text-white truncate">{displayName}</span>
+            <span className="text-xs text-white/70 truncate">{displayEmail}</span>
           </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={logout}
+            className="h-7 w-7 text-white/70 hover:text-white hover:bg-white/10 group-data-[collapsible=icon]:hidden"
+            title="Logout"
+          >
+            <LogOut className="h-4 w-4" />
+          </Button>
         </div>
       </SidebarFooter>
     </Sidebar>
