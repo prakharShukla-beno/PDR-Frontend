@@ -4,7 +4,8 @@
 // Account Detail Page
 // APIs:
 //   GET /api/prospects/:id              → account data
-//   GET /api/interactions/prospect/:id  → interactions list (Activity tab)
+//   PUT /api/prospects/:id              → account update (Edit modal)
+//   GET /api/interactions/prospect/:id  → interactions list
 //   POST /api/interactions              → log new interaction
 //   POST /api/enrichment/:id            → AI enrich
 // ─────────────────────────────────────────────
@@ -14,7 +15,7 @@ import { useParams } from "next/navigation"
 import Link from "next/link"
 import {
   ArrowLeft, Users, Mail, MessageSquare, Sparkles,
-  Plus, Loader2, CheckCircle
+  Plus, Loader2, CheckCircle, Pencil
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -36,7 +37,6 @@ import {
 import { api } from "@/lib/api"
 import type { Prospect, Interaction, InteractionType, InteractionOutcome } from "@/types"
 
-// ── Interaction types aur outcomes — backend enum se match ──
 const INTERACTION_TYPES: InteractionType[] = [
   "Email", "Call", "Meeting", "LinkedIn DM", "Demo", "Follow-Up", "Event"
 ]
@@ -66,6 +66,18 @@ export default function AccountDetailPage() {
   const [isLogging, setIsLogging] = useState(false)
   const [logMsg, setLogMsg] = useState("")
 
+  // ── Edit modal state ────────────────────────
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveMsg, setSaveMsg] = useState("")
+  const [editData, setEditData] = useState({
+    salesPriority: "",
+    intentSignal: "",
+    clvRanking: "",
+    strategicValue: "",
+    servicePitch: "",
+  })
+
   // ── GET prospect + interactions ─────────────
   useEffect(() => {
     const fetchAll = async () => {
@@ -93,7 +105,6 @@ export default function AccountDetailPage() {
     try {
       await api.post<any>(`/enrichment/${id}`)
       setEnrichMsg("✅ AI enrichment complete!")
-      // Prospect data refresh karo
       const res = await api.get<any>(`/prospects/${id}`)
       setProspect(res.data)
     } catch {
@@ -103,8 +114,46 @@ export default function AccountDetailPage() {
     }
   }
 
+  // ── PUT /api/prospects/:id ──────────────────
+  // Edit modal open karo — existing data prefill
+  const handleEdit = () => {
+    if (!prospect) return
+    setEditData({
+      salesPriority: prospect.salesPriority ?? "",
+      intentSignal: prospect.intentSignal ?? "",
+      clvRanking: prospect.clvRanking ?? "",
+      strategicValue: prospect.strategicValue ?? "",
+      servicePitch: prospect.servicePitch ?? "",
+    })
+    setShowEditModal(true)
+  }
+
+  // Edit form save karo
+  const handleSaveEdit = async () => {
+    setIsSaving(true)
+    setSaveMsg("")
+    try {
+      const res = await api.put<any>(`/prospects/${id}`, {
+        salesPriority: editData.salesPriority || undefined,
+        intentSignal: editData.intentSignal || undefined,
+        clvRanking: editData.clvRanking || undefined,
+        strategicValue: editData.strategicValue || undefined,
+        servicePitch: editData.servicePitch || undefined,
+      })
+      setProspect(res.data)
+      setSaveMsg("✅ Saved!")
+      setTimeout(() => {
+        setShowEditModal(false)
+        setSaveMsg("")
+      }, 1000)
+    } catch {
+      setSaveMsg("❌ Save nahi ho saka.")
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   // ── POST /api/interactions ──────────────────
-  // Log Interaction form submit
   const handleLogInteraction = async () => {
     if (!logType || !logDate) return
     setIsLogging(true)
@@ -118,10 +167,8 @@ export default function AccountDetailPage() {
         outcome: logOutcome,
       })
       setLogMsg("✅ Interaction logged!")
-      // Interactions list refresh karo
       const res = await api.get<any>(`/interactions/prospect/${id}`)
       setInteractions(res.data || [])
-      // 1 second baad modal band karo
       setTimeout(() => {
         setShowLogModal(false)
         setLogNotes("")
@@ -159,7 +206,6 @@ export default function AccountDetailPage() {
     )
   }
 
-  // Account naam ke initials
   const initials = prospect.accountName?.slice(0, 2).toUpperCase() ?? "NA"
 
   return (
@@ -167,8 +213,7 @@ export default function AccountDetailPage() {
 
       {/* ── Back button ── */}
       <Link href="/accounts" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="h-4 w-4" />
-        Back to accounts
+        <ArrowLeft className="h-4 w-4" />Back to accounts
       </Link>
 
       {/* ── Account Header Card ── */}
@@ -185,7 +230,7 @@ export default function AccountDetailPage() {
                   <div className="flex items-center gap-1.5">
                     <span className="h-2 w-2 rounded-full bg-primary" />
                     <span className="text-sm text-muted-foreground">
-                      {prospect.salesPriority === "P1" ? "Sales-Ready" : prospect.salesPriority ?? "Active"}
+                      {prospect.salesPriority?.startsWith("P1") ? "Sales-Ready" : prospect.salesPriority ?? "Active"}
                     </span>
                   </div>
                 </div>
@@ -203,14 +248,18 @@ export default function AccountDetailPage() {
             </div>
 
             {/* ── Action buttons ── */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 flex-wrap justify-end">
               <Button variant="outline" className="gap-2">
                 <Users className="h-4 w-4" />Assign
               </Button>
               <Button variant="outline" className="gap-2">
                 <Mail className="h-4 w-4" />Email POC
               </Button>
-              {/* Log Interaction button — modal kholega */}
+              {/* Edit button — PUT API call karega */}
+              <Button variant="outline" className="gap-2" onClick={handleEdit}>
+                <Pencil className="h-4 w-4" />Edit
+              </Button>
+              {/* Log Interaction button */}
               <Button variant="outline" className="gap-2" onClick={() => setShowLogModal(true)}>
                 <Plus className="h-4 w-4" />Log Interaction
               </Button>
@@ -219,7 +268,6 @@ export default function AccountDetailPage() {
               </Button>
             </div>
           </div>
-
           {enrichMsg && <div className="mt-3 text-sm px-3 py-2 rounded-lg border">{enrichMsg}</div>}
         </CardContent>
       </Card>
@@ -252,8 +300,7 @@ export default function AccountDetailPage() {
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="font-semibold">Buyer Intent Signals</h2>
                     <Badge className="bg-primary text-white">
-                      <Sparkles className="h-3 w-3 mr-1" />
-                      AI {prospect.techFitScore ?? "—"}%
+                      <Sparkles className="h-3 w-3 mr-1" />AI {prospect.techFitScore ?? "—"}%
                     </Badge>
                   </div>
                   {prospect.intentSignal ? (
@@ -266,7 +313,6 @@ export default function AccountDetailPage() {
                   )}
                 </CardContent>
               </Card>
-
               <Card>
                 <CardContent className="p-4">
                   <h2 className="font-semibold mb-4">Strategic Value</h2>
@@ -298,6 +344,10 @@ export default function AccountDetailPage() {
                       { label: "Employees", value: prospect.noOfEmployees },
                       { label: "CLV Ranking", value: prospect.clvRanking },
                       { label: "Sales Priority", value: prospect.salesPriority },
+                      { label: "Financial Capacity", value: prospect.financialCapacity },
+                      { label: "Margin Potential", value: prospect.marginPotential },
+                      { label: "History Trigger", value: prospect.historyTrigger },
+                      { label: "Adoption Profile", value: prospect.techAdoptionProfile },
                     ].map(({ label, value }) => (
                       <div key={label}>
                         <p className="text-muted-foreground">{label}</p>
@@ -314,12 +364,17 @@ export default function AccountDetailPage() {
               <Card>
                 <CardContent className="p-4">
                   <h2 className="font-semibold mb-4">Tech Stack</h2>
-                  {prospect.primaryTechStack && Array.isArray(prospect.primaryTechStack) && prospect.primaryTechStack.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {prospect.primaryTechStack.map((tech) => (
-                        <Badge key={tech} variant="outline">{tech}</Badge>
-                      ))}
-                    </div>
+                  {/* primaryTechStack string ya array dono handle karo */}
+                  {prospect.primaryTechStack ? (
+                    Array.isArray(prospect.primaryTechStack) ? (
+                      <div className="flex flex-wrap gap-2">
+                        {prospect.primaryTechStack.map((tech) => (
+                          <Badge key={tech} variant="outline">{tech}</Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <Badge variant="outline">{prospect.primaryTechStack}</Badge>
+                    )
                   ) : (
                     <p className="text-sm text-muted-foreground">Tech stack data nahi hai. AI Enrich karo.</p>
                   )}
@@ -332,22 +387,26 @@ export default function AccountDetailPage() {
                       <Progress value={prospect.techFitScore} className="h-2" />
                     </div>
                   )}
+                  {prospect.infrastructureRisk && (
+                    <div className="mt-3 p-3 bg-red-50 rounded-lg">
+                      <p className="text-xs text-muted-foreground mb-1">Infrastructure Risk</p>
+                      <p className="text-sm font-medium text-red-700">{prospect.infrastructureRisk}</p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
 
-            {/* ── Activity Tab — Interactions yahan hain ── */}
+            {/* Activity Tab */}
             <TabsContent value="activity" className="mt-4">
               <Card>
                 <CardContent className="p-0">
                   <div className="flex items-center justify-between p-4 border-b">
                     <h2 className="font-semibold">Interaction History ({interactions.length})</h2>
-                    {/* Log Interaction button — tab ke andar bhi ── */}
                     <Button size="sm" className="gap-2" onClick={() => setShowLogModal(true)}>
                       <Plus className="h-4 w-4" />Log Interaction
                     </Button>
                   </div>
-
                   {interactions.length === 0 ? (
                     <div className="p-8 text-center space-y-3">
                       <p className="text-muted-foreground">Koi interactions nahi hain abhi.</p>
@@ -361,7 +420,6 @@ export default function AccountDetailPage() {
                         <div key={interaction._id} className="p-4">
                           <div className="flex items-start justify-between">
                             <div className="flex items-center gap-3">
-                              {/* Interaction type badge */}
                               <Badge variant="outline">{interaction.type}</Badge>
                               {interaction.outcome && (
                                 <span className={`px-2 py-0.5 rounded text-xs font-medium ${getOutcomeColor(interaction.outcome)}`}>
@@ -395,6 +453,13 @@ export default function AccountDetailPage() {
                     <span className="text-sm font-medium">{prospect.source ?? "Unknown"}</span>
                     <Badge variant="secondary">Primary</Badge>
                   </div>
+                  {prospect.importLogId && typeof prospect.importLogId === "object" && (
+                    <div className="mt-3 p-3 bg-muted/30 rounded-lg text-sm">
+                      <p className="text-muted-foreground">Import File</p>
+                      <p className="font-medium">{prospect.importLogId.fileName}</p>
+                      <Badge variant="outline" className="mt-1">{prospect.importLogId.status}</Badge>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -403,23 +468,20 @@ export default function AccountDetailPage() {
 
         {/* ── Right Column ── */}
         <div className="space-y-6">
+
           {/* Lead Score */}
           <Card>
             <CardContent className="p-6 text-center">
               <p className="text-sm text-muted-foreground uppercase tracking-wide mb-4">Lead Score</p>
               <div className="flex items-center justify-center">
                 <div className="relative flex h-32 w-32 items-center justify-center rounded-full border-4 border-primary">
-                  <span className="text-4xl font-bold text-primary">
-                    {prospect.techFitScore ?? "—"}
-                  </span>
+                  <span className="text-4xl font-bold text-primary">{prospect.techFitScore ?? "—"}</span>
                 </div>
               </div>
-              <p className="mt-4 text-sm">
-                Intent: <span className="font-medium">
-                  {prospect.techFitScore && prospect.techFitScore >= 80 ? "High" :
-                   prospect.techFitScore && prospect.techFitScore >= 60 ? "Medium" : "Low"}
-                </span>
-              </p>
+              <p className="mt-4 text-sm">Intent: <span className="font-medium">
+                {prospect.techFitScore && prospect.techFitScore >= 80 ? "High" :
+                 prospect.techFitScore && prospect.techFitScore >= 60 ? "Medium" : "Low"}
+              </span></p>
             </CardContent>
           </Card>
 
@@ -429,9 +491,7 @@ export default function AccountDetailPage() {
               <CardContent className="p-4">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="font-semibold">Right POC</h2>
-                  <Badge className="bg-primary text-white">
-                    <Sparkles className="h-3 w-3 mr-1" />AI
-                  </Badge>
+                  <Badge className="bg-primary text-white"><Sparkles className="h-3 w-3 mr-1" />AI</Badge>
                 </div>
                 {prospect.contacts.filter(c => c.isPrimary).slice(0, 1).map((contact, i) => (
                   <div key={i}>
@@ -457,7 +517,7 @@ export default function AccountDetailPage() {
             </Card>
           )}
 
-          {/* AI Enrich button */}
+          {/* AI Enrich */}
           <Card>
             <CardContent className="p-4">
               <h2 className="font-semibold mb-3 flex items-center gap-2">
@@ -467,10 +527,7 @@ export default function AccountDetailPage() {
                 AI se prospect ko enrich karo — tech stack, intent signals, strategic value.
               </p>
               <Button className="w-full gap-2" onClick={handleEnrich} disabled={isEnriching}>
-                {isEnriching
-                  ? <Loader2 className="h-4 w-4 animate-spin" />
-                  : <Sparkles className="h-4 w-4" />
-                }
+                {isEnriching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                 {isEnriching ? "Enriching..." : "Enrich with AI"}
               </Button>
             </CardContent>
@@ -481,12 +538,8 @@ export default function AccountDetailPage() {
       {/* ── Log Interaction Modal ── */}
       <Dialog open={showLogModal} onOpenChange={setShowLogModal}>
         <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Log Interaction</DialogTitle>
-          </DialogHeader>
-
+          <DialogHeader><DialogTitle>Log Interaction</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
-            {/* Type */}
             <div className="space-y-2">
               <Label>Interaction Type *</Label>
               <Select value={logType} onValueChange={(v) => setLogType(v as InteractionType)}>
@@ -496,18 +549,10 @@ export default function AccountDetailPage() {
                 </SelectContent>
               </Select>
             </div>
-
-            {/* Date */}
             <div className="space-y-2">
               <Label>Date *</Label>
-              <Input
-                type="date"
-                value={logDate}
-                onChange={(e) => setLogDate(e.target.value)}
-              />
+              <Input type="date" value={logDate} onChange={(e) => setLogDate(e.target.value)} />
             </div>
-
-            {/* Outcome */}
             <div className="space-y-2">
               <Label>Outcome</Label>
               <Select value={logOutcome} onValueChange={(v) => setLogOutcome(v as InteractionOutcome)}>
@@ -517,19 +562,11 @@ export default function AccountDetailPage() {
                 </SelectContent>
               </Select>
             </div>
-
-            {/* Notes */}
             <div className="space-y-2">
               <Label>Notes</Label>
-              <Textarea
-                placeholder="Kya hua is interaction mein..."
-                value={logNotes}
-                onChange={(e) => setLogNotes(e.target.value)}
-                rows={3}
-              />
+              <Textarea placeholder="Kya hua is interaction mein..." value={logNotes}
+                onChange={(e) => setLogNotes(e.target.value)} rows={3} />
             </div>
-
-            {/* Message */}
             {logMsg && (
               <div className="flex items-center gap-2 text-sm px-3 py-2 rounded-lg border">
                 {logMsg.startsWith("✅") && <CheckCircle className="h-4 w-4 text-green-600" />}
@@ -537,12 +574,66 @@ export default function AccountDetailPage() {
               </div>
             )}
           </div>
-
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowLogModal(false)}>Cancel</Button>
             <Button onClick={handleLogInteraction} disabled={isLogging} className="gap-2">
               {isLogging ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
               {isLogging ? "Saving..." : "Save Interaction"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Edit Account Modal ── */}
+      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Edit — {prospect.accountName}</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1">
+              <Label>Sales Priority</Label>
+              <Select value={editData.salesPriority} onValueChange={(v) => setEditData(p => ({ ...p, salesPriority: v }))}>
+                <SelectTrigger><SelectValue placeholder="Select priority" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="P1 (Tier A+Hot)">P1 — Sales Ready</SelectItem>
+                  <SelectItem value="P2 (Tier B+Active)">P2 — Active</SelectItem>
+                  <SelectItem value="P3 (Tier B+Warm)">P3 — Warm</SelectItem>
+                  <SelectItem value="P4 (Tier B+Cold)">P4 — Cold</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>Intent Signal</Label>
+              <Input placeholder="e.g. Cost Containment" value={editData.intentSignal}
+                onChange={(e) => setEditData(p => ({ ...p, intentSignal: e.target.value }))} />
+            </div>
+            <div className="space-y-1">
+              <Label>CLV Ranking</Label>
+              <Select value={editData.clvRanking} onValueChange={(v) => setEditData(p => ({ ...p, clvRanking: v }))}>
+                <SelectTrigger><SelectValue placeholder="Select ranking" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Tier-A (Star)">Tier A — Star</SelectItem>
+                  <SelectItem value="Tier-B (Core)">Tier B — Core</SelectItem>
+                  <SelectItem value="Tier-C (Mass)">Tier C — Mass</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>Strategic Value</Label>
+              <Input placeholder="e.g. Market Maker" value={editData.strategicValue}
+                onChange={(e) => setEditData(p => ({ ...p, strategicValue: e.target.value }))} />
+            </div>
+            <div className="space-y-1">
+              <Label>Service Pitch</Label>
+              <Input placeholder="e.g. Automation & Outsourcing" value={editData.servicePitch}
+                onChange={(e) => setEditData(p => ({ ...p, servicePitch: e.target.value }))} />
+            </div>
+            {saveMsg && <div className="text-sm px-3 py-2 rounded-lg border">{saveMsg}</div>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditModal(false)}>Cancel</Button>
+            <Button onClick={handleSaveEdit} disabled={isSaving} className="gap-2">
+              {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {isSaving ? "Saving..." : "Save Changes"}
             </Button>
           </DialogFooter>
         </DialogContent>
