@@ -53,6 +53,8 @@ export default function AccountDetailPage() {
   const [interactions, setInteractions] = useState<Interaction[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
+
+
   // ── Enrich state ────────────────────────────
   const [isEnriching, setIsEnriching] = useState(false)
   const [enrichMsg, setEnrichMsg] = useState("")

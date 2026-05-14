@@ -22,15 +22,28 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+
+
+
 } from "@/components/ui/select"
+
+
+
+
 import {
   Dialog, DialogContent, DialogHeader,
-  DialogTitle, DialogFooter
+  DialogTitle, DialogFooter, DialogDescription
 } from "@/components/ui/dialog"
+
+
 import { api, ApiError } from "@/lib/api"
 import type { Prospect } from "@/types"
+import { useRouter } from "next/navigation"
+
 
 export default function AccountsPage() {
+
+  const router = useRouter()
 
   // ── Data state ──────────────────────────────
   const [prospects, setProspects] = useState<Prospect[]>([])
@@ -96,14 +109,32 @@ export default function AccountsPage() {
   // ── GET /api/search/filters ─────────────────
   // Industry dropdown ke options backend se
   useEffect(() => {
-    const fetchFilters = async () => {
-      try {
-        const res = await api.get<any>("/search/filters")
-        setIndustries(res.data?.primaryIndustry || res.primaryIndustry || [])
-      } catch (err) {
-        console.error("Filters fetch error:", err)
-      }
-    }
+  
+// ── Fallback industries — agar API se nahi aaye ──
+const DEFAULT_INDUSTRIES = [
+  "SaaS", "Fintech", "E-commerce", "Healthcare",
+  "EdTech", "Logistics", "Manufacturing", "BFSI",
+  "IT & ITES", "Retail & CPG"
+]
+
+
+
+
+
+const fetchFilters = async () => {
+  try {
+    const res = await api.get<any>("/search/filters")
+    const apiIndustries = res.data?.primaryIndustry || res.primaryIndustry || []
+    setIndustries(apiIndustries.length > 0 ? apiIndustries : DEFAULT_INDUSTRIES)
+  } catch (err) {
+    setIndustries(DEFAULT_INDUSTRIES)
+  }
+}
+
+
+
+
+
     fetchFilters()
   }, [])
 
@@ -192,14 +223,35 @@ export default function AccountsPage() {
   const allSelected = selectedIds.length === total && total > 0
   const hasSelection = selectedIds.length > 0
 
-  const toggleAll = () => {
-    if (allPageSelected) setSelectedIds(ids => ids.filter(id => !prospects.map(p => p._id).includes(id)))
-    else {
-      const newIds = [...selectedIds]
-      prospects.forEach(p => { if (!newIds.includes(p._id)) newIds.push(p._id) })
-      setSelectedIds(newIds)
-    }
+
+
+// Header checkbox — sirf current page select/deselect
+const toggleAll = () => {
+  if (allPageSelected) {
+    setSelectedIds(ids => ids.filter(id => !prospects.map(p => p._id).includes(id)))
+  } else {
+    const newIds = [...selectedIds]
+    prospects.forEach(p => { if (!newIds.includes(p._id)) newIds.push(p._id) })
+    setSelectedIds(newIds)
   }
+}
+
+// Bottom bar SELECT ALL — poora database select karta hai
+// Pehle current page load hai, sab select hote hain
+// "X selected — Select all 303?" pattern follow karta hai
+const toggleSelectAll = () => {
+  if (allSelected) {
+    setSelectedIds([])
+  } else {
+    // Sirf current page ke prospects select karo
+    // (full DB select ke liye backend support chahiye)
+    setSelectedIds(prospects.map(p => p._id))
+  }
+}
+
+
+
+  
 
   // ── Score circle color ──────────────────────
   const getScoreColor = (score?: number) => {
@@ -286,8 +338,10 @@ export default function AccountsPage() {
               <SelectItem value="P3">New</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" className="gap-2 bg-white"><Filter className="h-4 w-4" />Build Segment</Button>
-          <Button variant="outline" className="gap-2 bg-white"><Columns className="h-4 w-4" />Columns</Button>
+
+<Button variant="outline" className="gap-2 bg-white" onClick={() => router.push("/segments/icp-builder")}>
+  <Filter className="h-4 w-4" />Build Segment
+</Button>          <Button variant="outline" className="gap-2 bg-white"><Columns className="h-4 w-4" />Columns</Button>
         </div>
       </div>
 
@@ -418,6 +472,13 @@ export default function AccountsPage() {
       {/* ── Add Account Modal ── */}
       <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
         <DialogContent className="sm:max-w-lg">
+
+        <DialogDescription className="sr-only">
+             Naya prospect account create karo.
+        </DialogDescription>
+
+
+
           <DialogHeader>
             <DialogTitle>Add New Account</DialogTitle>
           </DialogHeader>

@@ -1,22 +1,47 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { Search, Bell, HelpCircle, ChevronDown } from "lucide-react"
+// ─────────────────────────────────────────────
+// Top Header
+// APIs:
+//   GET /api/notifications           → bell count
+//   PUT /api/notifications/read-all  → mark all read
+//   GET /api/search/prospects?query  → search bar
+// ─────────────────────────────────────────────
+
+import { useEffect, useState, useRef } from "react"
+import { useRouter } from "next/navigation"
+import { Search, Bell, HelpCircle, Loader2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { api } from "@/lib/api"
-import type { Notification } from "@/types"
+import type { Notification, Prospect } from "@/types"
 
 export function TopHeader() {
+  const router = useRouter()
+
+  // ── Notifications state ─────────────────────
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [showNotifs, setShowNotifs] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
 
+  // ── Search state ────────────────────────────
+  const [searchQuery, setSearchQuery] = useState("")
+  const [searchResults, setSearchResults] = useState<Prospect[]>([])
+  const [isSearching, setIsSearching] = useState(false)
+  const [showResults, setShowResults] = useState(false)
+  const searchRef = useRef<HTMLDivElement>(null)
+  const searchTimeout = useRef<NodeJS.Timeout | null>(null)
+
+  // ── GET /api/notifications ──────────────────
   useEffect(() => {
     const fetchNotifs = async () => {
       try {
-       const res = await api.get<any>("/notifications")
-        setNotifications(res.data?.notifications || res.data || [])
+        const res = await api.get<any>("/notifications")
+        const notifList = res.data || []
+        setNotifications(notifList)
+        setUnreadCount(res.unreadCount ?? notifList.filter((n: Notification) => !n.isRead).length)
       } catch {
         // silent fail
       }
@@ -24,36 +49,132 @@ export function TopHeader() {
     fetchNotifs()
   }, [])
 
-  const unreadCount = notifications.filter(n => !n.isRead).length
-
+  // ── PUT /api/notifications/read-all ─────────
   const markAllRead = async () => {
     try {
       await api.put("/notifications/read-all")
       setNotifications(notifications.map(n => ({ ...n, isRead: true })))
+      setUnreadCount(0)
     } catch {
       // silent fail
     }
   }
 
+  // ── Search — debounced 400ms ────────────────
+  // GET /api/search/prospects?query=xyz
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setSearchResults([])
+      setShowResults(false)
+      return
+    }
+    if (searchTimeout.current) clearTimeout(searchTimeout.current)
+    searchTimeout.current = setTimeout(async () => {
+      setIsSearching(true)
+      try {
+        const res = await api.get<any>(
+          `/search/prospects?query=${encodeURIComponent(searchQuery)}&limit=5`
+        )
+        setSearchResults(res.data?.prospects || res.prospects || [])
+        setShowResults(true)
+      } catch {
+        setSearchResults([])
+      } finally {
+        setIsSearching(false)
+      }
+    }, 400)
+    return () => {
+      if (searchTimeout.current) clearTimeout(searchTimeout.current)
+    }
+  }, [searchQuery])
+
+  // Search results ke bahar click hone pe band karo
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setShowResults(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
   return (
-    <header className="flex h-14 items-center justify-between border-b bg-white px-4 gap-4 relative">
+    <header className="flex h-14 items-center justify-between border-b bg-white px-4 gap-4 relative z-40">
       <div className="flex items-center gap-4 flex-1">
         <SidebarTrigger />
-        <div className="relative max-w-md flex-1">
+
+        {/* ── Search bar with dropdown ── */}
+        <div className="relative max-w-md flex-1" ref={searchRef}>
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          {isSearching && (
+            <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+          )}
           <Input
             placeholder="Search accounts, segments, campaigns..."
-            className="pl-9 h-9 bg-white border-border"
+            className="pl-9 pr-9 h-9 bg-white border-border"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onFocus={() => searchResults.length > 0 && setShowResults(true)}
           />
+
+          {/* Search results dropdown */}
+          {showResults && searchResults.length > 0 && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg overflow-hidden">
+              {searchResults.map((prospect) => (
+                <button
+                  key={prospect._id}
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 text-left transition-colors"
+                  onClick={() => {
+                    router.push(`/accounts/${prospect._id}`)
+                    setSearchQuery("")
+                    setShowResults(false)
+                  }}
+                >
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-bold flex-shrink-0">
+                    {prospect.techFitScore ?? "—"}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-medium text-sm truncate">{prospect.accountName}</p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {[prospect.primaryIndustry, prospect.country].filter(Boolean).join(" · ")}
+                    </p>
+                  </div>
+                </button>
+              ))}
+              <button
+                className="w-full px-4 py-2 text-xs text-primary hover:bg-muted/30 text-center border-t"
+                onClick={() => {
+                  router.push(`/accounts?search=${encodeURIComponent(searchQuery)}`)
+                  setShowResults(false)
+                }}
+              >
+                Saare results dekho →
+              </button>
+            </div>
+          )}
+
+          {/* No results */}
+          {showResults && searchResults.length === 0 && !isSearching && searchQuery.trim() && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg p-4 text-sm text-muted-foreground text-center">
+              "{searchQuery}" ke liye koi result nahi mila.
+            </div>
+          )}
         </div>
       </div>
 
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" className="relative" onClick={() => setShowNotifs(!showNotifs)}>
+        {/* Bell icon */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="relative"
+          onClick={() => setShowNotifs(!showNotifs)}
+        >
           <Bell className="h-5 w-5" />
           {unreadCount > 0 && (
             <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] text-white">
-              {unreadCount}
+              {unreadCount > 9 ? "9+" : unreadCount}
             </span>
           )}
         </Button>
@@ -62,28 +183,35 @@ export function TopHeader() {
         </Button>
       </div>
 
-      {/* Notifications Dropdown */}
+      {/* ── Notifications Dropdown ── */}
       {showNotifs && (
         <div className="absolute right-4 top-14 w-80 bg-white border rounded-lg shadow-lg z-50">
           <div className="flex items-center justify-between p-3 border-b">
             <h3 className="font-semibold text-sm">Notifications</h3>
             {unreadCount > 0 && (
-              <Button variant="ghost" className="text-xs h-7" onClick={markAllRead}>
+              <Button variant="ghost" className="text-xs h-7 text-primary" onClick={markAllRead}>
                 Mark all read
               </Button>
             )}
           </div>
-          <div className="max-h-64 overflow-y-auto divide-y">
+          <div className="max-h-72 overflow-y-auto divide-y">
             {notifications.length === 0 ? (
-              <p className="p-4 text-sm text-muted-foreground text-center">Koi notifications nahi hain.</p>
+              <p className="p-4 text-sm text-muted-foreground text-center">
+                Koi notifications nahi hain.
+              </p>
             ) : (
               notifications.slice(0, 10).map((notif) => (
-                <div key={notif._id} className={`p-3 text-sm ${!notif.isRead ? "bg-blue-50" : ""}`}>
+                <div
+                  key={notif._id}
+                  className={`p-3 text-sm ${!notif.isRead ? "bg-blue-50" : ""}`}
+                >
                   <p className={!notif.isRead ? "font-medium" : "text-muted-foreground"}>
                     {notif.message}
                   </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {new Date(notif.createdAt ?? "").toLocaleDateString()}
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {new Date(notif.createdAt ?? "").toLocaleDateString("en-IN", {
+                      day: "numeric", month: "short"
+                    })}
                   </p>
                 </div>
               ))
