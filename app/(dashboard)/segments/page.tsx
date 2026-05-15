@@ -1,9 +1,18 @@
 "use client"
 
+// ─────────────────────────────────────────────
+// Segments / ICP List Page
+// APIs:
+//   GET /api/icp              → all ICPs list
+//   DELETE /api/icp/:id       → delete ICP
+// ─────────────────────────────────────────────
 
-import { useEffect, useState } from "react"
-import Link from "next/link"
-import { Plus, Loader2, Target, ChevronRight } from "lucide-react"
+import { useEffect, useState, useCallback } from "react"
+import { useRouter } from "next/navigation"
+import {
+  Plus, Loader2, Target, Trash2,
+  ChevronLeft, ChevronRight, Users, Building2
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
@@ -11,41 +20,65 @@ import { api } from "@/lib/api"
 import type { ICP } from "@/types"
 
 export default function SegmentsPage() {
-  
+  const router = useRouter()
+
+  // ── Data state ──────────────────────────────
   const [icps, setIcps] = useState<ICP[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [total, setTotal] = useState(0)
+  const [totalPages, setTotalPages] = useState(1)
+  const [currentPage, setCurrentPage] = useState(1)
 
- 
-  useEffect(() => {
-    const fetchIcps = async () => {
-      try {
-        const res = await api.get<any>("/icp")
-        setIcps(res.data || [])
-      } catch (err) {
-        console.error("ICPs fetch error:", err)
-      } finally {
-        setIsLoading(false)
-      }
+  // ── GET /api/icp ────────────────────────────
+  // Response: { success, data: [...], pagination: {...} }
+  const fetchIcps = useCallback(async () => {
+    setIsLoading(true)
+    try {
+      const res = await api.get<any>(`/icp?page=${currentPage}&limit=12`)
+      setIcps(res.data || [])
+      setTotal(res.pagination?.total || 0)
+      setTotalPages(res.pagination?.totalPages || 1)
+    } catch (err) {
+      console.error("ICPs fetch error:", err)
+    } finally {
+      setIsLoading(false)
     }
-    fetchIcps()
-  }, [])
+  }, [currentPage])
+
+  useEffect(() => { fetchIcps() }, [fetchIcps])
+
+  // ── DELETE /api/icp/:id ─────────────────────
+  const handleDelete = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!confirm("Ye ICP profile delete karna chahte ho?")) return
+    try {
+      await api.delete(`/icp/${id}`)
+      fetchIcps()
+    } catch {
+      alert("Delete nahi ho saka.")
+    }
+  }
 
   return (
     <div className="p-6 space-y-6">
+
       {/* ── Header ── */}
       <div className="flex items-center justify-between">
         <div>
+          <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">
+            Workspace
+          </p>
           <h1 className="text-2xl font-bold">Segments & ICP</h1>
           <p className="text-sm text-muted-foreground">
-            Apne saved Ideal Customer Profiles manage karo.
+            {total} ICP profiles saved
           </p>
         </div>
-        <Link href="/segments/icp-builder">
-          <Button className="gap-2">
-            <Plus className="h-4 w-4" />
-            New ICP
-          </Button>
-        </Link>
+        <Button
+          className="gap-2"
+          onClick={() => router.push("/segments/icp-builder")}
+        >
+          <Plus className="h-4 w-4" />New ICP
+        </Button>
       </div>
 
       {/* ── Loading ── */}
@@ -62,72 +95,167 @@ export default function SegmentsPage() {
           <div>
             <p className="font-medium">Koi ICP nahi hai abhi</p>
             <p className="text-sm text-muted-foreground">
-              first build your first ICP — system automatically matching prospects search.
+              Pehla ICP banao — system automatically matching prospects dhundh dega.
             </p>
           </div>
-          <Link href="/segments/icp-builder">
-            <Button>Create ICP</Button>
-          </Link>
+          <Button onClick={() => router.push("/segments/icp-builder")}>
+            Create ICP
+          </Button>
         </div>
       )}
 
-      {/* ── ICP Cards ── */}
+      {/* ── ICP Cards Grid ── */}
       {!isLoading && icps.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {icps.map((icp) => (
-            <Card key={icp._id} className="hover:shadow-md transition-shadow">
-              <CardContent className="p-4 space-y-3">
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {icps.map((icp) => (
+              <Card
+                key={icp._id}
+                className="hover:shadow-md transition-shadow cursor-pointer"
+                onClick={() => router.push(`/segments/icp-builder?id=${icp._id}`)}
+              >
+                <CardContent className="p-4 space-y-3">
 
-                {/* ICP Name + Active badge */}
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="font-semibold">{icp.name}</h3>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {new Date(icp.createdAt ?? "").toLocaleDateString()}
-                    </p>
-                  </div>
-                  {icp.isActive && (
-                    <Badge className="text-xs">Active</Badge>
-                  )}
-                </div>
-
-                {/* Industries */}
-                {icp.industries && icp.industries.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {icp.industries.slice(0, 3).map((ind) => (
-                      <Badge key={ind} variant="secondary" className="text-xs">
-                        {ind}
-                      </Badge>
-                    ))}
-                    {icp.industries.length > 3 && (
-                      <Badge variant="outline" className="text-xs">
-                        +{icp.industries.length - 3}
-                      </Badge>
+                  {/* Name + Active badge */}
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="font-semibold leading-tight line-clamp-1">
+                      {icp.name}
+                    </h3>
+                    {icp.isActive && (
+                      <Badge className="text-xs flex-shrink-0">Active</Badge>
                     )}
                   </div>
-                )}
 
-                {/* Quick stats */}
-                <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-                  {icp.minTechFitScore && (
-                    <div>Min Score: <span className="font-medium text-foreground">{icp.minTechFitScore}</span></div>
+                  {/* Description */}
+                  {(icp as any).description && (
+                    <p className="text-sm text-muted-foreground line-clamp-2">
+                      {(icp as any).description}
+                    </p>
                   )}
-                  {icp.employeeRanges && icp.employeeRanges.length > 0 && (
-                    <div>Size: <span className="font-medium text-foreground">{icp.employeeRanges[0]}</span></div>
-                  )}
-                </div>
 
-                {/* View button */}
-                <Link href={`/segments/icp-builder?id=${icp._id}`}>
-                  <Button variant="outline" className="w-full gap-2 h-8 text-sm">
-                    View & Edit
-                    <ChevronRight className="h-3 w-3" />
-                  </Button>
-                </Link>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                  {/* Industries */}
+                  {icp.industries && icp.industries.length > 0 && (
+                    <div className="flex items-center gap-1 flex-wrap">
+                      <Building2 className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                      {icp.industries.slice(0, 3).map((ind) => (
+                        <Badge key={ind} variant="secondary" className="text-xs">
+                          {ind}
+                        </Badge>
+                      ))}
+                      {icp.industries.length > 3 && (
+                        <Badge variant="outline" className="text-xs">
+                          +{icp.industries.length - 3}
+                        </Badge>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Business models */}
+                  {icp.businessModels && icp.businessModels.length > 0 && (
+                    <div className="flex gap-1 flex-wrap">
+                      {icp.businessModels.map((bm) => (
+                        <Badge key={bm} variant="outline" className="text-xs">
+                          {bm}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Quick stats */}
+                  <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground pt-1 border-t">
+                    {icp.minTechFitScore && (
+                      <div>
+                        Min Score:{" "}
+                        <span className="font-medium text-foreground">
+                          {icp.minTechFitScore}
+                        </span>
+                      </div>
+                    )}
+                    {icp.countries && icp.countries.length > 0 && (
+                      <div>
+                        Countries:{" "}
+                        <span className="font-medium text-foreground">
+                          {icp.countries.slice(0, 2).join(", ")}
+                        </span>
+                      </div>
+                    )}
+                    {icp.employeeRanges && icp.employeeRanges.length > 0 && (
+                      <div>
+                        Size:{" "}
+                        <span className="font-medium text-foreground">
+                          {icp.employeeRanges[0]}
+                        </span>
+                      </div>
+                    )}
+                    <div className="text-xs text-muted-foreground">
+                      {new Date(icp.createdAt ?? "").toLocaleDateString("en-IN", {
+                        day: "numeric", month: "short", year: "numeric"
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Buyer Persona preview */}
+                  {(icp as any).buyerPersona?.targetSeniorities?.length > 0 && (
+                    <div className="flex items-center gap-1">
+                      <Users className="h-3 w-3 text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground">
+                        {(icp as any).buyerPersona.targetSeniorities.slice(0, 2).join(", ")}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Action buttons */}
+                  <div className="flex gap-2 pt-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 text-xs"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        router.push(`/segments/icp-builder?id=${icp._id}`)
+                      }}
+                    >
+                      View & Edit
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-red-500"
+                      onClick={(e) => handleDelete(icp._id, e)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* ── Pagination ── */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between pt-2">
+              <p className="text-sm text-muted-foreground">
+                Page {currentPage} of {totalPages} — {total} total
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline" size="icon" className="h-8 w-8"
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(p => p - 1)}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline" size="icon" className="h-8 w-8"
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage(p => p + 1)}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   )
