@@ -154,7 +154,8 @@ export interface Duplicate {
 export type NotificationType = "import_complete" | "enrichment_done" | "dedup_complete"
 
 export interface Notification {
-  id: string
+  _id?: string
+  id?: string
   userId: string
   type: NotificationType
   message: string
@@ -168,4 +169,9 @@ export interface Notification {
 export interface DashboardSummary {
   totalProspects: number
   duplicateCount: number
-  enrichedCount:
+  enrichedCount: number
+  icpMatchCount?: number
+  pendingDuplicates?: number
+  totalInteractions?: number
+  enrichmentCoverage?: number
+}

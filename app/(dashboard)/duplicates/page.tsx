@@ -4,8 +4,8 @@
 // Duplicates Page
 // APIs:
 //   GET /api/duplicates?status=pending  → pending pairs
-//   POST /api/duplicates/:id/merge      → merge karo
-//   POST /api/duplicates/:id/dismiss    → dismiss karo
+//   PUT /api/duplicates/:id/merge       → merge karo
+//   PUT /api/duplicates/:id/dismiss     → dismiss karo
 // ─────────────────────────────────────────────
 
 import { useEffect, useState, useCallback } from "react"
@@ -58,7 +58,7 @@ export default function DuplicatesPage() {
     if (!confirm("Dono prospects merge karna chahte ho? Ek delete ho jaayega.")) return
     setActionId(id)
     try {
-      await api.post(`/duplicates/${id}/merge`, {})
+      await api.put(`/duplicates/${id}/merge`, {})
       fetchDuplicates()
     } catch {
       alert("Merge nahi ho saka.")
@@ -71,7 +71,7 @@ export default function DuplicatesPage() {
   const handleDismiss = async (id: string) => {
     setActionId(id)
     try {
-      await api.post(`/duplicates/${id}/dismiss`, {})
+      await api.put(`/duplicates/${id}/dismiss`, {})
       fetchDuplicates()
     } catch {
       alert("Dismiss nahi ho saka.")

@@ -3,8 +3,13 @@
 // ─────────────────────────────────────────────
 // Segments / ICP List Page
 // APIs:
-//   GET /api/icp              → all ICPs list
-//   DELETE /api/icp/:id       → delete ICP
+//   GET /api/icp                           → all ICPs list
+//   DELETE /api/icp/:id                    → delete ICP
+//   GET /api/search/prospects?primaryIndustry → account count per ICP
+//
+// Account count logic:
+//   ICP mein multiple industries ho sakti hain
+//   Har industry ka count alag fetch karo → sum karo
 // ─────────────────────────────────────────────
 
 import { useEffect, useState, useCallback } from "react"
@@ -29,8 +34,12 @@ export default function SegmentsPage() {
   const [totalPages, setTotalPages] = useState(1)
   const [currentPage, setCurrentPage] = useState(1)
 
+  // ── Account counts per ICP ──────────────────
+  // Key: icp._id, Value: total account count
+  const [accountCounts, setAccountCounts] = useState<Record<string, number>>({})
+  const [countsLoading, setCountsLoading] = useState(false)
+
   // ── GET /api/icp ────────────────────────────
-  // Response: { success, data: [...], pagination: {...} }
   const fetchIcps = useCallback(async () => {
     setIsLoading(true)
     try {
@@ -46,6 +55,73 @@ export default function SegmentsPage() {
   }, [currentPage])
 
   useEffect(() => { fetchIcps() }, [fetchIcps])
+
+  // ── Account counts fetch ────────────────────
+  // ICP load hone ke baad har ICP ki industries ke
+  // accounts count karo — multiple industries ho to
+  // sabke counts add karo
+  useEffect(() => {
+    if (!icps || icps.length === 0) return
+    let cancelled = false
+
+    const loadCounts = async () => {
+      setCountsLoading(true)
+      try {
+        const counts = await Promise.all(
+          icps.map(async (icp) => {
+            // Koi industry nahi
+            if (!icp.industries || icp.industries.length === 0) {
+              return { id: icp._id, count: 0 }
+            }
+
+            // Single industry — ek call
+            if (icp.industries.length === 1) {
+              const res = await api.get<any>(
+                `/search/prospects?primaryIndustry=${encodeURIComponent(icp.industries[0])}&page=1&limit=1`
+              ).catch(() => null)
+              return {
+                id: icp._id,
+                count: res?.data?.pagination?.total
+                  || res?.pagination?.total
+                  || 0
+              }
+            }
+
+            // Multiple industries — parallel calls, phir sum karo
+            // e.g. IT (50) + Healthcare (30) = 80
+            const results = await Promise.all(
+              icp.industries.map(ind =>
+                api.get<any>(
+                  `/search/prospects?primaryIndustry=${encodeURIComponent(ind)}&page=1&limit=1`
+                ).catch(() => null)
+              )
+            )
+            const industryTotal = results.reduce((sum, res) => {
+              return sum + (
+                res?.data?.pagination?.total
+                || res?.pagination?.total
+                || 0
+              )
+            }, 0)
+
+            return { id: icp._id, count: industryTotal }
+          })
+        )
+
+        if (cancelled) return
+        const countMap: Record<string, number> = {}
+        counts.forEach(c => { countMap[c.id] = c.count })
+        setAccountCounts(countMap)
+      } catch (err) {
+        console.error("Account count error:", err)
+      } finally {
+        if (!cancelled) setCountsLoading(false)
+      }
+    }
+
+    loadCounts()
+    return () => { cancelled = true }
+  }, [icps])
 
   // ── DELETE /api/icp/:id ─────────────────────
   const handleDelete = async (id: string, e: React.MouseEvent) => {
@@ -73,10 +149,7 @@ export default function SegmentsPage() {
             {total} ICP profiles saved
           </p>
         </div>
-        <Button
-          className="gap-2"
-          onClick={() => router.push("/segments/icp-builder")}
-        >
+        <Button className="gap-2" onClick={() => router.push("/segments/icp-builder")}>
           <Plus className="h-4 w-4" />New ICP
         </Button>
       </div>
@@ -112,11 +185,15 @@ export default function SegmentsPage() {
               <Card
                 key={icp._id}
                 className="hover:shadow-md transition-shadow cursor-pointer"
-                onClick={() => router.push(`/segments/icp-builder?id=${icp._id}`)}
+                onClick={() => {
+                  // Saari industries ka filter laga ke accounts page pe jao
+                  const industryParam = icp.industries?.slice(0, 1)[0] || ""
+                  router.push(`/accounts?industry=${encodeURIComponent(industryParam)}`)
+                }}
               >
                 <CardContent className="p-4 space-y-3">
 
-                  {/* Name + Active badge */}
+                  {/* ── Name + Active badge ── */}
                   <div className="flex items-start justify-between gap-2">
                     <h3 className="font-semibold leading-tight line-clamp-1">
                       {icp.name}
@@ -126,14 +203,35 @@ export default function SegmentsPage() {
                     )}
                   </div>
 
-                  {/* Description */}
+                  {/* ── Description ── */}
                   {(icp as any).description && (
                     <p className="text-sm text-muted-foreground line-clamp-2">
                       {(icp as any).description}
                     </p>
                   )}
 
-                  {/* Industries */}
+                  {/* ── Account Count — prominently dikhao ── */}
+                  <div className="flex items-end gap-2">
+                    <div>
+                      {countsLoading && accountCounts[icp._id] === undefined ? (
+                        <div className="flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                          <span className="text-sm text-muted-foreground">Loading...</span>
+                        </div>
+                      ) : (
+                        <>
+                          <p className="text-3xl font-bold text-primary">
+                            {accountCounts[icp._id] ?? "—"}
+                          </p>
+                          <p className="text-xs text-muted-foreground uppercase tracking-wide">
+                            Matching Accounts
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* ── Industries ── */}
                   {icp.industries && icp.industries.length > 0 && (
                     <div className="flex items-center gap-1 flex-wrap">
                       <Building2 className="h-3 w-3 text-muted-foreground flex-shrink-0" />
@@ -150,7 +248,7 @@ export default function SegmentsPage() {
                     </div>
                   )}
 
-                  {/* Business models */}
+                  {/* ── Business Models ── */}
                   {icp.businessModels && icp.businessModels.length > 0 && (
                     <div className="flex gap-1 flex-wrap">
                       {icp.businessModels.map((bm) => (
@@ -161,7 +259,7 @@ export default function SegmentsPage() {
                     </div>
                   )}
 
-                  {/* Quick stats */}
+                  {/* ── Quick stats ── */}
                   <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground pt-1 border-t">
                     {icp.minTechFitScore && (
                       <div>
@@ -187,14 +285,14 @@ export default function SegmentsPage() {
                         </span>
                       </div>
                     )}
-                    <div className="text-xs text-muted-foreground">
+                    <div>
                       {new Date(icp.createdAt ?? "").toLocaleDateString("en-IN", {
                         day: "numeric", month: "short", year: "numeric"
                       })}
                     </div>
                   </div>
 
-                  {/* Buyer Persona preview */}
+                  {/* ── Buyer Persona preview ── */}
                   {(icp as any).buyerPersona?.targetSeniorities?.length > 0 && (
                     <div className="flex items-center gap-1">
                       <Users className="h-3 w-3 text-muted-foreground" />
@@ -204,7 +302,7 @@ export default function SegmentsPage() {
                     </div>
                   )}
 
-                  {/* Action buttons */}
+                  {/* ── Action buttons ── */}
                   <div className="flex gap-2 pt-1">
                     <Button
                       variant="outline"

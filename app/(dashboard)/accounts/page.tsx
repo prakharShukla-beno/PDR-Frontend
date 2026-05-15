@@ -11,6 +11,7 @@
 // ─────────────────────────────────────────────
 
 import { useEffect, useState, useCallback } from "react"
+import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import {
   Search, Upload, Download, Plus, Filter,
@@ -44,6 +45,7 @@ import { useRouter } from "next/navigation"
 export default function AccountsPage() {
 
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   // ── Data state ──────────────────────────────
   const [prospects, setProspects] = useState<Prospect[]>([])
@@ -56,6 +58,13 @@ export default function AccountsPage() {
   const [industry, setIndustry] = useState("all")
   const [status, setStatus] = useState("all")
   const [industries, setIndustries] = useState<string[]>([])
+
+  // Read industry from URL on mount
+  useEffect(() => {
+    const ind = searchParams.get("industry")
+    if (ind) setIndustry(ind)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // ── Pagination state ────────────────────────
   const [currentPage, setCurrentPage] = useState(1)
@@ -91,11 +100,20 @@ export default function AccountsPage() {
   const fetchProspects = useCallback(async () => {
     setIsLoading(true)
     try {
-      let url = `/prospects?page=${currentPage}&limit=${recordsPerPage}`
-      if (search) url += `&query=${encodeURIComponent(search)}`
-      if (industry !== "all") url += `&primaryIndustry=${encodeURIComponent(industry)}`
-      if (status !== "all") url += `&salesPriority=${encodeURIComponent(status)}`
-      const res = await api.get<any>(url)
+      let res
+      // If any filter/search is active, use the search endpoint (supports paging)
+      if (search || industry !== "all" || status !== "all") {
+        let url = `/search/prospects?search=${encodeURIComponent(search || "")}`
+        if (industry !== "all") url += `&primaryIndustry=${encodeURIComponent(industry)}`
+        if (status !== "all") url += `&salesPriority=${encodeURIComponent(status)}`
+        url += `&page=${currentPage}&limit=${recordsPerPage}`
+        res = await api.get<any>(url)
+      } else {
+        // No filters — use simple listing with pagination
+        const url = `/prospects?page=${currentPage}&limit=${recordsPerPage}`
+        res = await api.get<any>(url)
+      }
+
       setProspects(res.data?.prospects || res.data || res.prospects || [])
       setTotal(res.data?.pagination?.total || res.pagination?.total || 0)
       setTotalPages(res.data?.pagination?.totalPages || res.pagination?.totalPages || 1)
@@ -121,10 +139,10 @@ const DEFAULT_INDUSTRIES = [
 
 
 
-const fetchFilters = async () => {
+  const fetchFilters = async () => {
   try {
     const res = await api.get<any>("/search/filters")
-    const apiIndustries = res.data?.primaryIndustry || res.primaryIndustry || []
+    const apiIndustries = res.data?.industries || res.industries || []
     setIndustries(apiIndustries.length > 0 ? apiIndustries : DEFAULT_INDUSTRIES)
   } catch (err) {
     setIndustries(DEFAULT_INDUSTRIES)
