@@ -26,35 +26,53 @@ export interface Contact {
   isPrimary?: boolean
 }
 
+
+
+
 export interface Prospect {
   _id: string
   accountName: string
   website?: string
   source?: string
+  accountSource?: string
   primaryIndustry?: string
+  commercialCategory?: string
   businessModel?: string
   country?: string
   hqLocationCity?: string
   annualRevenue?: string
   noOfEmployees?: string
-  primaryTechStack?: string[]
-  techFitScore?: number
-  adoptionProfile?: string
+
+  // Tech fields
+  primaryTechStack?: string | string[]
+  techAdoptionProfile?: string
   infrastructureRisk?: string
-  clvRanking?: "Tier A" | "Tier B" | "Tier C"
-  salesPriority?: "P1" | "P2" | "P3" | "P4"
+  techFitScore?: number
+  financialCapacity?: string
+  marginPotential?: string
+
+  // Sales fields
+  clvRanking?: string
+  salesPriority?: string
   intentSignal?: string
   servicePitch?: string
   strategicValue?: string
+  historyTrigger?: string
   isDuplicate?: boolean
+
+  // Relations
   contacts?: Contact[]
   assignedTo?: User | string
   campaignIds?: string[]
   interactionIds?: string[]
-  importLogId?: string
+  importLogId?: string | { _id: string; fileName: string; status: string }
+
   createdAt?: string
   updatedAt?: string
 }
+
+
+
 
 // Enrichment
 export interface Enrichment {
