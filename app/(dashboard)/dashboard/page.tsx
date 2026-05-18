@@ -1,16 +1,16 @@
 "use client"
 
 // ─────────────────────────────────────────────
-// Dashboard Page
+// Dashboard Page — Complete Version
 // APIs:
-//   GET /api/dashboard/summary          → stats cards
-//   GET /api/dashboard/top-prospects    → sales-ready accounts
-//   GET /api/dashboard/by-industry      → industry breakdown chart
-//   GET /api/dashboard/by-country       → country breakdown
-//   GET /api/dashboard/by-priority      → priority breakdown
-//   GET /api/dashboard/by-clv           → CLV breakdown
-//   GET /api/dashboard/import-history   → recent imports
-//   GET /api/campaigns                  → campaigns list
+//   GET /api/dashboard/summary
+//   GET /api/dashboard/top-prospects
+//   GET /api/dashboard/by-industry
+//   GET /api/dashboard/by-country
+//   GET /api/dashboard/by-priority
+//   GET /api/dashboard/by-clv
+//   GET /api/dashboard/import-history
+//   GET /api/campaigns
 // ─────────────────────────────────────────────
 
 import { useEffect, useState } from "react"
@@ -24,7 +24,6 @@ import {
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
 import { api } from "@/lib/api"
 import { useAuth } from "@/context/AuthContext"
 import type { DashboardSummary, Prospect } from "@/types"
@@ -33,7 +32,6 @@ export default function DashboardPage() {
   const { user } = useAuth()
   const router = useRouter()
 
-  // ── Data state ──────────────────────────────
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [topProspects, setTopProspects] = useState<Prospect[]>([])
   const [campaigns, setCampaigns] = useState<any[]>([])
@@ -44,48 +42,28 @@ export default function DashboardPage() {
   const [importHistory, setImportHistory] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
-  // ── Fetch all dashboard data ────────────────
   useEffect(() => {
     const fetchAll = async () => {
       try {
-        const [
-          summaryRes,
-          prospectsRes,
-          campaignsRes,
-          industryRes,
-          countryRes,
-          priorityRes,
-          clvRes,
-          importRes,
-        ] = await Promise.all([
-          api.get<any>("/dashboard/summary"),
-          api.get<any>("/dashboard/top-prospects"),
-          api.get<any>("/campaigns?page=1&limit=5"),
-          api.get<any>("/dashboard/by-industry"),
-          api.get<any>("/dashboard/by-country"),
-          api.get<any>("/dashboard/by-priority"),
-          api.get<any>("/dashboard/by-clv"),
-          api.get<any>("/dashboard/import-history"),
-        ])
-
-        // Summary — res.data is direct object
+        const [summaryRes, prospectsRes, campaignsRes, industryRes, countryRes, priorityRes, clvRes, importRes] =
+          await Promise.all([
+            api.get<any>("/dashboard/summary"),
+            api.get<any>("/dashboard/top-prospects"),
+            api.get<any>("/campaigns?page=1&limit=5"),
+            api.get<any>("/dashboard/by-industry"),
+            api.get<any>("/dashboard/by-country"),
+            api.get<any>("/dashboard/by-priority"),
+            api.get<any>("/dashboard/by-clv"),
+            api.get<any>("/dashboard/import-history"),
+          ])
         setSummary(summaryRes.data)
-
-        // Top prospects — res.data is array
         setTopProspects(prospectsRes.data || [])
-
-        // Campaigns — res.data is array
         setCampaigns(campaignsRes.data || [])
-
-        // Charts data
         setByIndustry(industryRes.data || [])
         setByCountry(countryRes.data || [])
         setByPriority(priorityRes.data || [])
         setByCLV(clvRes.data || [])
-
-        // Import history
         setImportHistory(importRes.data || [])
-
       } catch (err) {
         console.error("Dashboard load error:", err)
       } finally {
@@ -95,35 +73,30 @@ export default function DashboardPage() {
     fetchAll()
   }, [])
 
-  // ── Helpers ─────────────────────────────────
   const firstName = user?.name?.split(" ")[0] ?? "there"
 
-  // Time-based greeting
   const getGreeting = () => {
-    const hour = new Date().getHours()
-    if (hour < 12) return "Good morning"
-    if (hour < 17) return "Good afternoon"
+    const h = new Date().getHours()
+    if (h < 12) return "Good morning"
+    if (h < 17) return "Good afternoon"
     return "Good evening"
   }
 
-  // Priority color
-  const getPriorityColor = (priority: string) => {
-    if (priority?.startsWith("P1")) return "bg-red-500"
-    if (priority?.startsWith("P2")) return "bg-orange-400"
-    if (priority?.startsWith("P3")) return "bg-yellow-400"
+  const getPriorityColor = (p: string) => {
+    if (p?.startsWith("P1")) return "bg-red-500"
+    if (p?.startsWith("P2")) return "bg-orange-400"
+    if (p?.startsWith("P3")) return "bg-yellow-400"
     return "bg-gray-300"
   }
 
-  // CLV color
-  const getCLVColor = (clv: string) => {
-    if (clv?.includes("Tier-A")) return "bg-primary"
-    if (clv?.includes("Tier-B")) return "bg-blue-400"
+  const getCLVColor = (c: string) => {
+    if (c?.includes("Tier-A")) return "bg-primary"
+    if (c?.includes("Tier-B")) return "bg-blue-400"
     return "bg-gray-300"
   }
 
-  // Max value for bar chart
-  const maxIndustryCount = Math.max(...byIndustry.map(i => i.count), 1)
-  const maxCountryCount = Math.max(...byCountry.map(c => c.count), 1)
+  const maxInd = Math.max(...byIndustry.map(i => i.count), 1)
+  const maxCty = Math.max(...byCountry.map(c => c.count), 1)
 
   if (isLoading) {
     return (
@@ -136,66 +109,30 @@ export default function DashboardPage() {
   return (
     <div className="p-6 space-y-6">
 
-      {/* ── Header ── */}
+      {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-sm text-muted-foreground uppercase tracking-wide">
-            Sales Rep - Dashboard
-          </p>
-          <h1 className="text-2xl font-bold text-foreground">
-            {getGreeting()}, {firstName}
-          </h1>
-          <p className="text-muted-foreground">
-            Here&apos;s what&apos;s happening across your prospect workspace.
-          </p>
+          <p className="text-sm text-muted-foreground uppercase tracking-wide">Sales Rep - Dashboard</p>
+          <h1 className="text-2xl font-bold">{getGreeting()}, {firstName}</h1>
+          <p className="text-muted-foreground">Here&apos;s what&apos;s happening across your prospect workspace.</p>
         </div>
         <div className="flex gap-3">
-          <Button
-            variant="outline"
-            onClick={() => router.push("/segments/icp-builder")}
-          >
+          <Button variant="outline" onClick={() => router.push("/segments/icp-builder")}>
             New Segment
           </Button>
-          <Button
-            className="gap-2"
-            onClick={() => router.push("/campaigns")}
-          >
+          <Button className="gap-2" onClick={() => router.push("/campaigns")}>
             <Sparkles className="h-4 w-4" />New Campaign
           </Button>
         </div>
       </div>
 
-      {/* ── Stats Cards ── */}
+      {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          {
-            title: "Total Prospects",
-            value: summary?.totalProspects ?? 0,
-            subtext: `${summary?.enrichmentCoverage ?? 0}% enriched`,
-            icon: TrendingUp,
-            href: "/accounts",
-          },
-          {
-            title: "ICP Matches",
-            value: summary?.icpMatchCount ?? 0,
-            subtext: "matched to ICP",
-            icon: Target,
-            href: "/segments",
-          },
-          {
-            title: "AI Enriched",
-            value: summary?.enrichedCount ?? 0,
-            subtext: "prospects enriched",
-            icon: Sparkles,
-            href: "/accounts",
-          },
-          {
-            title: "Pending Duplicates",
-            value: summary?.pendingDuplicates ?? 0,
-            subtext: "need review",
-            icon: Copy,
-            href: "/duplicates",
-          },
+          { title: "Total Prospects", value: summary?.totalProspects ?? 0, sub: `${summary?.enrichmentCoverage ?? 0}% enriched`, icon: TrendingUp, href: "/accounts" },
+          { title: "ICP Matches", value: summary?.icpMatchCount ?? 0, sub: "matched to ICP", icon: Target, href: "/segments" },
+          { title: "AI Enriched", value: summary?.enrichedCount ?? 0, sub: "prospects enriched", icon: Sparkles, href: "/accounts" },
+          { title: "Pending Duplicates", value: summary?.pendingDuplicates ?? 0, sub: "need review", icon: Copy, href: "/duplicates" },
         ].map((stat) => (
           <Link href={stat.href} key={stat.title}>
             <Card className="py-4 hover:shadow-md transition-shadow cursor-pointer">
@@ -203,7 +140,7 @@ export default function DashboardPage() {
                 <div>
                   <p className="text-sm text-muted-foreground">{stat.title}</p>
                   <p className="text-2xl font-bold">{stat.value.toLocaleString()}</p>
-                  <p className="text-xs text-muted-foreground">{stat.subtext}</p>
+                  <p className="text-xs text-muted-foreground">{stat.sub}</p>
                 </div>
                 <div className="p-2 rounded-lg bg-accent">
                   <stat.icon className="h-5 w-5 text-primary" />
@@ -214,10 +151,10 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* ── Main Grid ── */}
+      {/* Main Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-        {/* ── Left col (2/3) ── */}
+        {/* Left col */}
         <div className="lg:col-span-2 space-y-6">
 
           {/* Sales-Ready Accounts */}
@@ -226,14 +163,9 @@ export default function DashboardPage() {
               <div className="flex items-center justify-between p-4 border-b">
                 <div>
                   <h2 className="font-semibold">Sales-Ready Accounts</h2>
-                  <p className="text-sm text-muted-foreground">
-                    Top scored accounts matching your ICP
-                  </p>
+                  <p className="text-sm text-muted-foreground">Top scored accounts matching your ICP</p>
                 </div>
-                <Link
-                  href="/accounts"
-                  className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-                >
+                <Link href="/accounts" className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
                   View all <ArrowUpRight className="h-4 w-4" />
                 </Link>
               </div>
@@ -241,22 +173,14 @@ export default function DashboardPage() {
                 {topProspects.length === 0 ? (
                   <div className="p-8 text-center text-muted-foreground">
                     <p>Koi top prospects nahi mile.</p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="mt-3 gap-2"
-                      onClick={() => router.push("/accounts")}
-                    >
+                    <Button variant="outline" size="sm" className="mt-3 gap-2" onClick={() => router.push("/accounts")}>
                       <Upload className="h-4 w-4" />Import Data
                     </Button>
                   </div>
                 ) : (
                   topProspects.slice(0, 6).map((prospect) => (
-                    <Link
-                      key={prospect._id}
-                      href={`/accounts/${prospect._id}`}
-                      className="flex items-center gap-4 p-4 hover:bg-muted/50 transition-colors"
-                    >
+                    <Link key={prospect._id} href={`/accounts/${prospect._id}`}
+                      className="flex items-center gap-4 p-4 hover:bg-muted/50 transition-colors">
                       <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-white text-sm font-bold flex-shrink-0">
                         {prospect.techFitScore ?? "—"}
                       </div>
@@ -264,33 +188,19 @@ export default function DashboardPage() {
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium">{prospect.accountName}</span>
                           {prospect.primaryIndustry && (
-                            <span className="text-xs text-muted-foreground">
-                              {prospect.primaryIndustry}
-                            </span>
+                            <span className="text-xs text-muted-foreground">{prospect.primaryIndustry}</span>
                           )}
                         </div>
                         <div className="flex gap-2 mt-1 flex-wrap">
                           {prospect.intentSignal && (
-                            <Badge variant="secondary" className="text-xs">
-                              {prospect.intentSignal}
-                            </Badge>
+                            <Badge variant="secondary" className="text-xs">{prospect.intentSignal}</Badge>
                           )}
                           {prospect.salesPriority && (
-                            <Badge variant="outline" className="text-xs">
-                              {prospect.salesPriority}
-                            </Badge>
-                          )}
-                          {prospect.country && (
-                            <span className="text-xs text-muted-foreground">
-                              {prospect.country}
-                            </span>
+                            <Badge variant="outline" className="text-xs">{prospect.salesPriority}</Badge>
                           )}
                         </div>
                       </div>
-                      <Badge
-                        variant="outline"
-                        className="text-green-600 border-green-200 bg-green-50 flex-shrink-0"
-                      >
+                      <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50 flex-shrink-0">
                         Sales-Ready
                       </Badge>
                     </Link>
@@ -300,10 +210,8 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* Industry + Country breakdown */}
+          {/* Industry + Country charts */}
           <div className="grid grid-cols-2 gap-4">
-
-            {/* By Industry */}
             <Card>
               <CardContent className="p-4 space-y-3">
                 <div className="flex items-center gap-2">
@@ -314,16 +222,11 @@ export default function DashboardPage() {
                   {byIndustry.slice(0, 5).map((item) => (
                     <div key={item.industry}>
                       <div className="flex justify-between text-xs mb-1">
-                        <span className="text-muted-foreground truncate max-w-[120px]">
-                          {item.industry}
-                        </span>
+                        <span className="text-muted-foreground truncate max-w-[120px]">{item.industry}</span>
                         <span className="font-medium">{item.count}</span>
                       </div>
                       <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-primary rounded-full transition-all"
-                          style={{ width: `${(item.count / maxIndustryCount) * 100}%` }}
-                        />
+                        <div className="h-full bg-primary rounded-full" style={{ width: `${(item.count / maxInd) * 100}%` }} />
                       </div>
                     </div>
                   ))}
@@ -331,7 +234,6 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
 
-            {/* By Country */}
             <Card>
               <CardContent className="p-4 space-y-3">
                 <div className="flex items-center gap-2">
@@ -346,10 +248,7 @@ export default function DashboardPage() {
                         <span className="font-medium">{item.count}</span>
                       </div>
                       <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-blue-400 rounded-full transition-all"
-                          style={{ width: `${(item.count / maxCountryCount) * 100}%` }}
-                        />
+                        <div className="h-full bg-blue-400 rounded-full" style={{ width: `${(item.count / maxCty) * 100}%` }} />
                       </div>
                     </div>
                   ))}
@@ -362,10 +261,9 @@ export default function DashboardPage() {
           {importHistory.length > 0 && (
             <Card>
               <CardContent className="p-0">
-                <div className="flex items-center justify-between p-4 border-b">
+                <div className="p-4 border-b">
                   <h3 className="font-semibold flex items-center gap-2">
-                    <Upload className="h-4 w-4 text-primary" />
-                    Recent Imports
+                    <Upload className="h-4 w-4 text-primary" />Recent Imports
                   </h3>
                 </div>
                 <div className="divide-y">
@@ -376,16 +274,10 @@ export default function DashboardPage() {
                           {imp.fileName?.split("-").slice(1).join("-") || imp.fileName}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          {imp.successCount} records •{" "}
-                          {new Date(imp.createdAt).toLocaleDateString("en-IN", {
-                            day: "numeric", month: "short"
-                          })}
+                          {imp.successCount} records · {new Date(imp.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
                         </p>
                       </div>
-                      <Badge
-                        variant={imp.status === "completed" ? "default" : "secondary"}
-                        className="text-xs"
-                      >
+                      <Badge variant={imp.status === "completed" ? "default" : "secondary"} className="text-xs">
                         {imp.status}
                       </Badge>
                     </div>
@@ -396,7 +288,7 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* ── Right col (1/3) ── */}
+        {/* Right col */}
         <div className="space-y-6">
 
           {/* Quick Stats */}
@@ -418,7 +310,7 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* Priority Breakdown */}
+          {/* By Priority */}
           {byPriority.length > 0 && (
             <Card>
               <CardContent className="p-4 space-y-3">
@@ -427,9 +319,7 @@ export default function DashboardPage() {
                   {byPriority.map((item) => (
                     <div key={item.priority} className="flex items-center gap-2">
                       <div className={`h-2 w-2 rounded-full flex-shrink-0 ${getPriorityColor(item.priority)}`} />
-                      <span className="text-xs text-muted-foreground flex-1 truncate">
-                        {item.priority}
-                      </span>
+                      <span className="text-xs text-muted-foreground flex-1 truncate">{item.priority}</span>
                       <span className="text-xs font-medium">{item.count}</span>
                     </div>
                   ))}
@@ -438,7 +328,7 @@ export default function DashboardPage() {
             </Card>
           )}
 
-          {/* CLV Breakdown */}
+          {/* By CLV */}
           {byCLV.length > 0 && (
             <Card>
               <CardContent className="p-4 space-y-3">
@@ -447,9 +337,7 @@ export default function DashboardPage() {
                   {byCLV.map((item) => (
                     <div key={item.clvRanking} className="flex items-center gap-2">
                       <div className={`h-2 w-2 rounded-full flex-shrink-0 ${getCLVColor(item.clvRanking)}`} />
-                      <span className="text-xs text-muted-foreground flex-1 truncate">
-                        {item.clvRanking}
-                      </span>
+                      <span className="text-xs text-muted-foreground flex-1 truncate">{item.clvRanking}</span>
                       <span className="text-xs font-medium">{item.count}</span>
                     </div>
                   ))}
@@ -463,40 +351,24 @@ export default function DashboardPage() {
             <CardContent className="p-0">
               <div className="flex items-center justify-between p-4 border-b">
                 <h3 className="font-semibold">Campaigns</h3>
-                <Link
-                  href="/campaigns"
-                  className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
-                >
+                <Link href="/campaigns" className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
                   View all <ArrowUpRight className="h-3 w-3" />
                 </Link>
               </div>
               <div className="divide-y">
                 {campaigns.length === 0 ? (
-                  <div className="p-4 text-sm text-muted-foreground text-center">
-                    Koi campaigns nahi hain.
-                  </div>
+                  <div className="p-4 text-sm text-muted-foreground text-center">Koi campaigns nahi hain.</div>
                 ) : (
                   campaigns.slice(0, 4).map((campaign) => (
-                    <Link
-                      key={campaign._id}
-                      href={`/campaigns/${campaign._id}`}
-                      className="flex items-center justify-between p-3 hover:bg-muted/30 transition-colors"
-                    >
+                    <Link key={campaign._id} href={`/campaigns/${campaign._id}`}
+                      className="flex items-center justify-between p-3 hover:bg-muted/30 transition-colors">
                       <div className="min-w-0">
                         <p className="text-sm font-medium truncate">{campaign.name}</p>
                         <p className="text-xs text-muted-foreground">
-                          {Array.isArray(campaign.prospectIds)
-                            ? campaign.prospectIds.length
-                            : 0} prospects
+                          {Array.isArray(campaign.prospectIds) ? campaign.prospectIds.length : 0} prospects
                         </p>
                       </div>
-                      <Badge
-                        variant={
-                          campaign.status === "active" ? "default" :
-                          campaign.status === "completed" ? "secondary" : "outline"
-                        }
-                        className="text-xs flex-shrink-0"
-                      >
+                      <Badge variant={campaign.status === "active" ? "default" : campaign.status === "completed" ? "secondary" : "outline"} className="text-xs flex-shrink-0">
                         {campaign.status}
                       </Badge>
                     </Link>

@@ -1,22 +1,20 @@
 "use client"
 
 // ─────────────────────────────────────────────
-// ICP Builder Page — Create + Edit + Match
+// ICP Builder — Create + Edit
 // APIs:
-//   POST /api/icp                          → create new ICP
-//   GET /api/icp/:id                       → load existing ICP for edit
-//   PUT /api/icp/:id                       → update existing ICP
-//   GET /api/icp/:id/match-prospects       → matching prospects
-//   GET /api/icp/:id/match-persona         → matching buyer personas
+//   POST /api/icp              → create
+//   GET  /api/icp/:id          → load for edit
+//   PUT  /api/icp/:id          → update
+//   GET  /api/icp/:id/match-prospects
+//   GET  /api/icp/:id/match-persona
+// buyerPersona fields: targetSeniorities, targetDepartments, targetDesignations
 // ─────────────────────────────────────────────
 
 import { useEffect, useState } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import Link from "next/link"
-import {
-  ArrowLeft, Loader2, Save, Users,
-  Building2, Target, ChevronRight
-} from "lucide-react"
+import { ArrowLeft, Loader2, Save, Users, Building2, Target, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -27,53 +25,37 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { api } from "@/lib/api"
 import type { Prospect } from "@/types"
 
-// ── Options — backend ke actual values se match ──
+// ── Options matching backend actual values ──
 const INDUSTRY_OPTIONS = [
   "BFSI", "IT & ITES", "SaaS", "Fintech", "E-commerce",
   "Healthcare", "EdTech", "Logistics", "Manufacturing",
   "Retail & CPG", "Media & Telecom", "Real Estate"
 ]
-
 const BUSINESS_MODEL_OPTIONS = ["B2B", "B2C", "B2B2C", "D2C", "E-Commerce", "Marketplace"]
-
-const EMPLOYEE_RANGES = [
-  "1-50", "51-200", "201-500", "501-1,000",
-  "1,001-5,000", "5,000+"
-]
-
+const EMPLOYEE_RANGES = ["1-50", "51-200", "201-500", "501-1,000", "1,001-5,000", "5,000+"]
 const REVENUE_RANGES = [
   "Seed <$1M", "Early $1M-$10M", "Scale-Up $10M-$50M",
   "Mid-Market $50M-$250M", "Corporate $250M-$1B", "Enterprise $1B+"
 ]
-
 const INTENT_SIGNALS = [
   "Modernization Mandate", "Hyper-Growth Mode", "Risk Mitigation",
   "Cost Containment", "Hiring for Data role", "Capital Event",
   "Strategic Pivot", "Regulatory Action"
 ]
-
-const COUNTRY_OPTIONS = [
-  "India", "UAE", "Singapore", "USA", "UK",
-  "Australia", "Canada", "Germany"
-]
-
+const COUNTRY_OPTIONS = ["India", "UAE", "Singapore", "USA", "UK", "Australia", "Canada", "Germany"]
 const SENIORITY_OPTIONS = ["C-Suite", "VP", "Director", "Manager", "Senior IC"]
 const DEPARTMENT_OPTIONS = ["Technology", "Operations", "Sales", "Finance", "Marketing", "HR"]
-const DESIGNATION_OPTIONS = [
-  "CTO", "VP Engineering", "IT Director", "CIO",
-  "VP Sales", "Head of Operations", "CFO"
-]
+const DESIGNATION_OPTIONS = ["CTO", "VP Engineering", "IT Director", "CIO", "VP Sales", "Head of Operations", "CFO"]
 
-// ── Toggle helper ─────────────────────────────
 const toggle = (list: string[], val: string) =>
   list.includes(val) ? list.filter(v => v !== val) : [...list, val]
 
 export default function IcpBuilderPage() {
   const searchParams = useSearchParams()
   const router = useRouter()
-  const editId = searchParams.get("id") // edit mode ke liye
+  const editId = searchParams.get("id")
 
-  // ── Form state ──────────────────────────────
+  // Form state
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [industries, setIndustries] = useState<string[]>([])
@@ -84,70 +66,54 @@ export default function IcpBuilderPage() {
   const [intentSignals, setIntentSignals] = useState<string[]>([])
   const [minTechScore, setMinTechScore] = useState("")
 
-  // ── Buyer Persona state ─────────────────────
+  // Buyer Persona
   const [targetSeniorities, setTargetSeniorities] = useState<string[]>([])
   const [targetDepartments, setTargetDepartments] = useState<string[]>([])
   const [targetDesignations, setTargetDesignations] = useState<string[]>([])
 
-  // ── UI state ────────────────────────────────
+  // UI state
   const [isLoadingIcp, setIsLoadingIcp] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [saveMsg, setSaveMsg] = useState("")
   const [savedIcpId, setSavedIcpId] = useState<string | null>(editId)
 
-  // ── Match state ─────────────────────────────
+  // Match state
   const [matchedProspects, setMatchedProspects] = useState<Prospect[]>([])
-  const [matchedPersonas, setMatchedPersonas] = useState<any[]>([])
   const [isMatching, setIsMatching] = useState(false)
   const [matchTotal, setMatchTotal] = useState(0)
 
-  // ── Load existing ICP for edit ──────────────
-  // GET /api/icp/:id
+  // Load existing ICP for edit
   useEffect(() => {
     if (!editId) return
     setIsLoadingIcp(true)
-    const loadIcp = async () => {
-      try {
-        const res = await api.get<any>(`/icp/${editId}`)
-        const icp = res.data
-        setName(icp.name ?? "")
-        setDescription(icp.description ?? "")
-        setIndustries(icp.industries ?? [])
-        setBusinessModels(icp.businessModels ?? [])
-        setCountries(icp.countries ?? [])
-        setEmployeeRanges(icp.employeeRanges ?? [])
-        setRevenues(icp.annualRevenues ?? [])
-        setIntentSignals(icp.intentSignals ?? [])
-        setMinTechScore(icp.minTechFitScore ? String(icp.minTechFitScore) : "")
-        // Buyer persona
-        setTargetSeniorities(icp.buyerPersona?.targetSeniorities ?? [])
-        setTargetDepartments(icp.buyerPersona?.targetDepartments ?? [])
-        setTargetDesignations(icp.buyerPersona?.targetDesignations ?? [])
-      } catch (err) {
-        console.error("ICP load error:", err)
-      } finally {
-        setIsLoadingIcp(false)
-      }
-    }
-    loadIcp()
+    api.get<any>(`/icp/${editId}`).then(res => {
+      const icp = res.data
+      setName(icp.name ?? "")
+      setDescription(icp.description ?? "")
+      setIndustries(icp.industries ?? [])
+      setBusinessModels(icp.businessModels ?? [])
+      setCountries(icp.countries ?? [])
+      setEmployeeRanges(icp.employeeRanges ?? [])
+      setRevenues(icp.annualRevenues ?? [])
+      setIntentSignals(icp.intentSignals ?? [])
+      setMinTechScore(icp.minTechFitScore ? String(icp.minTechFitScore) : "")
+      setTargetSeniorities(icp.buyerPersona?.targetSeniorities ?? [])
+      setTargetDepartments(icp.buyerPersona?.targetDepartments ?? [])
+      setTargetDesignations(icp.buyerPersona?.targetDesignations ?? [])
+    }).catch(console.error).finally(() => setIsLoadingIcp(false))
   }, [editId])
 
-  // ── Load matches when editId available ──────
+  // Load matches on edit
   useEffect(() => {
     if (editId) fetchMatches(editId)
   }, [editId])
 
-  // ── GET /api/icp/:id/match-prospects ────────
   const fetchMatches = async (icpId: string) => {
     setIsMatching(true)
     try {
-      const [prospectRes, personaRes] = await Promise.all([
-        api.get<any>(`/icp/${icpId}/match-prospects?page=1&limit=20`),
-        api.get<any>(`/icp/${icpId}/match-persona?page=1&limit=20`),
-      ])
-      setMatchedProspects(prospectRes.data || [])
-      setMatchTotal(prospectRes.pagination?.total || 0)
-      setMatchedPersonas(personaRes.data || [])
+      const res = await api.get<any>(`/icp/${icpId}/match-prospects?page=1&limit=20`)
+      setMatchedProspects(res.data || [])
+      setMatchTotal(res.pagination?.total || 0)
     } catch (err) {
       console.error("Match error:", err)
     } finally {
@@ -155,12 +121,8 @@ export default function IcpBuilderPage() {
     }
   }
 
-  // ── POST or PUT /api/icp ────────────────────
   const handleSave = async () => {
-    if (!name.trim()) {
-      setSaveMsg("❌ ICP naam zaroori hai.")
-      return
-    }
+    if (!name.trim()) { setSaveMsg("❌ ICP naam zaroori hai."); return }
     setIsSaving(true)
     setSaveMsg("")
     try {
@@ -182,26 +144,19 @@ export default function IcpBuilderPage() {
       }
 
       let icpId = savedIcpId
-
       if (editId || savedIcpId) {
-        // Update existing
         const res = await api.put<any>(`/icp/${editId || savedIcpId}`, payload)
         icpId = res.data?._id || editId || savedIcpId
         setSaveMsg("✅ ICP update ho gaya!")
       } else {
-        // Create new
         const res = await api.post<any>("/icp", payload)
         icpId = res.data?._id
         setSavedIcpId(icpId)
         setSaveMsg("✅ ICP save ho gaya!")
-        // URL update karo without refresh
         router.replace(`/segments/icp-builder?id=${icpId}`)
       }
-
-      // Matches fetch karo
       if (icpId) fetchMatches(icpId)
-
-    } catch (err) {
+    } catch {
       setSaveMsg("❌ Save nahi ho saka.")
     } finally {
       setIsSaving(false)
@@ -209,29 +164,20 @@ export default function IcpBuilderPage() {
   }
 
   if (isLoadingIcp) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    )
+    return <div className="flex items-center justify-center h-96"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
   }
 
   return (
     <div className="p-6 space-y-6">
 
-      {/* ── Header ── */}
+      {/* Header */}
       <div className="flex items-center gap-4">
-        <Link href="/segments"
-          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+        <Link href="/segments" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-4 w-4" />Back
         </Link>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold">
-            {editId ? "Edit ICP Profile" : "New ICP Profile"}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Ideal Customer Profile define karo — system matching prospects dhundh dega.
-          </p>
+          <h1 className="text-2xl font-bold">{editId ? "Edit ICP Profile" : "New ICP Profile"}</h1>
+          <p className="text-sm text-muted-foreground">Define your Ideal Customer Profile — system will find matching prospects.</p>
         </div>
         <Button className="gap-2" onClick={handleSave} disabled={isSaving}>
           {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
@@ -239,13 +185,11 @@ export default function IcpBuilderPage() {
         </Button>
       </div>
 
-      {saveMsg && (
-        <div className="text-sm px-4 py-2 rounded-lg border">{saveMsg}</div>
-      )}
+      {saveMsg && <div className="text-sm px-4 py-2 rounded-lg border">{saveMsg}</div>}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-        {/* ── Left: Form ── */}
+        {/* Left: Form */}
         <div className="lg:col-span-2">
           <Tabs defaultValue="company">
             <TabsList className="w-full">
@@ -253,48 +197,28 @@ export default function IcpBuilderPage() {
               <TabsTrigger value="persona" className="flex-1">Buyer Persona</TabsTrigger>
             </TabsList>
 
-            {/* ── Company Profile Tab ── */}
+            {/* Company Profile Tab */}
             <TabsContent value="company" className="mt-4 space-y-4">
-
-              {/* Name + Description */}
               <Card>
                 <CardContent className="p-4 space-y-3">
                   <div className="space-y-1">
                     <Label>ICP Name *</Label>
-                    <Input
-                      placeholder="e.g. Enterprise BFSI India"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                    />
+                    <Input placeholder="e.g. Enterprise BFSI India" value={name} onChange={(e) => setName(e.target.value)} />
                   </div>
                   <div className="space-y-1">
                     <Label>Description (Optional)</Label>
-                    <Input
-                      placeholder="e.g. Large BFSI companies with high tech fit"
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                    />
+                    <Input placeholder="e.g. Large BFSI companies with high tech fit" value={description} onChange={(e) => setDescription(e.target.value)} />
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Industries */}
               <Card>
                 <CardContent className="p-4 space-y-3">
-                  <h3 className="font-semibold flex items-center gap-2">
-                    <Building2 className="h-4 w-4 text-primary" />Industries
-                  </h3>
+                  <h3 className="font-semibold flex items-center gap-2"><Building2 className="h-4 w-4 text-primary" />Industries</h3>
                   <div className="flex flex-wrap gap-2">
                     {INDUSTRY_OPTIONS.map((ind) => (
-                      <button
-                        key={ind}
-                        onClick={() => setIndustries(p => toggle(p, ind))}
-                        className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-                          industries.includes(ind)
-                            ? "bg-primary text-white border-primary"
-                            : "bg-white text-muted-foreground border-border hover:border-primary"
-                        }`}
-                      >
+                      <button key={ind} onClick={() => setIndustries(p => toggle(p, ind))}
+                        className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${industries.includes(ind) ? "bg-primary text-white border-primary" : "bg-white text-muted-foreground border-border hover:border-primary"}`}>
                         {ind}
                       </button>
                     ))}
@@ -302,21 +226,13 @@ export default function IcpBuilderPage() {
                 </CardContent>
               </Card>
 
-              {/* Business Models */}
               <Card>
                 <CardContent className="p-4 space-y-3">
                   <h3 className="font-semibold">Business Models</h3>
                   <div className="flex flex-wrap gap-2">
                     {BUSINESS_MODEL_OPTIONS.map((bm) => (
-                      <button
-                        key={bm}
-                        onClick={() => setBusinessModels(p => toggle(p, bm))}
-                        className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-                          businessModels.includes(bm)
-                            ? "bg-primary text-white border-primary"
-                            : "bg-white text-muted-foreground border-border hover:border-primary"
-                        }`}
-                      >
+                      <button key={bm} onClick={() => setBusinessModels(p => toggle(p, bm))}
+                        className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${businessModels.includes(bm) ? "bg-primary text-white border-primary" : "bg-white text-muted-foreground border-border hover:border-primary"}`}>
                         {bm}
                       </button>
                     ))}
@@ -324,21 +240,13 @@ export default function IcpBuilderPage() {
                 </CardContent>
               </Card>
 
-              {/* Countries */}
               <Card>
                 <CardContent className="p-4 space-y-3">
-                  <h3 className="font-semibold">Countries / Regions</h3>
+                  <h3 className="font-semibold">Countries</h3>
                   <div className="flex flex-wrap gap-2">
                     {COUNTRY_OPTIONS.map((c) => (
-                      <button
-                        key={c}
-                        onClick={() => setCountries(p => toggle(p, c))}
-                        className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-                          countries.includes(c)
-                            ? "bg-primary text-white border-primary"
-                            : "bg-white text-muted-foreground border-border hover:border-primary"
-                        }`}
-                      >
+                      <button key={c} onClick={() => setCountries(p => toggle(p, c))}
+                        className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${countries.includes(c) ? "bg-primary text-white border-primary" : "bg-white text-muted-foreground border-border hover:border-primary"}`}>
                         {c}
                       </button>
                     ))}
@@ -346,7 +254,6 @@ export default function IcpBuilderPage() {
                 </CardContent>
               </Card>
 
-              {/* Employee + Revenue */}
               <div className="grid grid-cols-2 gap-4">
                 <Card>
                   <CardContent className="p-4 space-y-3">
@@ -354,34 +261,23 @@ export default function IcpBuilderPage() {
                     <div className="space-y-2">
                       {EMPLOYEE_RANGES.map((range) => (
                         <div key={range} className="flex items-center gap-2">
-                          <Checkbox
-                            id={`emp-${range}`}
-                            checked={employeeRanges.includes(range)}
-                            onCheckedChange={() => setEmployeeRanges(p => toggle(p, range))}
-                          />
-                          <label htmlFor={`emp-${range}`} className="text-sm cursor-pointer">
-                            {range}
-                          </label>
+                          <Checkbox id={`emp-${range}`} checked={employeeRanges.includes(range)}
+                            onCheckedChange={() => setEmployeeRanges(p => toggle(p, range))} />
+                          <label htmlFor={`emp-${range}`} className="text-sm cursor-pointer">{range}</label>
                         </div>
                       ))}
                     </div>
                   </CardContent>
                 </Card>
-
                 <Card>
                   <CardContent className="p-4 space-y-3">
                     <h3 className="font-semibold text-sm">Annual Revenue</h3>
                     <div className="space-y-2">
                       {REVENUE_RANGES.map((rev) => (
                         <div key={rev} className="flex items-center gap-2">
-                          <Checkbox
-                            id={`rev-${rev}`}
-                            checked={revenues.includes(rev)}
-                            onCheckedChange={() => setRevenues(p => toggle(p, rev))}
-                          />
-                          <label htmlFor={`rev-${rev}`} className="text-sm cursor-pointer text-xs">
-                            {rev}
-                          </label>
+                          <Checkbox id={`rev-${rev}`} checked={revenues.includes(rev)}
+                            onCheckedChange={() => setRevenues(p => toggle(p, rev))} />
+                          <label htmlFor={`rev-${rev}`} className="text-xs cursor-pointer">{rev}</label>
                         </div>
                       ))}
                     </div>
@@ -389,24 +285,13 @@ export default function IcpBuilderPage() {
                 </Card>
               </div>
 
-              {/* Intent Signals */}
               <Card>
                 <CardContent className="p-4 space-y-3">
                   <h3 className="font-semibold">Intent Signals</h3>
-                  <p className="text-xs text-muted-foreground">
-                    Kaunse signals wale accounts priority mein hain?
-                  </p>
                   <div className="flex flex-wrap gap-2">
                     {INTENT_SIGNALS.map((signal) => (
-                      <button
-                        key={signal}
-                        onClick={() => setIntentSignals(p => toggle(p, signal))}
-                        className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-                          intentSignals.includes(signal)
-                            ? "bg-primary text-white border-primary"
-                            : "bg-white text-muted-foreground border-border hover:border-primary"
-                        }`}
-                      >
+                      <button key={signal} onClick={() => setIntentSignals(p => toggle(p, signal))}
+                        className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${intentSignals.includes(signal) ? "bg-primary text-white border-primary" : "bg-white text-muted-foreground border-border hover:border-primary"}`}>
                         {signal}
                       </button>
                     ))}
@@ -414,92 +299,56 @@ export default function IcpBuilderPage() {
                 </CardContent>
               </Card>
 
-              {/* Min Tech Score */}
               <Card>
                 <CardContent className="p-4 space-y-3">
                   <h3 className="font-semibold">Minimum Tech Fit Score</h3>
-                  <p className="text-xs text-muted-foreground">
-                    0-100 ke beech — sirf is score se upar ke prospects match honge
-                  </p>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={100}
-                    placeholder="e.g. 60"
-                    value={minTechScore}
-                    onChange={(e) => setMinTechScore(e.target.value)}
-                    className="w-32"
-                  />
+                  <p className="text-xs text-muted-foreground">0-100 ke beech — sirf is score se upar ke prospects match honge</p>
+                  <Input type="number" min={0} max={100} placeholder="e.g. 60" value={minTechScore}
+                    onChange={(e) => setMinTechScore(e.target.value)} className="w-32" />
                 </CardContent>
               </Card>
             </TabsContent>
 
-            {/* ── Buyer Persona Tab ── */}
+            {/* Buyer Persona Tab */}
             <TabsContent value="persona" className="mt-4 space-y-4">
               <Card>
                 <CardContent className="p-4 space-y-4">
-                  <div className="flex items-center gap-2 mb-2">
+                  <div className="flex items-center gap-2">
                     <Users className="h-4 w-4 text-primary" />
                     <h3 className="font-semibold">Target Buyer Persona</h3>
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    Kaunse logon se contact karna hai — seniority, department, designation.
-                  </p>
+                  <p className="text-sm text-muted-foreground">Kaunse logon se contact karna hai — seniority, department, designation.</p>
 
-                  {/* Seniorities */}
                   <div className="space-y-2">
                     <Label className="text-sm font-medium">Seniority Level</Label>
                     <div className="flex flex-wrap gap-2">
                       {SENIORITY_OPTIONS.map((s) => (
-                        <button
-                          key={s}
-                          onClick={() => setTargetSeniorities(p => toggle(p, s))}
-                          className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-                            targetSeniorities.includes(s)
-                              ? "bg-primary text-white border-primary"
-                              : "bg-white text-muted-foreground border-border hover:border-primary"
-                          }`}
-                        >
+                        <button key={s} onClick={() => setTargetSeniorities(p => toggle(p, s))}
+                          className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${targetSeniorities.includes(s) ? "bg-primary text-white border-primary" : "bg-white text-muted-foreground border-border hover:border-primary"}`}>
                           {s}
                         </button>
                       ))}
                     </div>
                   </div>
 
-                  {/* Departments */}
                   <div className="space-y-2">
                     <Label className="text-sm font-medium">Department</Label>
                     <div className="flex flex-wrap gap-2">
                       {DEPARTMENT_OPTIONS.map((d) => (
-                        <button
-                          key={d}
-                          onClick={() => setTargetDepartments(p => toggle(p, d))}
-                          className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-                            targetDepartments.includes(d)
-                              ? "bg-primary text-white border-primary"
-                              : "bg-white text-muted-foreground border-border hover:border-primary"
-                          }`}
-                        >
+                        <button key={d} onClick={() => setTargetDepartments(p => toggle(p, d))}
+                          className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${targetDepartments.includes(d) ? "bg-primary text-white border-primary" : "bg-white text-muted-foreground border-border hover:border-primary"}`}>
                           {d}
                         </button>
                       ))}
                     </div>
                   </div>
 
-                  {/* Designations */}
                   <div className="space-y-2">
                     <Label className="text-sm font-medium">Designation</Label>
                     <div className="flex flex-wrap gap-2">
                       {DESIGNATION_OPTIONS.map((des) => (
-                        <button
-                          key={des}
-                          onClick={() => setTargetDesignations(p => toggle(p, des))}
-                          className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-                            targetDesignations.includes(des)
-                              ? "bg-primary text-white border-primary"
-                              : "bg-white text-muted-foreground border-border hover:border-primary"
-                          }`}
-                        >
+                        <button key={des} onClick={() => setTargetDesignations(p => toggle(p, des))}
+                          className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${targetDesignations.includes(des) ? "bg-primary text-white border-primary" : "bg-white text-muted-foreground border-border hover:border-primary"}`}>
                           {des}
                         </button>
                       ))}
@@ -511,48 +360,37 @@ export default function IcpBuilderPage() {
           </Tabs>
         </div>
 
-        {/* ── Right: Matched Prospects ── */}
-        <div className="space-y-4">
+        {/* Right: Matched Prospects */}
+        <div>
           <Card>
             <CardContent className="p-0">
               <div className="flex items-center gap-2 p-4 border-b">
                 <Target className="h-4 w-4 text-primary" />
                 <h3 className="font-semibold">Matching Prospects</h3>
-                {matchTotal > 0 && (
-                  <Badge className="ml-auto">{matchTotal}</Badge>
-                )}
+                {matchTotal > 0 && <Badge className="ml-auto">{matchTotal}</Badge>}
               </div>
 
-              {/* Placeholder — ICP save nahi hua abhi */}
               {!savedIcpId && !isMatching && (
                 <div className="p-6 text-center text-sm text-muted-foreground">
                   ICP save karo — matching prospects yahan dikhenge.
                 </div>
               )}
 
-              {/* Loading */}
               {isMatching && (
                 <div className="p-6 flex justify-center">
                   <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                 </div>
               )}
 
-              {/* Matched list */}
               {!isMatching && matchedProspects.length > 0 && (
-                <div className="divide-y max-h-72 overflow-y-auto">
+                <div className="divide-y max-h-[500px] overflow-y-auto">
                   {matchedProspects.map((prospect) => (
-                    <Link
-                      key={prospect._id}
-                      href={`/accounts/${prospect._id}`}
-                      className="flex items-center justify-between p-3 hover:bg-muted/30 transition-colors"
-                    >
+                    <Link key={prospect._id} href={`/accounts/${prospect._id}`}
+                      className="flex items-center justify-between p-3 hover:bg-muted/30 transition-colors">
                       <div className="min-w-0">
-                        <p className="font-medium text-sm truncate">
-                          {prospect.accountName}
-                        </p>
+                        <p className="font-medium text-sm truncate">{prospect.accountName}</p>
                         <p className="text-xs text-muted-foreground truncate">
-                          {[prospect.primaryIndustry, prospect.country]
-                            .filter(Boolean).join(" · ")}
+                          {[prospect.primaryIndustry, prospect.country].filter(Boolean).join(" · ")}
                         </p>
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
@@ -566,46 +404,19 @@ export default function IcpBuilderPage() {
                 </div>
               )}
 
-              {/* No matches */}
               {!isMatching && savedIcpId && matchedProspects.length === 0 && (
                 <div className="p-6 text-center text-sm text-muted-foreground">
                   Is ICP se koi prospect match nahi hua. Criteria loose karo.
                 </div>
               )}
 
-              {/* Total count link */}
               {matchTotal > matchedProspects.length && (
-                <div className="p-3 border-t text-center">
-                  <p className="text-xs text-muted-foreground">
-                    Showing 20 of {matchTotal} matches
-                  </p>
+                <div className="p-3 border-t text-center text-xs text-muted-foreground">
+                  Showing 20 of {matchTotal} matches
                 </div>
               )}
             </CardContent>
           </Card>
-
-          {/* Buyer Persona matches */}
-          {matchedPersonas.length > 0 && (
-            <Card>
-              <CardContent className="p-0">
-                <div className="flex items-center gap-2 p-4 border-b">
-                  <Users className="h-4 w-4 text-primary" />
-                  <h3 className="font-semibold text-sm">Persona Matches</h3>
-                  <Badge className="ml-auto text-xs">{matchedPersonas.length}</Badge>
-                </div>
-                <div className="divide-y max-h-48 overflow-y-auto">
-                  {matchedPersonas.slice(0, 5).map((persona: any, i) => (
-                    <div key={i} className="p-3 text-sm">
-                      <p className="font-medium">{persona.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {persona.designation} · {persona.seniority}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
         </div>
       </div>
     </div>

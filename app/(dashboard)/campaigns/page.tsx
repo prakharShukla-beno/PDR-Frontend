@@ -1,7 +1,8 @@
 "use client"
 
 // ─────────────────────────────────────────────
-// Campaigns List Page
+// Campaigns List Page — with Performance Table
+// Reference: akshayji.lovable.app/app/campaigns
 // APIs:
 //   GET /api/campaigns?page=1&limit=10  → list
 //   POST /api/campaigns                  → create
@@ -13,14 +14,15 @@ import { useEffect, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import {
   Plus, Loader2, Megaphone, Trash2,
-  ChevronLeft, ChevronRight, Pencil, Users
+  ChevronLeft, ChevronRight, Send,
+  Eye, MousePointerClick, TrendingUp
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
+import { Input } from "@/components/ui/input"
 import {
   Dialog, DialogContent, DialogHeader,
   DialogTitle, DialogFooter, DialogDescription
@@ -47,18 +49,8 @@ export default function CampaignsPage() {
   const [isCreating, setIsCreating] = useState(false)
   const [createMsg, setCreateMsg] = useState("")
   const [newCampaign, setNewCampaign] = useState({
-    name: "",
-    description: "",
-    status: "draft",
-    promptUsed: "",
+    name: "", description: "", status: "draft", promptUsed: "",
   })
-
-  // ── Edit status modal state ─────────────────
-  const [showEditModal, setShowEditModal] = useState(false)
-  const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null)
-  const [editStatus, setEditStatus] = useState("")
-  const [isUpdating, setIsUpdating] = useState(false)
-  const [editMsg, setEditMsg] = useState("")
 
   // ── GET /api/campaigns ──────────────────────
   const fetchCampaigns = useCallback(async () => {
@@ -107,26 +99,6 @@ export default function CampaignsPage() {
     }
   }
 
-  // ── PUT /api/campaigns/:id — status update ──
-  const handleUpdateStatus = async () => {
-    if (!editingCampaign) return
-    setIsUpdating(true)
-    setEditMsg("")
-    try {
-      await api.put(`/campaigns/${editingCampaign._id}`, { status: editStatus })
-      setEditMsg("✅ Status update ho gaya!")
-      setTimeout(() => {
-        setShowEditModal(false)
-        setEditMsg("")
-        fetchCampaigns()
-      }, 800)
-    } catch {
-      setEditMsg("❌ Update nahi ho saka.")
-    } finally {
-      setIsUpdating(false)
-    }
-  }
-
   // ── DELETE /api/campaigns/:id ───────────────
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
@@ -139,21 +111,16 @@ export default function CampaignsPage() {
     }
   }
 
-  // ── Open edit modal ─────────────────────────
-  const openEdit = (campaign: Campaign, e: React.MouseEvent) => {
-    e.stopPropagation()
-    setEditingCampaign(campaign)
-    setEditStatus(campaign.status)
-    setEditMsg("")
-    setShowEditModal(true)
-  }
-
-  // ── Status badge color ──────────────────────
+  // ── Status badge ────────────────────────────
   const getStatusStyle = (status: string) => {
     if (status === "active") return "bg-green-100 text-green-700 border-green-200"
     if (status === "completed") return "bg-blue-100 text-blue-700 border-blue-200"
     return "bg-gray-100 text-gray-600 border-gray-200"
   }
+
+  // ── Summary KPIs — from campaigns data ─────
+  const totalSent = campaigns.reduce((s, c) => s + ((c as any).sent ?? 0), 0)
+  const activeCampaigns = campaigns.filter(c => c.status === "active").length
 
   return (
     <div className="p-6 space-y-6">
@@ -162,19 +129,53 @@ export default function CampaignsPage() {
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">
-            Workspace
+            Prompt-based outreach
           </p>
           <h1 className="text-2xl font-bold">Campaigns</h1>
-          <p className="text-sm text-muted-foreground">{total} total campaigns</p>
+          <p className="text-sm text-muted-foreground">
+            {total} campaigns · {activeCampaigns} active
+          </p>
         </div>
-        <Button className="gap-2" onClick={() => setShowCreateModal(true)}>
-          <Plus className="h-4 w-4" />New Campaign
-        </Button>
+        <div className="flex gap-3">
+          {/* Campaign Wizard button */}
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => router.push("/campaigns/new")}
+          >
+            <Plus className="h-4 w-4" />Campaign Wizard
+          </Button>
+          <Button className="gap-2" onClick={() => setShowCreateModal(true)}>
+            <Plus className="h-4 w-4" />Quick Create
+          </Button>
+        </div>
+      </div>
+
+      {/* ── Summary KPI Cards ── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: "Total Sent", value: totalSent.toLocaleString(), icon: Send, color: "text-blue-500" },
+          { label: "Avg Open Rate", value: "—", icon: Eye, color: "text-green-500" },
+          { label: "Avg CTR", value: "—", icon: MousePointerClick, color: "text-purple-500" },
+          { label: "Conversions", value: "—", icon: TrendingUp, color: "text-primary" },
+        ].map((stat) => (
+          <Card key={stat.label} className="py-4">
+            <CardContent className="flex items-start justify-between p-0 px-4">
+              <div>
+                <p className="text-sm text-muted-foreground">{stat.label}</p>
+                <p className="text-2xl font-bold">{stat.value}</p>
+              </div>
+              <div className="p-2 rounded-lg bg-accent">
+                <stat.icon className={`h-5 w-5 ${stat.color}`} />
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       {/* ── Loading ── */}
       {isLoading && (
-        <div className="flex justify-center py-16">
+        <div className="flex justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
       )}
@@ -186,148 +187,158 @@ export default function CampaignsPage() {
           <div>
             <p className="font-medium">Koi campaigns nahi hain abhi</p>
             <p className="text-sm text-muted-foreground">
-              Pehli campaign banao aur prospects add karo.
+              Wizard se step-by-step campaign banao.
             </p>
           </div>
-          <Button onClick={() => setShowCreateModal(true)}>Create Campaign</Button>
+          <Button onClick={() => router.push("/campaigns/new")}>
+            Start Campaign Wizard
+          </Button>
         </div>
       )}
 
-      {/* ── Campaigns Grid ── */}
+      {/* ── Campaigns Performance Table ── */}
       {!isLoading && campaigns.length > 0 && (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {campaigns.map((campaign) => (
-              <Card
-                key={campaign._id}
-                className="hover:shadow-md transition-shadow cursor-pointer"
-                onClick={() => router.push(`/campaigns/${campaign._id}`)}
-              >
-                <CardContent className="p-4 space-y-3">
+          <Card>
+            <CardContent className="p-0">
+              <div className="p-4 border-b">
+                <h2 className="font-semibold">All Campaigns</h2>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-muted/30 border-b">
+                    <tr className="text-left text-xs text-muted-foreground uppercase tracking-wider">
+                      <th className="p-4 font-medium">Campaign</th>
+                      <th className="p-4 font-medium">Status</th>
+                      <th className="p-4 font-medium text-center">Prospects</th>
+                      <th className="p-4 font-medium text-center">Sent</th>
+                      <th className="p-4 font-medium text-center">Open</th>
+                      <th className="p-4 font-medium text-center">CTR</th>
+                      <th className="p-4 font-medium text-center">Conv</th>
+                      <th className="p-4 font-medium">Performance</th>
+                      <th className="p-4 w-10"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {campaigns.map((campaign) => {
+                      const prospects = Array.isArray(campaign.prospectIds)
+                        ? campaign.prospectIds.length : 0
+                      const sent = (campaign as any).sent ?? 0
+                      const openRate = (campaign as any).openRate ?? 0
+                      const ctr = (campaign as any).ctr ?? 0
+                      const conv = (campaign as any).conversions ?? 0
 
-                  {/* Name + Status */}
-                  <div className="flex items-start justify-between gap-2">
-                    <h3 className="font-semibold leading-tight line-clamp-1">
-                      {campaign.name}
-                    </h3>
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium border flex-shrink-0 ${getStatusStyle(campaign.status)}`}>
-                      {campaign.status}
-                    </span>
-                  </div>
-
-                  {/* Description */}
-                  {campaign.description && (
-                    <p className="text-sm text-muted-foreground line-clamp-2">
-                      {campaign.description}
-                    </p>
-                  )}
-
-                  {/* Prompt */}
-                  {campaign.promptUsed && (
-                    <div className="p-2 bg-muted/50 rounded text-xs text-muted-foreground line-clamp-2">
-                      <span className="font-medium">Prompt:</span> {campaign.promptUsed}
-                    </div>
-                  )}
-
-                  {/* Prospects count + Created by */}
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-1 text-muted-foreground">
-                      <Users className="h-3 w-3" />
-                      <span>
-                        {Array.isArray(campaign.prospectIds)
-                          ? campaign.prospectIds.length
-                          : 0} prospects
-                      </span>
-                    </div>
-                    <span className="text-xs text-muted-foreground">
-                      {new Date(campaign.createdAt ?? "").toLocaleDateString("en-IN", {
-                        day: "numeric", month: "short", year: "numeric"
-                      })}
-                    </span>
-                  </div>
-
-                  {/* Created by */}
-                  {campaign.createdBy && typeof campaign.createdBy === "object" && (
-                    <p className="text-xs text-muted-foreground">
-                      By: {(campaign.createdBy as any).name}
-                    </p>
-                  )}
-
-                  {/* Action buttons */}
-                  <div className="flex gap-2 pt-1 border-t">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1 text-xs gap-1"
-                      onClick={(e) => openEdit(campaign, e)}
-                    >
-                      <Pencil className="h-3 w-3" />
-                      Edit Status
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-red-500"
-                      onClick={(e) => handleDelete(campaign._id, e)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                      return (
+                        <tr
+                          key={campaign._id}
+                          className="hover:bg-muted/20 transition-colors cursor-pointer"
+                          onClick={() => router.push(`/campaigns/${campaign._id}`)}
+                        >
+                          <td className="p-4">
+                            <p className="font-medium text-sm">{campaign.name}</p>
+                            {campaign.description && (
+                              <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
+                                {campaign.description}
+                              </p>
+                            )}
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {new Date(campaign.createdAt ?? "").toLocaleDateString("en-IN", {
+                                day: "numeric", month: "short", year: "numeric"
+                              })}
+                            </p>
+                          </td>
+                          <td className="p-4">
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getStatusStyle(campaign.status)}`}>
+                              {campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1)}
+                            </span>
+                          </td>
+                          <td className="p-4 text-center text-sm font-medium">{prospects}</td>
+                          <td className="p-4 text-center text-sm">{sent || "—"}</td>
+                          <td className="p-4 text-center text-sm">{openRate ? `${openRate}%` : "—"}</td>
+                          <td className="p-4 text-center text-sm">{ctr ? `${ctr}%` : "—"}</td>
+                          <td className="p-4 text-center text-sm">{conv || "—"}</td>
+                          <td className="p-4">
+                            {/* Performance bar — prospects based */}
+                            <div className="w-20">
+                              <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full ${
+                                    campaign.status === "active" ? "bg-green-500" :
+                                    campaign.status === "completed" ? "bg-blue-400" : "bg-gray-300"
+                                  }`}
+                                  style={{
+                                    width: campaign.status === "completed" ? "100%" :
+                                           campaign.status === "active" ? "60%" : "10%"
+                                  }}
+                                />
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {campaign.status === "completed" ? "Done" :
+                                 campaign.status === "active" ? "Running" : "Draft"}
+                              </p>
+                            </div>
+                          </td>
+                          <td className="p-4">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-muted-foreground hover:text-red-500"
+                              onClick={(e) => handleDelete(campaign._id, e)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* ── Pagination ── */}
-          <div className="flex items-center justify-between pt-2">
-            <p className="text-sm text-muted-foreground">
-              Page {currentPage} of {totalPages} — {total} total
-            </p>
-            <div className="flex gap-2">
-              <Button variant="outline" size="icon" className="h-8 w-8"
-                disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <Button variant="outline" size="icon" className="h-8 w-8"
-                disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)}>
-                <ChevronRight className="h-4 w-4" />
-              </Button>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">
+                Page {currentPage} of {totalPages} — {total} total
+              </p>
+              <div className="flex gap-2">
+                <Button variant="outline" size="icon" className="h-8 w-8"
+                  disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button variant="outline" size="icon" className="h-8 w-8"
+                  disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)}>
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
         </>
       )}
 
-      {/* ── Create Campaign Modal ── */}
+      {/* ── Quick Create Modal ── */}
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>New Campaign</DialogTitle>
-            <DialogDescription className="sr-only">
-              Naya campaign create karo
-            </DialogDescription>
+            <DialogTitle>Quick Create Campaign</DialogTitle>
+            <DialogDescription className="sr-only">Naya campaign banao</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1">
               <Label>Campaign Name *</Label>
-              <Input
-                placeholder="e.g. Q3 Fintech Outreach"
-                value={newCampaign.name}
-                onChange={(e) => setNewCampaign(p => ({ ...p, name: e.target.value }))}
-              />
+              <Input placeholder="e.g. Q3 Fintech Outreach" value={newCampaign.name}
+                onChange={(e) => setNewCampaign(p => ({ ...p, name: e.target.value }))} />
             </div>
             <div className="space-y-1">
               <Label>Description</Label>
-              <Textarea
-                placeholder="Campaign ka purpose kya hai..."
-                value={newCampaign.description}
-                onChange={(e) => setNewCampaign(p => ({ ...p, description: e.target.value }))}
-                rows={2}
-              />
+              <Textarea placeholder="Campaign ka purpose..." value={newCampaign.description}
+                onChange={(e) => setNewCampaign(p => ({ ...p, description: e.target.value }))} rows={2} />
             </div>
             <div className="space-y-1">
               <Label>Status</Label>
-              <Select value={newCampaign.status}
-                onValueChange={(v) => setNewCampaign(p => ({ ...p, status: v }))}>
+              <Select value={newCampaign.status} onValueChange={(v) => setNewCampaign(p => ({ ...p, status: v }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="draft">Draft</SelectItem>
@@ -338,59 +349,16 @@ export default function CampaignsPage() {
             </div>
             <div className="space-y-1">
               <Label>AI Prompt (Optional)</Label>
-              <Textarea
-                placeholder="AI ko kya dhundna hai is campaign mein..."
-                value={newCampaign.promptUsed}
-                onChange={(e) => setNewCampaign(p => ({ ...p, promptUsed: e.target.value }))}
-                rows={3}
-              />
+              <Textarea placeholder="AI ko kya karna hai..." value={newCampaign.promptUsed}
+                onChange={(e) => setNewCampaign(p => ({ ...p, promptUsed: e.target.value }))} rows={3} />
             </div>
-            {createMsg && (
-              <div className="text-sm px-3 py-2 rounded-lg border">{createMsg}</div>
-            )}
+            {createMsg && <div className="text-sm px-3 py-2 rounded-lg border">{createMsg}</div>}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateModal(false)}>
-              Cancel
-            </Button>
+            <Button variant="outline" onClick={() => setShowCreateModal(false)}>Cancel</Button>
             <Button onClick={handleCreate} disabled={isCreating} className="gap-2">
               {isCreating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-              {isCreating ? "Creating..." : "Create Campaign"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ── Edit Status Modal ── */}
-      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Update Status</DialogTitle>
-            <DialogDescription className="text-sm text-muted-foreground">
-              {editingCampaign?.name}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-1">
-              <Label>Status</Label>
-              <Select value={editStatus} onValueChange={setEditStatus}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="draft">Draft</SelectItem>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {editMsg && (
-              <div className="text-sm px-3 py-2 rounded-lg border">{editMsg}</div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowEditModal(false)}>Cancel</Button>
-            <Button onClick={handleUpdateStatus} disabled={isUpdating} className="gap-2">
-              {isUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              {isUpdating ? "Saving..." : "Save"}
+              {isCreating ? "Creating..." : "Create"}
             </Button>
           </DialogFooter>
         </DialogContent>

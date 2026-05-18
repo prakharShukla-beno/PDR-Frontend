@@ -308,7 +308,7 @@ const toggleSelectAll = () => {
           <div className="flex gap-3">
             {/* Import Excel */}
             <label className="cursor-pointer">
-              <input type="file" accept=".xlsx" className="hidden"
+              <input type="file" accept=".xlsx,.csv" className="hidden"
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) { setUploadFile(f); setUploadMsg("") } }}
               />
               <Button variant="outline" className="gap-2" asChild>
