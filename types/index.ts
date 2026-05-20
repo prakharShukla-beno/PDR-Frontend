@@ -13,8 +13,53 @@ export interface AuthResponse {
   user: User
 }
 
-// Prospect / Account
+// ─── Contact (NEW) ────────────────────────────────────────────────────────────
+export type FunctionalDomain =
+  | "Corporate Strategy"
+  | "Technology & Digital"
+  | "Data & AI"
+  | "Finance & Accounting"
+  | "Revenue & Growth"
+  | "Product & Creative"
+  | "Operations & Logistics"
+  | "People & HR"
+  | "Legal & Governance"
+  | "Healthcare & Life Sciences"
+  | "Industrial & Engineering"
+  | "Resources & Utilities"
+  | "Public Sector & NGO"
+
 export interface Contact {
+  _id: string
+  accountId: Prospect | string
+  firstName?: string
+  lastName?: string
+  functionalDomain?: FunctionalDomain
+  keyFocusAreas?: string
+  standardizedRoles?: string
+  email?: string
+  secondaryEmail?: string
+  primaryPhone?: string
+  secondaryPhone?: string
+  primaryMobNo?: string
+  primaryPhoneExtension?: string
+  secondaryPhoneExtension?: string
+  linkedIn?: string
+  twitterUrl?: string
+  country?: string
+  state?: string
+  city?: string
+  timeZone?: string
+  isPrimary?: boolean
+  source?: "excel" | "csv" | "manual"
+  campaignIds?: Campaign[] | string[]
+  importLogId?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+// Prospect / Account
+export interface EmbeddedContact {
   _id?: string
   name: string
   designation?: string
@@ -25,9 +70,6 @@ export interface Contact {
   linkedin?: string
   isPrimary?: boolean
 }
-
-
-
 
 export interface Prospect {
   _id: string
@@ -61,7 +103,7 @@ export interface Prospect {
   isDuplicate?: boolean
 
   // Relations
-  contacts?: Contact[]
+  contacts?: EmbeddedContact[]
   assignedTo?: User | string
   campaignIds?: string[]
   interactionIds?: string[]
@@ -70,9 +112,6 @@ export interface Prospect {
   createdAt?: string
   updatedAt?: string
 }
-
-
-
 
 // Enrichment
 export interface Enrichment {
