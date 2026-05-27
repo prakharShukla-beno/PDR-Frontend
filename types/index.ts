@@ -13,7 +13,7 @@ export interface AuthResponse {
   user: User
 }
 
-// ─── Contact (NEW) ────────────────────────────────────────────────────────────
+// ─── Contact ─────────────────────────────────────────────────────────────────
 export type FunctionalDomain =
   | "Corporate Strategy"
   | "Technology & Digital"
@@ -31,7 +31,25 @@ export type FunctionalDomain =
 
 export interface Contact {
   _id: string
-  accountId: Prospect | string
+  accountId: Prospect | string | null
+
+  // Account reference fields
+  accountName?: string
+
+  // Denormalized account fields — filter ke liye
+  accountIndustry?: string
+  accountCountry?: string
+  accountCity?: string
+  accountEmployees?: string
+  accountRevenue?: string
+  accountBusinessModel?: string
+  accountSalesPriority?: string
+  accountClvRanking?: string
+  accountTechFitScore?: number
+  accountIntentSignal?: string
+  accountWebsite?: string
+
+  // Contact fields
   firstName?: string
   lastName?: string
   functionalDomain?: FunctionalDomain
@@ -50,15 +68,23 @@ export interface Contact {
   state?: string
   city?: string
   timeZone?: string
+
+  // Computed boolean fields
+  hasEmail?: boolean
+  hasPhone?: boolean
+  hasLinkedIn?: boolean
+
+  // System
   isPrimary?: boolean
-  source?: "excel" | "csv" | "manual"
+  isLinked?: boolean
+  source?: "excel" | "csv" | "manual" | "account_import"
   campaignIds?: Campaign[] | string[]
   importLogId?: string
   createdAt?: string
   updatedAt?: string
 }
 
-// Prospect / Account
+// ─── Prospect / Account ───────────────────────────────────────────────────────
 export interface EmbeddedContact {
   _id?: string
   name: string
@@ -74,6 +100,7 @@ export interface EmbeddedContact {
 export interface Prospect {
   _id: string
   accountName: string
+  accountNameLower?: string
   website?: string
   source?: string
   accountSource?: string
@@ -87,6 +114,8 @@ export interface Prospect {
 
   // Tech fields
   primaryTechStack?: string | string[]
+  secondaryTechStack?: string
+  tertiaryTechStack?: string
   techAdoptionProfile?: string
   infrastructureRisk?: string
   techFitScore?: number
@@ -100,10 +129,11 @@ export interface Prospect {
   servicePitch?: string
   strategicValue?: string
   historyTrigger?: string
+  campaignName?: string
+  comments?: string
   isDuplicate?: boolean
 
   // Relations
-  contacts?: EmbeddedContact[]
   assignedTo?: User | string
   campaignIds?: string[]
   interactionIds?: string[]
@@ -113,7 +143,7 @@ export interface Prospect {
   updatedAt?: string
 }
 
-// Enrichment
+// ─── Enrichment ───────────────────────────────────────────────────────────────
 export interface Enrichment {
   _id: string
   prospectId: string
@@ -126,7 +156,7 @@ export interface Enrichment {
   updatedAt?: string
 }
 
-// Campaign
+// ─── Campaign ─────────────────────────────────────────────────────────────────
 export interface Campaign {
   _id: string
   name: string
@@ -134,21 +164,29 @@ export interface Campaign {
   promptUsed?: string
   status: "draft" | "active" | "completed"
   prospectIds?: string[] | Prospect[]
+  stats?: {
+    sentCount?: number
+    openCount?: number
+    clickCount?: number
+    replyCount?: number
+    conversions?: number
+  }
   createdBy?: User | string
   createdAt?: string
   updatedAt?: string
 }
 
-// ICP
+// ─── ICP ──────────────────────────────────────────────────────────────────────
 export interface BuyerPersona {
-  seniorities?: string[]
-  departments?: string[]
-  designations?: string[]
+  targetSeniorities?: string[]
+  targetDepartments?: string[]
+  targetDesignations?: string[]
 }
 
 export interface ICP {
   _id: string
   name: string
+  description?: string
   industries?: string[]
   businessModels?: string[]
   countries?: string[]
@@ -162,7 +200,7 @@ export interface ICP {
   createdAt?: string
 }
 
-// Interaction
+// ─── Interaction ──────────────────────────────────────────────────────────────
 export type InteractionType = "Email" | "Call" | "Meeting" | "LinkedIn DM" | "Demo" | "Follow-Up" | "Event"
 export type InteractionOutcome = "Positive" | "Neutral" | "Negative" | "No Response"
 
@@ -177,7 +215,7 @@ export interface Interaction {
   createdAt?: string
 }
 
-// Duplicate
+// ─── Duplicate ────────────────────────────────────────────────────────────────
 export interface Duplicate {
   _id: string
   prospectId1: Prospect | string
@@ -189,8 +227,12 @@ export interface Duplicate {
   createdAt?: string
 }
 
-// Notification
-export type NotificationType = "import_complete" | "enrichment_done" | "dedup_complete"
+// ─── Notification ─────────────────────────────────────────────────────────────
+export type NotificationType =
+  | "import_complete"
+  | "enrichment_complete"
+  | "enrichment_done"
+  | "dedup_complete"
 
 export interface Notification {
   _id?: string
@@ -204,7 +246,7 @@ export interface Notification {
   createdAt?: string
 }
 
-// Dashboard
+// ─── Dashboard ────────────────────────────────────────────────────────────────
 export interface DashboardSummary {
   totalProspects: number
   duplicateCount: number
@@ -213,4 +255,43 @@ export interface DashboardSummary {
   pendingDuplicates?: number
   totalInteractions?: number
   enrichmentCoverage?: number
+}
+
+// ─── Import Log ───────────────────────────────────────────────────────────────
+export interface ImportLog {
+  _id: string
+  fileName: string
+  importType: string
+  uploadedBy: User | string
+  totalRows: number
+  successCount: number
+  failedCount: number
+  status: "processing" | "completed" | "failed" | "partial"
+  errorDetails?: string[]
+  createdAt?: string
+}
+
+// ─── Segment ──────────────────────────────────────────────────────────────────
+export interface Segment {
+  _id: string
+  name: string
+  description?: string
+  filters: Record<string, unknown>
+  prospectCount?: number
+  createdBy?: User | string
+  createdAt?: string
+}
+
+// ─── Pagination ───────────────────────────────────────────────────────────────
+export interface Pagination {
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+}
+
+export interface PaginatedResponse<T> {
+  success: boolean
+  data: T[]
+  pagination: Pagination
 }
