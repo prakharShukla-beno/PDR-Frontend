@@ -172,7 +172,7 @@ export default function DashboardPage() {
               <div className="divide-y">
                 {topProspects.length === 0 ? (
                   <div className="p-8 text-center text-muted-foreground">
-                    <p>Koi top prospects nahi mile.</p>
+                    <p>No top prospects found.</p>
                     <Button variant="outline" size="sm" className="mt-3 gap-2" onClick={() => router.push("/accounts")}>
                       <Upload className="h-4 w-4" />Import Data
                     </Button>
@@ -357,7 +357,7 @@ export default function DashboardPage() {
               </div>
               <div className="divide-y">
                 {campaigns.length === 0 ? (
-                  <div className="p-4 text-sm text-muted-foreground text-center">Koi campaigns nahi hain.</div>
+                  <div className="p-4 text-sm text-muted-foreground text-center">No campaigns available.</div>
                 ) : (
                   campaigns.slice(0, 4).map((campaign) => (
                     <Link key={campaign._id} href={`/campaigns/${campaign._id}`}

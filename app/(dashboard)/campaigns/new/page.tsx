@@ -3,13 +3,13 @@
 // ─────────────────────────────────────────────
 // Campaign Wizard — 6-Step Flow
 // Reference: akshayji.lovable.app/app/campaigns/new
-// Step 1: Segment choose karo (ICP list)
-// Step 2: Goal define karo
-// Step 3: AI Prompt likho
-// Step 4: AI Draft preview
+// Step 1: Choose a segment (ICP list)
+// Step 2: Define the goal
+// Step 3: Write the AI prompt
+// Step 4: Preview the AI draft
 // Step 5: Review prospects
-// Step 6: Schedule/Launch
-// API: POST /api/campaigns → final mein create
+// Step 6: Schedule or launch
+// API: POST /api/campaigns → create the campaign at the end
 // ─────────────────────────────────────────────
 
 import { useEffect, useState } from "react"
@@ -142,7 +142,7 @@ export default function CampaignWizardPage() {
       }, 1000)
     } catch (err) {
       if (err instanceof ApiError) setCreateMsg(`❌ ${err.message}`)
-      else setCreateMsg("❌ Create nahi ho saka.")
+      else setCreateMsg("❌ Creation failed.")
     } finally {
       setIsCreating(false)
     }
@@ -204,7 +204,7 @@ export default function CampaignWizardPage() {
             <div className="space-y-4">
               <h2 className="font-semibold text-lg">Choose a segment</h2>
               <p className="text-sm text-muted-foreground">
-                Kaunse ICP ke prospects ko target karna hai?
+                Which ICP prospects should be targeted?
               </p>
               {icpsLoading ? (
                 <div className="flex justify-center py-8">
@@ -212,7 +212,7 @@ export default function CampaignWizardPage() {
                 </div>
               ) : icps.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
-                  <p>Koi ICP nahi hai.</p>
+                  <p>No ICP profiles found.</p>
                   <Link href="/segments/icp-builder">
                     <Button variant="outline" size="sm" className="mt-3">Create ICP first</Button>
                   </Link>
@@ -337,12 +337,12 @@ export default function CampaignWizardPage() {
                 <Badge className="ml-auto">AI Generated</Badge>
               </div>
               <p className="text-sm text-muted-foreground">
-                AI ne yeh outreach message draft kiya hai. Edit kar sakte ho.
+                AI has drafted this outreach message. You can edit it.
               </p>
               {isDrafting ? (
                 <div className="flex flex-col items-center justify-center py-12 gap-3">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                  <p className="text-sm text-muted-foreground">AI draft generate kar raha hai...</p>
+                  <p className="text-sm text-muted-foreground">Generating AI draft...</p>
                 </div>
               ) : (
                 <Textarea
@@ -362,7 +362,7 @@ export default function CampaignWizardPage() {
           {currentStep === 5 && (
             <div className="space-y-4">
               <h2 className="font-semibold text-lg">Review</h2>
-              <p className="text-sm text-muted-foreground">Campaign launch karne se pehle review karo.</p>
+              <p className="text-sm text-muted-foreground">Review before launching the campaign.</p>
 
               <div className="space-y-3">
                 <div className="p-3 border rounded-lg">
@@ -395,7 +395,7 @@ export default function CampaignWizardPage() {
             <div className="space-y-4">
               <h2 className="font-semibold text-lg">Schedule & Launch</h2>
               <p className="text-sm text-muted-foreground">
-                Campaign abhi launch karo ya schedule karo.
+                Launch now or schedule the campaign.
               </p>
 
               <div className="grid grid-cols-2 gap-4">

@@ -3,8 +3,8 @@
 // ─────────────────────────────────────────────
 // Audit Log Page
 // Reference: akshayji.lovable.app/app/audit
-// Backend mein dedicated audit API nahi hai
-// Import history + enrichment activity use karenge
+// No dedicated audit API in backend
+// Use import history and enrichment activity data
 // APIs:
 //   GET /api/dashboard/import-history
 //   GET /api/interactions → recent interactions
@@ -46,7 +46,7 @@ export default function AuditLogPage() {
           api.get<any>("/dashboard/import-history"),
         ])
 
-        // Import history ko audit events mein convert karo
+        // Convert import history into audit events
         const importEvents: AuditEvent[] = (importRes.data || []).map((imp: any) => ({
           id: imp._id,
           time: new Date(imp.createdAt).toLocaleString("en-IN", {
@@ -140,7 +140,7 @@ export default function AuditLogPage() {
           ) : filteredEvents.length === 0 ? (
             <div className="p-12 text-center text-muted-foreground">
               <Filter className="h-8 w-8 mx-auto mb-2 opacity-40" />
-              <p>Koi audit events nahi hain is period mein.</p>
+              <p>No audit events for this period.</p>
             </div>
           ) : (
             <table className="w-full">

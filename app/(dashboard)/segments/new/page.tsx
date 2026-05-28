@@ -135,11 +135,11 @@ export default function NewSegmentPage() {
   // POST /api/segments — save the segment
   const handleSave = async () => {
     if (!name.trim()) {
-      setSaveMsg("❌ Segment name zaroori hai.")
+      setSaveMsg("❌ Segment name is required.")
       return
     }
     if (!hasFilters) {
-      setSaveMsg("❌ Kam se kam ek filter select karo.")
+      setSaveMsg("❌ Please select at least one filter.")
       return
     }
     setIsSaving(true)
@@ -151,10 +151,10 @@ export default function NewSegmentPage() {
         isShared,
         filters:     buildFilters(),
       })
-      setSaveMsg("✅ Segment save ho gaya!")
+      setSaveMsg("✅ Segment saved successfully!")
       setTimeout(() => router.push("/segments"), 1000)
     } catch (err: any) {
-      setSaveMsg(`❌ ${err?.message || "Save nahi ho saka."}`)
+      setSaveMsg(`❌ ${err?.message || "Save failed."}`)
     } finally {
       setIsSaving(false)
     }

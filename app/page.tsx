@@ -21,7 +21,7 @@ export default function LoginPage() {
     setError("")
 
     if (!email || !password) {
-      setError("Email aur password dono zaroori hain.")
+      setError("Email and password are both required.")
       return
     }
 
@@ -32,7 +32,7 @@ export default function LoginPage() {
       if (err instanceof ApiError) {
         setError(err.message)
       } else {
-        setError("Kuch gadbad ho gayi. Dobara try karo.")
+        setError("Something went wrong. Please try again.")
       }
     } finally {
       setIsLoading(false)

@@ -91,7 +91,7 @@ export function TopHeader() {
     }
   }, [searchQuery])
 
-  // Search results ke bahar click hone pe band karo
+  // Close search results when clicking outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
@@ -160,7 +160,7 @@ export function TopHeader() {
                   setShowResults(false)
                 }}
               >
-                Saare results dekho →
+                View all results →
               </button>
             </div>
           )}
@@ -168,7 +168,7 @@ export function TopHeader() {
           {/* No results */}
           {showResults && searchResults.length === 0 && !isSearching && searchQuery.trim() && (
             <div className="absolute top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg p-4 text-sm text-muted-foreground text-center">
-              "{searchQuery}" ke liye koi result nahi mila.
+              "{searchQuery}" did not return any results.
             </div>
           )}
         </div>
@@ -208,7 +208,7 @@ export function TopHeader() {
           <div className="max-h-72 overflow-y-auto divide-y">
             {notifications.length === 0 ? (
               <p className="p-4 text-sm text-muted-foreground text-center">
-                Koi notifications nahi hain.
+                No notifications available.
               </p>
             ) : (
               notifications.slice(0, 10).map((notif) => (

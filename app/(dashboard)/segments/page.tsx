@@ -88,13 +88,13 @@ export default function SegmentsPage() {
     return () => { cancelled = true }
   }, [icps])
 
-  // ── ICP card click — accounts page pe saare filters leke jao ─────────────
-  // ICP ke saare filters URL params mein daalo
-  // Accounts page inhe read karke filter apply karega
+  // ── ICP card click — pass all filters to the accounts page ───────
+  // Add all ICP filters to URL parameters
+  // The accounts page will read these and apply the filters
   const handleIcpClick = (icp: ICP) => {
     const params = new URLSearchParams()
 
-    // Industries — saari industries daalo, sirf pehli nahi
+    // Industries — include all industries, not just the first one
     if (icp.industries?.length) {
       icp.industries.forEach(ind => params.append("industryInclude[]", ind))
     }
@@ -146,12 +146,12 @@ export default function SegmentsPage() {
   // DELETE /api/icp/:id
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
-    if (!confirm("Ye ICP profile delete karna chahte ho?")) return
+    if (!confirm("Are you sure you want to delete this ICP profile?")) return
     try {
       await api.delete(`/icp/${id}`)
       fetchIcps()
     } catch {
-      alert("Delete nahi ho saka.")
+      alert("Delete failed.")
     }
   }
 
@@ -180,9 +180,9 @@ export default function SegmentsPage() {
         <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
           <Target className="h-12 w-12 text-muted-foreground/40" />
           <div>
-            <p className="font-medium">Koi ICP nahi hai abhi</p>
+            <p className="font-medium">No ICP profiles found yet</p>
             <p className="text-sm text-muted-foreground">
-              Pehla ICP banao — system automatically matching prospects dhundh dega.
+              Create your first ICP profile — the system will automatically find matching prospects.
             </p>
           </div>
           <Button onClick={() => router.push("/segments/icp-builder")}>Create ICP</Button>

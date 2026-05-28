@@ -7,7 +7,7 @@
 //   GET /api/dashboard/import-history → recent imports
 //   POST /api/import/excel            → CSV upload
 // Note: Apollo/ZoomInfo/Bitrix24 connectors
-// abhi backend mein nahi hain — UI only show karo
+// Backend connectors are not available yet — display only the UI
 // ─────────────────────────────────────────────
 
 import { useEffect, useState, useRef } from "react"
@@ -297,7 +297,7 @@ export default function DataSourcesPage() {
           ) : importHistory.length === 0 ? (
             <div className="p-8 text-center text-muted-foreground">
               <Upload className="h-8 w-8 mx-auto mb-2 opacity-40" />
-              <p>Koi imports nahi hain abhi. CSV upload karo.</p>
+              <p>No imports yet. Upload a CSV file.</p>
             </div>
           ) : (
             <div className="divide-y">

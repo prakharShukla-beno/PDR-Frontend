@@ -20,7 +20,7 @@ export default function ForgotPasswordPage() {
     setError("")
 
     if (!email) {
-      setError("Email zaroori hai.")
+      setError("Email is required.")
       return
     }
 
@@ -32,8 +32,8 @@ export default function ForgotPasswordPage() {
         body: JSON.stringify({ email }),
       })
 
-      // Backend hamesha same message deta hai chahe email ho ya na ho
-      // Toh response check karna zaroori nahi — bas submitted mark karo
+      // Backend returns the same message regardless of email validity.
+      // No need to inspect the response — just mark the form as submitted.
       if (res.ok || res.status === 200) {
         setIsSubmitted(true)
       } else {

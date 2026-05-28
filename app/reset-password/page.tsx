@@ -24,7 +24,7 @@ export default function ResetPasswordPage() {
   const [isSuccess, setIsSuccess]       = useState(false)
   const [error, setError]               = useState("")
 
-  // Token nahi mila URL mein — invalid link
+  // Token not found in URL — invalid link
   useEffect(() => {
     if (!token) {
       setError("Invalid or missing reset link. Please request a new one.")
@@ -36,15 +36,15 @@ export default function ResetPasswordPage() {
     setError("")
 
     if (!newPassword) {
-      setError("Password zaroori hai.")
+      setError("Password is required.")
       return
     }
     if (newPassword.length < 6) {
-      setError("Password kam se kam 6 characters ka hona chahiye.")
+      setError("Password must be at least 6 characters.")
       return
     }
     if (newPassword !== confirm) {
-      setError("Passwords match nahi kar rahe.")
+      setError("Passwords do not match.")
       return
     }
 
@@ -62,7 +62,7 @@ export default function ResetPasswordPage() {
         throw new Error(data.message || "Reset failed. Please try again.")
       }
 
-      // Auto login — backend ne naya token diya
+      // Auto login — backend returned a new token
       if (data.data?.token) {
         setToken(data.data.token)
         setStoredUser(data.data.user)
@@ -71,7 +71,7 @@ export default function ResetPasswordPage() {
 
       setIsSuccess(true)
 
-      // 2 second baad dashboard pe bhejo
+      // Redirect to dashboard after 2 seconds
       setTimeout(() => {
         router.push("/dashboard")
       }, 2000)

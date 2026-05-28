@@ -138,11 +138,11 @@ export default function ContactsPage() {
   }
 
   const handleDelete = async () => {
-    if (!selectedIds.length || !confirm(`${selectedIds.length} contact(s) delete karna chahte ho?`)) return
+    if (!selectedIds.length || !confirm(`Do you want to delete ${selectedIds.length} selected contact(s)?`)) return
     try {
       await Promise.all(selectedIds.map(id => api.delete(`/contacts/${id}`)))
       setSelectedIds([]); fetchContacts()
-    } catch { alert("Delete nahi ho saka.") }
+    } catch { alert("Delete failed.") }
   }
 
   const handleUpload = async () => {
@@ -151,24 +151,24 @@ export default function ContactsPage() {
     try {
       const formData = new FormData(); formData.append("file", uploadFile)
       await api.upload<any>("/import/contacts", formData)
-      setUploadMsg("✅ Import shuru ho gaya! Notification aayegi jab complete ho.")
+      setUploadMsg("✅ Import started. You will be notified when it completes.")
       setUploadFile(null)
       setTimeout(fetchContacts, 2000)
     } catch (err) {
       if (err instanceof ApiError) setUploadMsg(`❌ ${err.message}`)
-      else setUploadMsg("❌ Upload nahi ho saka.")
+      else setUploadMsg("❌ Upload failed.")
     } finally { setIsUploading(false) }
   }
 
   const handleAddContact = async () => {
-    if (!newContact.accountId) { setAddMsg("❌ Account select karna zaroori hai."); return }
+    if (!newContact.accountId) { setAddMsg("❌ Selecting an account is required."); return }
     setIsAdding(true); setAddMsg("")
     try {
       const payload: any = { ...newContact }
       Object.keys(payload).forEach(k => { if (payload[k] === "") delete payload[k] })
       delete payload.accountName
       await api.post("/contacts", payload)
-      setAddMsg("✅ Contact create ho gaya!")
+      setAddMsg("✅ Contact created successfully!")
       setTimeout(() => {
         setShowAddModal(false); setAddMsg(""); setNewContact(emptyContact)
         setAccountSearch(""); setAccountOptions([]); fetchContacts()
@@ -295,7 +295,7 @@ export default function ContactsPage() {
                   <td colSpan={9} className="p-12 text-center">
                     <div className="flex flex-col items-center gap-3 text-muted-foreground">
                       <Users className="h-10 w-10 opacity-30" />
-                      <p>{activeCount > 0 ? "Koi contacts filter criteria se match nahi karte." : "Koi contacts nahi hain."}</p>
+                      <p>{activeCount > 0 ? "No contacts match the filter criteria." : "No contacts available."}</p>
                     </div>
                   </td>
                 </tr>
@@ -408,7 +408,7 @@ export default function ContactsPage() {
         if (!open) { setNewContact(emptyContact); setAccountSearch(""); setAccountOptions([]) }
       }}>
         <DialogContent className="sm:max-w-2xl">
-          <DialogDescription className="sr-only">Naya contact create karo.</DialogDescription>
+          <DialogDescription className="sr-only">Create a new contact.</DialogDescription>
           <DialogHeader><DialogTitle>Add New Contact</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2 max-h-[65vh] overflow-y-auto pr-1">
             <div className="space-y-1">
@@ -421,7 +421,7 @@ export default function ContactsPage() {
               ) : (
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input placeholder="Account naam search karo..." className="pl-9"
+                  <Input placeholder="Search account name..." className="pl-9"
                     value={accountSearch} onChange={(e) => setAccountSearch(e.target.value)} />
                   {(accountOptions.length > 0 || isSearchingAccounts) && (
                     <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-lg border bg-white shadow-lg">

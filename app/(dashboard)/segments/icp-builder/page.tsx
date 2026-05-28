@@ -147,17 +147,17 @@ export default function IcpBuilderPage() {
       if (editId || savedIcpId) {
         const res = await api.put<any>(`/icp/${editId || savedIcpId}`, payload)
         icpId = res.data?._id || editId || savedIcpId
-        setSaveMsg("✅ ICP update ho gaya!")
+        setSaveMsg("✅ ICP profile updated successfully!")
       } else {
         const res = await api.post<any>("/icp", payload)
         icpId = res.data?._id
         setSavedIcpId(icpId)
-        setSaveMsg("✅ ICP save ho gaya!")
+        setSaveMsg("✅ ICP profile saved successfully!")
         router.replace(`/segments/icp-builder?id=${icpId}`)
       }
       if (icpId) fetchMatches(icpId)
     } catch {
-      setSaveMsg("❌ Save nahi ho saka.")
+      setSaveMsg("❌ Save failed.")
     } finally {
       setIsSaving(false)
     }
@@ -302,7 +302,7 @@ export default function IcpBuilderPage() {
               <Card>
                 <CardContent className="p-4 space-y-3">
                   <h3 className="font-semibold">Minimum Tech Fit Score</h3>
-                  <p className="text-xs text-muted-foreground">0-100 ke beech — sirf is score se upar ke prospects match honge</p>
+                  <p className="text-xs text-muted-foreground">0-100 range — only prospects above this score will match.</p>
                   <Input type="number" min={0} max={100} placeholder="e.g. 60" value={minTechScore}
                     onChange={(e) => setMinTechScore(e.target.value)} className="w-32" />
                 </CardContent>
@@ -317,7 +317,7 @@ export default function IcpBuilderPage() {
                     <Users className="h-4 w-4 text-primary" />
                     <h3 className="font-semibold">Target Buyer Persona</h3>
                   </div>
-                  <p className="text-sm text-muted-foreground">Kaunse logon se contact karna hai — seniority, department, designation.</p>
+                  <p className="text-sm text-muted-foreground">Who to contact — seniority, department, designation.</p>
 
                   <div className="space-y-2">
                     <Label className="text-sm font-medium">Seniority Level</Label>
@@ -372,7 +372,7 @@ export default function IcpBuilderPage() {
 
               {!savedIcpId && !isMatching && (
                 <div className="p-6 text-center text-sm text-muted-foreground">
-                  ICP save karo — matching prospects yahan dikhenge.
+                  Save the ICP profile — matching prospects will appear here.
                 </div>
               )}
 
@@ -406,7 +406,7 @@ export default function IcpBuilderPage() {
 
               {!isMatching && savedIcpId && matchedProspects.length === 0 && (
                 <div className="p-6 text-center text-sm text-muted-foreground">
-                  Is ICP se koi prospect match nahi hua. Criteria loose karo.
+                  No prospects match this ICP yet. Try loosening the criteria.
                 </div>
               )}
 

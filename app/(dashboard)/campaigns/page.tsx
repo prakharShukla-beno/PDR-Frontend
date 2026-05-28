@@ -84,7 +84,7 @@ export default function CampaignsPage() {
         status: newCampaign.status,
         promptUsed: newCampaign.promptUsed || undefined,
       })
-      setCreateMsg("✅ Campaign create ho gayi!")
+      setCreateMsg("✅ Campaign created successfully!")
       setTimeout(() => {
         setShowCreateModal(false)
         setCreateMsg("")
@@ -93,7 +93,7 @@ export default function CampaignsPage() {
       }, 1000)
     } catch (err) {
       if (err instanceof ApiError) setCreateMsg(`❌ ${err.message}`)
-      else setCreateMsg("❌ Create nahi ho saki.")
+      else setCreateMsg("❌ Creation failed.")
     } finally {
       setIsCreating(false)
     }
@@ -102,12 +102,12 @@ export default function CampaignsPage() {
   // ── DELETE /api/campaigns/:id ───────────────
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
-    if (!confirm("Ye campaign delete karna chahte ho?")) return
+    if (!confirm("Are you sure you want to delete this campaign?")) return
     try {
       await api.delete(`/campaigns/${id}`)
       fetchCampaigns()
     } catch {
-      alert("Delete nahi ho saka.")
+      alert("Delete failed.")
     }
   }
 
@@ -185,9 +185,9 @@ export default function CampaignsPage() {
         <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
           <Megaphone className="h-12 w-12 text-muted-foreground/40" />
           <div>
-            <p className="font-medium">Koi campaigns nahi hain abhi</p>
+            <p className="font-medium">No campaigns found yet</p>
             <p className="text-sm text-muted-foreground">
-              Wizard se step-by-step campaign banao.
+              Use the wizard to create a campaign step by step.
             </p>
           </div>
           <Button onClick={() => router.push("/campaigns/new")}>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react"
 import Link from "next/link"
-import { useSearchParams } from "next/navigation"  // ← URL params padhne ke liye
+import { useSearchParams } from "next/navigation"  // For reading URL params
 import {
   Search, Upload, Download, Plus, SlidersHorizontal,
   X, Pencil, ChevronLeft, ChevronRight, Loader2
@@ -19,7 +19,7 @@ import type { Prospect } from "@/types"
 import { FilterPanel, FilterState, EMPTY_FILTERS, buildFilterQuery, countActiveFilters } from "@/components/filters/FilterPanel"
 
 export default function AccountsPage() {
-  const searchParams = useSearchParams()  // ← Segment se aaye URL params
+  const searchParams = useSearchParams()  // Segment URL parameters
 
   const [prospects, setProspects]           = useState<Prospect[]>([])
   const [total, setTotal]                   = useState(0)
@@ -44,16 +44,16 @@ export default function AccountsPage() {
     businessModel: "", country: "", hqLocationCity: "", source: "",
   })
 
-  // ── URL params se filters read karo — Segment click pe apply hoga ──────────
-  // Jab bhi URL params change hote hain (segment click), filters update ho jaate hain
+  // ── Load filters from URL params for segment links ──────────
+  // Update filters whenever URL params change
   useEffect(() => {
     if (!searchParams) return
 
-    // Segment name — header mein dikhane ke liye
+    // Segment name — display in the header
     const name = searchParams.get("segmentName")
     if (name) setSegmentName(name)
 
-    // Check karo koi segment filter aaya hai kya
+    // Check if a segment filter is present
     const hasSegmentFilter =
       searchParams.has("industryInclude[]") ||
       searchParams.has("countryInclude[]") ||
@@ -87,7 +87,7 @@ export default function AccountsPage() {
       techFitScoreMax: 100,
     }
 
-    // Filters apply karo
+    // Apply filters
     setAppliedFilters(newFilters)
     setFilters(newFilters)
     setCurrentPage(1)
@@ -143,11 +143,11 @@ export default function AccountsPage() {
   }
 
   const handleDelete = async () => {
-    if (!selectedIds.length || !confirm(`${selectedIds.length} prospect(s) delete karna chahte ho?`)) return
+    if (!selectedIds.length || !confirm(`Do you want to delete ${selectedIds.length} selected prospect(s)?`)) return
     try {
       await Promise.all(selectedIds.map(id => api.delete(`/prospects/${id}`)))
       setSelectedIds([]); fetchProspects()
-    } catch { alert("Delete nahi ho saka.") }
+    } catch { alert("Delete failed.") }
   }
 
   const handleUpload = async () => {
@@ -156,7 +156,7 @@ export default function AccountsPage() {
     try {
       const formData = new FormData(); formData.append("file", uploadFile)
       await api.upload<any>("/import/excel", formData)
-      setUploadMsg("✅ Import shuru ho gaya! Notification aayegi jab complete ho.")
+      setUploadMsg("✅ Import started. You will be notified when it completes.")
       setUploadFile(null); setTimeout(fetchProspects, 2000)
     } catch (err) {
       if (err instanceof ApiError) setUploadMsg(`❌ ${err.message}`)
@@ -164,13 +164,13 @@ export default function AccountsPage() {
   }
 
   const handleAddAccount = async () => {
-    if (!newAccount.accountName.trim()) { setAddMsg("❌ Account name zaroori hai."); return }
+    if (!newAccount.accountName.trim()) { setAddMsg("❌ Account name is required."); return }
     setIsAdding(true); setAddMsg("")
     try {
       const payload: any = { ...newAccount, source: newAccount.source || "manual" }
       Object.keys(payload).forEach(k => { if (!payload[k]) delete payload[k] })
       await api.post("/prospects", payload)
-      setAddMsg("✅ Account create ho gaya!")
+      setAddMsg("✅ Account created successfully!")
       setTimeout(() => {
         setShowAddModal(false); setAddMsg("")
         setNewAccount({ accountName: "", website: "", primaryIndustry: "", businessModel: "", country: "", hqLocationCity: "", source: "" })
@@ -215,7 +215,7 @@ export default function AccountsPage() {
             </p>
             <h1 className="text-2xl font-bold text-foreground">
               Accounts
-              {/* Segment se aaya hai to segment name dikhao */}
+              {/* If segment context exists, show the segment name */}
               {segmentName && (
                 <span className="ml-2 text-base font-normal text-primary">
                   — {segmentName}
@@ -234,7 +234,7 @@ export default function AccountsPage() {
                   setSegmentName("")
                   setAppliedFilters(EMPTY_FILTERS)
                   setFilters(EMPTY_FILTERS)
-                  // URL clean karo
+                  // Clean the URL
                   window.history.replaceState({}, "", "/accounts")
                 }}
               >
@@ -342,7 +342,7 @@ export default function AccountsPage() {
                 ))
               ) : prospects.length === 0 ? (
                 <tr><td colSpan={8} className="p-12 text-center text-muted-foreground">
-                  {activeCount > 0 ? "Koi accounts filter criteria se match nahi karte." : "Koi accounts nahi hain."}
+                  {activeCount > 0 ? "No accounts match the filter criteria." : "No accounts available."}
                 </td></tr>
               ) : (
                 prospects.map((p) => (
@@ -446,7 +446,7 @@ export default function AccountsPage() {
 
       <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
         <DialogContent className="sm:max-w-lg">
-          <DialogDescription className="sr-only">Naya account create karo.</DialogDescription>
+          <DialogDescription className="sr-only">Create a new account.</DialogDescription>
           <DialogHeader><DialogTitle>Add New Account</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2 max-h-[60vh] overflow-y-auto pr-1">
             <div className="space-y-1">

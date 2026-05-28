@@ -146,7 +146,7 @@ export default function ContactDetailPage() {
       setTimeout(() => { setShowEditModal(false); setSaveMsg("") }, 1000)
     } catch (err) {
       if (err instanceof ApiError) setSaveMsg(`❌ ${err.message}`)
-      else setSaveMsg("❌ Save nahi ho saka.")
+      else setSaveMsg("❌ Save failed.")
     } finally {
       setIsSaving(false)
     }
@@ -167,12 +167,12 @@ export default function ContactDetailPage() {
 
   // ── POST /api/contacts/:id/campaigns/:campaignId ─────────────────────────────
   const handleAddToCampaign = async () => {
-    if (!selectedCampaignId) { setCampaignMsg("❌ Campaign select karo."); return }
+    if (!selectedCampaignId) { setCampaignMsg("❌ Please select a campaign."); return }
     setIsAddingToCampaign(true)
     setCampaignMsg("")
     try {
       await api.post(`/contacts/${contactId}/campaigns/${selectedCampaignId}`)
-      setCampaignMsg("✅ Contact campaign mein add ho gaya!")
+      setCampaignMsg("✅ Contact successfully added to campaign!")
       const res = await api.get<any>(`/contacts/${contactId}`)
       setContact(res.data)
       setTimeout(() => {
@@ -182,7 +182,7 @@ export default function ContactDetailPage() {
       }, 1200)
     } catch (err) {
       if (err instanceof ApiError) setCampaignMsg(`❌ ${err.message}`)
-      else setCampaignMsg("❌ Campaign mein add nahi ho saka.")
+      else setCampaignMsg("❌ Could not add to campaign.")
     } finally {
       setIsAddingToCampaign(false)
     }
@@ -211,7 +211,7 @@ export default function ContactDetailPage() {
   if (!contact) {
     return (
       <div className="p-6">
-        <p className="text-muted-foreground">Contact nahi mila.</p>
+        <p className="text-muted-foreground">Contact not found.</p>
         <Link href="/contacts"><Button variant="outline" className="mt-4">Back</Button></Link>
       </div>
     )
@@ -467,7 +467,7 @@ export default function ContactDetailPage() {
               </div>
               {linkedCampaigns.length === 0 ? (
                 <div className="p-8 text-center space-y-3">
-                  <p className="text-muted-foreground text-sm">Koi campaign nahi hai abhi.</p>
+                  <p className="text-muted-foreground text-sm">No campaigns available yet.</p>
                   <Button variant="outline" size="sm" className="gap-2" onClick={handleOpenCampaignModal}>
                     <Plus className="h-4 w-4" />Save to Campaign
                   </Button>
@@ -525,7 +525,7 @@ export default function ContactDetailPage() {
                   </Link>
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">Account linked nahi hai.</p>
+                <p className="text-sm text-muted-foreground">No account is linked.</p>
               )}
             </CardContent>
           </Card>
@@ -558,7 +558,7 @@ export default function ContactDetailPage() {
                 <Save className="h-4 w-4 text-primary" />Save to Campaign
               </h2>
               <p className="text-sm text-muted-foreground mb-3">
-                Is contact ko ek campaign mein add karo targeted outreach ke liye.
+                Add this contact to a campaign for targeted outreach.
               </p>
               <Button className="w-full gap-2" onClick={handleOpenCampaignModal}>
                 <Plus className="h-4 w-4" />Select Campaign
@@ -571,7 +571,7 @@ export default function ContactDetailPage() {
       {/* ── Edit Modal ── */}
       <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
         <DialogContent className="sm:max-w-2xl">
-          <DialogDescription className="sr-only">Contact edit karo.</DialogDescription>
+          <DialogDescription className="sr-only">Edit contact details.</DialogDescription>
           <DialogHeader><DialogTitle>Edit — {fullName}</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2 max-h-[65vh] overflow-y-auto pr-1">
 
@@ -683,19 +683,19 @@ export default function ContactDetailPage() {
       {/* ── Save to Campaign Modal ── */}
       <Dialog open={showCampaignModal} onOpenChange={setShowCampaignModal}>
         <DialogContent className="sm:max-w-md">
-          <DialogDescription className="sr-only">Campaign mein add karo.</DialogDescription>
+          <DialogDescription className="sr-only">Add to campaign.</DialogDescription>
           <DialogHeader><DialogTitle>Save to Campaign</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
             <p className="text-sm text-muted-foreground">
-              <span className="font-medium text-foreground">{fullName}</span> ko kaunse campaign mein add karna hai?
+              <span className="font-medium text-foreground">{fullName}</span> should be added to which campaign?
             </p>
             <div className="space-y-1">
-              <Label>Campaign Select Karo</Label>
+              <Label>Select a Campaign</Label>
               <Select value={selectedCampaignId} onValueChange={setSelectedCampaignId}>
-                <SelectTrigger><SelectValue placeholder="Campaign choose karo..." /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Select campaign..." /></SelectTrigger>
                 <SelectContent>
                   {campaigns.length === 0
-                    ? <SelectItem value="none" disabled>Koi campaigns nahi hain</SelectItem>
+                    ? <SelectItem value="none" disabled>No campaigns available</SelectItem>
                     : campaigns.map(c => (
                         <SelectItem key={c._id} value={c._id}>
                           {c.name} — <span className="capitalize text-muted-foreground">{c.status}</span>

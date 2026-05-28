@@ -160,8 +160,8 @@ export default function InsightsPage() {
           <Card>
             <CardContent className="p-12 text-center text-muted-foreground">
               <TrendingUp className="h-12 w-12 mx-auto mb-4 opacity-30" />
-              <p className="font-medium">Koi top accounts nahi mile.</p>
-              <p className="text-sm mt-1">Data import karo aur AI enrichment run karo.</p>
+              <p className="font-medium">No top accounts found.</p>
+              <p className="text-sm mt-1">Import data and run AI enrichment.</p>
               <Button variant="outline" className="mt-4" onClick={() => router.push("/accounts")}>
                 Import Data
               </Button>

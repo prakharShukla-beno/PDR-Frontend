@@ -3,7 +3,7 @@
 // ─────────────────────────────────────────────
 // Users & Roles Page
 // Reference: akshayji.lovable.app/app/users
-// Backend mein user management API nahi hai abhi
+// Backend user management API not available yet
 // Current logged-in user dikhao + static permissions matrix
 // API: GET /api/auth/me (agar ho) ya AuthContext se
 // ─────────────────────────────────────────────
@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/select"
 import { useAuth } from "@/context/AuthContext"
 
-// Static team members — backend API nahi hai abhi
+// Static team members — backend API not available yet
 const TEAM_MEMBERS = [
   { initials: "RS", name: "Rajat Sharma", email: "rajat@beno.io", role: "Admin", status: "active" },
   { initials: "PS", name: "Pavan Sengar", email: "pavan@beno.io", role: "Admin", status: "active" },
@@ -61,7 +61,7 @@ export default function UsersRolesPage() {
   const [inviteRole, setInviteRole] = useState("Sales")
   const [inviteMsg, setInviteMsg] = useState("")
 
-  // Current user ko team mein add karo
+  // Add the current user to the team
   const currentUser = user ? {
     initials: user.name?.slice(0, 2).toUpperCase() ?? "U",
     name: user.name ?? "User",
@@ -77,10 +77,10 @@ export default function UsersRolesPage() {
 
   const handleInvite = () => {
     if (!inviteEmail.trim()) {
-      setInviteMsg("❌ Email zaroori hai.")
+      setInviteMsg("❌ Email is required.")
       return
     }
-    setInviteMsg(`✅ Invite bhej diya — ${inviteEmail}`)
+    setInviteMsg(`✅ Invite sent — ${inviteEmail}`)
     setTimeout(() => {
       setShowInviteModal(false)
       setInviteMsg("")
@@ -99,7 +99,7 @@ export default function UsersRolesPage() {
           </p>
           <h1 className="text-2xl font-bold">Users & Roles</h1>
           <p className="text-sm text-muted-foreground">
-            Team members aur permissions manage karo.
+            Manage team members and permissions.
           </p>
         </div>
         <Button className="gap-2" onClick={() => setShowInviteModal(true)}>
@@ -192,7 +192,7 @@ export default function UsersRolesPage() {
           <DialogHeader>
             <DialogTitle>Invite User</DialogTitle>
             <DialogDescription className="text-sm text-muted-foreground">
-              Team member ko workspace mein invite karo.
+              Invite a team member to the workspace.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">

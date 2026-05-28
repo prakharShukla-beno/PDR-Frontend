@@ -114,7 +114,7 @@ export default function AccountDetailPage() {
       const res = await api.get<any>(`/prospects/${id}`)
       setProspect(res.data)
     } catch {
-      setEnrichMsg("❌ Enrichment fail ho gayi.")
+      setEnrichMsg("❌ Enrichment failed.")
     } finally {
       setIsEnriching(false)
     }
@@ -151,7 +151,7 @@ export default function AccountDetailPage() {
         setSaveMsg("")
       }, 1000)
     } catch {
-      setSaveMsg("❌ Save nahi ho saka.")
+      setSaveMsg("❌ Save failed.")
     } finally {
       setIsSaving(false)
     }
@@ -179,7 +179,7 @@ export default function AccountDetailPage() {
         setLogMsg("")
       }, 1000)
     } catch {
-      setLogMsg("❌ Log nahi ho saka.")
+      setLogMsg("❌ Log failed.")
     } finally {
       setIsLogging(false)
     }
@@ -204,7 +204,7 @@ export default function AccountDetailPage() {
   if (!prospect) {
     return (
       <div className="p-6">
-        <p className="text-muted-foreground">Prospect nahi mila.</p>
+        <p className="text-muted-foreground">Prospect not found.</p>
         <Link href="/accounts"><Button variant="outline" className="mt-4">Back</Button></Link>
       </div>
     )
@@ -320,7 +320,7 @@ export default function AccountDetailPage() {
                       <Badge variant="outline">Source: {prospect.source ?? "—"}</Badge>
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground">Koi intent signals nahi hain. AI Enrich karo.</p>
+                    <p className="text-sm text-muted-foreground">No intent signals available. Enrich with AI.</p>
                   )}
                 </CardContent>
               </Card>
@@ -328,7 +328,7 @@ export default function AccountDetailPage() {
                 <CardContent className="p-4">
                   <h2 className="font-semibold mb-4">Strategic Value</h2>
                   <p className="text-sm text-muted-foreground">
-                    {prospect.strategicValue ?? "AI enrichment ke baad strategic value yahan dikhegi."}
+                    {prospect.strategicValue ?? "Strategic value will appear here after AI enrichment."}
                   </p>
                   {prospect.servicePitch && (
                     <div className="mt-3 p-3 bg-muted/50 rounded-lg">
@@ -386,7 +386,7 @@ export default function AccountDetailPage() {
                       <Badge variant="outline">{prospect.primaryTechStack}</Badge>
                     )
                   ) : (
-                    <p className="text-sm text-muted-foreground">Tech stack data nahi hai. AI Enrich karo.</p>
+                    <p className="text-sm text-muted-foreground">No tech stack data available. Enrich with AI.</p>
                   )}
                   {prospect.techFitScore && (
                     <div className="mt-4 space-y-2">
@@ -419,9 +419,9 @@ export default function AccountDetailPage() {
                   </div>
                   {interactions.length === 0 ? (
                     <div className="p-8 text-center space-y-3">
-                      <p className="text-muted-foreground">Koi interactions nahi hain abhi.</p>
+                      <p className="text-muted-foreground">No interactions recorded yet.</p>
                       <Button variant="outline" size="sm" className="gap-2" onClick={() => setShowLogModal(true)}>
-                        <Plus className="h-4 w-4" />First interaction log karo
+                        <Plus className="h-4 w-4" />Log first interaction
                       </Button>
                     </div>
                   ) : (
@@ -463,7 +463,7 @@ export default function AccountDetailPage() {
                   </div>
                   {contacts.length === 0 ? (
                     <div className="p-8 text-center">
-                      <p className="text-muted-foreground">Is account ke koi contacts nahi hain.</p>
+                      <p className="text-muted-foreground">No contacts linked to this account.</p>
                     </div>
                   ) : (
                     <div className="divide-y">
@@ -543,7 +543,7 @@ export default function AccountDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Primary Contact — contacts state se dikhao */}
+          {/* Primary Contact — display from contacts state */}
           {contacts.length > 0 && (
             <Card>
               <CardContent className="p-4">
@@ -588,7 +588,7 @@ export default function AccountDetailPage() {
                 <Sparkles className="h-4 w-4 text-primary" />AI Enrichment
               </h2>
               <p className="text-sm text-muted-foreground mb-3">
-                AI se prospect ko enrich karo — tech stack, intent signals, strategic value.
+                Use AI to enrich the prospect with tech stack, intent signals, and strategic value.
               </p>
               <Button className="w-full gap-2" onClick={handleEnrich} disabled={isEnriching}>
                 {isEnriching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
@@ -628,7 +628,7 @@ export default function AccountDetailPage() {
             </div>
             <div className="space-y-2">
               <Label>Notes</Label>
-              <Textarea placeholder="Kya hua is interaction mein..." value={logNotes}
+              <Textarea placeholder="What happened during this interaction..." value={logNotes}
                 onChange={(e) => setLogNotes(e.target.value)} rows={3} />
             </div>
             {logMsg && (
