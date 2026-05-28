@@ -5,7 +5,7 @@
 // APIs:
 //   GET /api/notifications           → bell count
 //   PUT /api/notifications/read-all  → mark all read
-//   GET /api/search/prospects?query  → search bar
+//   GET /api/search/prospects?search  → search bar
 // ─────────────────────────────────────────────
 
 import { useEffect, useState, useRef } from "react"
@@ -63,7 +63,10 @@ export function TopHeader() {
   // ── Search — debounced 400ms ────────────────
   // GET /api/search/prospects?query=xyz
   useEffect(() => {
-    if (!searchQuery.trim()) {
+    const q = searchQuery.trim()
+    // require at least 2 characters
+    if (q.length < 2) {
+      if (searchTimeout.current) clearTimeout(searchTimeout.current)
       setSearchResults([])
       setShowResults(false)
       return
@@ -73,7 +76,7 @@ export function TopHeader() {
       setIsSearching(true)
       try {
         const res = await api.get<any>(
-          `/search/prospects?query=${encodeURIComponent(searchQuery)}&limit=5`
+          `/search/prospects?search=${encodeURIComponent(q)}&limit=5`
         )
         setSearchResults(res.data?.prospects || res.prospects || [])
         setShowResults(true)
@@ -88,7 +91,7 @@ export function TopHeader() {
     }
   }, [searchQuery])
 
-  // Search results ke bahar click hone pe band karo
+  // Close search results when clicking outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
@@ -96,7 +99,15 @@ export function TopHeader() {
       }
     }
     document.addEventListener("mousedown", handleClickOutside)
-    return () => document.removeEventListener("mousedown", handleClickOutside)
+    // close on Escape as well
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShowResults(false)
+    }
+    document.addEventListener("keydown", handleKey)
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside)
+      document.removeEventListener("keydown", handleKey)
+    }
   }, [])
 
   return (
@@ -115,7 +126,7 @@ export function TopHeader() {
             className="pl-9 pr-9 h-9 bg-white border-border"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            onFocus={() => searchResults.length > 0 && setShowResults(true)}
+            onFocus={() => (searchQuery.trim().length >= 2 && searchResults.length > 0) && setShowResults(true)}
           />
 
           {/* Search results dropdown */}
@@ -149,7 +160,7 @@ export function TopHeader() {
                   setShowResults(false)
                 }}
               >
-                Saare results dekho →
+                View all results →
               </button>
             </div>
           )}
@@ -157,7 +168,7 @@ export function TopHeader() {
           {/* No results */}
           {showResults && searchResults.length === 0 && !isSearching && searchQuery.trim() && (
             <div className="absolute top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg p-4 text-sm text-muted-foreground text-center">
-              "{searchQuery}" ke liye koi result nahi mila.
+              "{searchQuery}" did not return any results.
             </div>
           )}
         </div>
@@ -197,7 +208,7 @@ export function TopHeader() {
           <div className="max-h-72 overflow-y-auto divide-y">
             {notifications.length === 0 ? (
               <p className="p-4 text-sm text-muted-foreground text-center">
-                Koi notifications nahi hain.
+                No notifications available.
               </p>
             ) : (
               notifications.slice(0, 10).map((notif) => (

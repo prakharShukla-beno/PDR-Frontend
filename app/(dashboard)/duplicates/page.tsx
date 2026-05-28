@@ -4,8 +4,8 @@
 // Duplicates Page
 // APIs:
 //   GET /api/duplicates?status=pending  → pending pairs
-//   POST /api/duplicates/:id/merge      → merge karo
-//   POST /api/duplicates/:id/dismiss    → dismiss karo
+//   PUT /api/duplicates/:id/merge       → merge duplicates
+//   PUT /api/duplicates/:id/dismiss     → dismiss duplicates
 // ─────────────────────────────────────────────
 
 import { useEffect, useState, useCallback } from "react"
@@ -55,13 +55,13 @@ export default function DuplicatesPage() {
 
   // ── POST /api/duplicates/:id/merge ──────────
   const handleMerge = async (id: string) => {
-    if (!confirm("Dono prospects merge karna chahte ho? Ek delete ho jaayega.")) return
+    if (!confirm("Do you want to merge both prospects? One record will be removed.")) return
     setActionId(id)
     try {
-      await api.post(`/duplicates/${id}/merge`, {})
+      await api.put(`/duplicates/${id}/merge`, {})
       fetchDuplicates()
     } catch {
-      alert("Merge nahi ho saka.")
+      alert("Merge failed.")
     } finally {
       setActionId(null)
     }
@@ -71,10 +71,10 @@ export default function DuplicatesPage() {
   const handleDismiss = async (id: string) => {
     setActionId(id)
     try {
-      await api.post(`/duplicates/${id}/dismiss`, {})
+      await api.put(`/duplicates/${id}/dismiss`, {})
       fetchDuplicates()
     } catch {
-      alert("Dismiss nahi ho saka.")
+      alert("Dismiss failed.")
     } finally {
       setActionId(null)
     }
@@ -126,9 +126,9 @@ export default function DuplicatesPage() {
         <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
           <Copy className="h-12 w-12 text-muted-foreground/40" />
           <div>
-            <p className="font-medium">Koi duplicate nahi {statusFilter === "pending" ? "pending" : statusFilter} mein</p>
+            <p className="font-medium">No duplicates {statusFilter === "pending" ? "pending review" : `in ${statusFilter}`}</p>
             <p className="text-sm text-muted-foreground">
-              {statusFilter === "pending" ? "Saare duplicates review ho gaye hain." : "Is status mein koi entry nahi."}
+              {statusFilter === "pending" ? "All duplicates have been reviewed." : "No entries found for this status."}
             </p>
           </div>
         </div>
@@ -221,7 +221,7 @@ export default function DuplicatesPage() {
                         Dismiss
                       </Button>
                       <p className="text-xs text-muted-foreground ml-auto">
-                        Merge karoge to pehla account rakhega, doosra delete hoga.
+                        Merging will keep the first account and delete the second.
                       </p>
                     </div>
                   )}

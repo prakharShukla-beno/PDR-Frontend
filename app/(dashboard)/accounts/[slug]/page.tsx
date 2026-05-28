@@ -8,6 +8,7 @@
 //   GET /api/interactions/prospect/:id  → interactions list
 //   POST /api/interactions              → log new interaction
 //   POST /api/enrichment/:id            → AI enrich
+//   GET /api/contacts?accountId=:id     → linked contacts  ← NEW
 // ─────────────────────────────────────────────
 
 import { useEffect, useState } from "react"
@@ -53,7 +54,8 @@ export default function AccountDetailPage() {
   const [interactions, setInteractions] = useState<Interaction[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
-
+  // ── CHANGE 1: Contacts state ────────────────
+  const [contacts, setContacts] = useState<any[]>([])
 
   // ── Enrich state ────────────────────────────
   const [isEnriching, setIsEnriching] = useState(false)
@@ -80,17 +82,19 @@ export default function AccountDetailPage() {
     servicePitch: "",
   })
 
-  // ── GET prospect + interactions ─────────────
+  // ── CHANGE 2: GET prospect + interactions + contacts ─────────────
   useEffect(() => {
     const fetchAll = async () => {
       if (!id) return
       try {
-        const [prospectRes, interactionsRes] = await Promise.all([
+        const [prospectRes, interactionsRes, contactsRes] = await Promise.all([
           api.get<any>(`/prospects/${id}`),
           api.get<any>(`/interactions/prospect/${id}`),
+          api.get<any>(`/contacts?accountId=${id}&limit=50`),
         ])
         setProspect(prospectRes.data)
         setInteractions(interactionsRes.data || [])
+        setContacts(contactsRes.data?.contacts || [])
       } catch (err) {
         console.error("Account detail error:", err)
       } finally {
@@ -110,14 +114,13 @@ export default function AccountDetailPage() {
       const res = await api.get<any>(`/prospects/${id}`)
       setProspect(res.data)
     } catch {
-      setEnrichMsg("❌ Enrichment fail ho gayi.")
+      setEnrichMsg("❌ Enrichment failed.")
     } finally {
       setIsEnriching(false)
     }
   }
 
   // ── PUT /api/prospects/:id ──────────────────
-  // Edit modal open karo — existing data prefill
   const handleEdit = () => {
     if (!prospect) return
     setEditData({
@@ -130,7 +133,6 @@ export default function AccountDetailPage() {
     setShowEditModal(true)
   }
 
-  // Edit form save karo
   const handleSaveEdit = async () => {
     setIsSaving(true)
     setSaveMsg("")
@@ -149,7 +151,7 @@ export default function AccountDetailPage() {
         setSaveMsg("")
       }, 1000)
     } catch {
-      setSaveMsg("❌ Save nahi ho saka.")
+      setSaveMsg("❌ Save failed.")
     } finally {
       setIsSaving(false)
     }
@@ -177,7 +179,7 @@ export default function AccountDetailPage() {
         setLogMsg("")
       }, 1000)
     } catch {
-      setLogMsg("❌ Log nahi ho saka.")
+      setLogMsg("❌ Log failed.")
     } finally {
       setIsLogging(false)
     }
@@ -202,7 +204,7 @@ export default function AccountDetailPage() {
   if (!prospect) {
     return (
       <div className="p-6">
-        <p className="text-muted-foreground">Prospect nahi mila.</p>
+        <p className="text-muted-foreground">Prospect not found.</p>
         <Link href="/accounts"><Button variant="outline" className="mt-4">Back</Button></Link>
       </div>
     )
@@ -257,11 +259,9 @@ export default function AccountDetailPage() {
               <Button variant="outline" className="gap-2">
                 <Mail className="h-4 w-4" />Email POC
               </Button>
-              {/* Edit button — PUT API call karega */}
               <Button variant="outline" className="gap-2" onClick={handleEdit}>
                 <Pencil className="h-4 w-4" />Edit
               </Button>
-              {/* Log Interaction button */}
               <Button variant="outline" className="gap-2" onClick={() => setShowLogModal(true)}>
                 <Plus className="h-4 w-4" />Log Interaction
               </Button>
@@ -292,6 +292,15 @@ export default function AccountDetailPage() {
                   </span>
                 )}
               </TabsTrigger>
+              {/* ── CHANGE 3: Contacts tab ── */}
+              <TabsTrigger value="contacts">
+                Contacts
+                {contacts.length > 0 && (
+                  <span className="ml-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] text-white">
+                    {contacts.length}
+                  </span>
+                )}
+              </TabsTrigger>
               <TabsTrigger value="sources">Sources</TabsTrigger>
             </TabsList>
 
@@ -311,7 +320,7 @@ export default function AccountDetailPage() {
                       <Badge variant="outline">Source: {prospect.source ?? "—"}</Badge>
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground">Koi intent signals nahi hain. AI Enrich karo.</p>
+                    <p className="text-sm text-muted-foreground">No intent signals available. Enrich with AI.</p>
                   )}
                 </CardContent>
               </Card>
@@ -319,7 +328,7 @@ export default function AccountDetailPage() {
                 <CardContent className="p-4">
                   <h2 className="font-semibold mb-4">Strategic Value</h2>
                   <p className="text-sm text-muted-foreground">
-                    {prospect.strategicValue ?? "AI enrichment ke baad strategic value yahan dikhegi."}
+                    {prospect.strategicValue ?? "Strategic value will appear here after AI enrichment."}
                   </p>
                   {prospect.servicePitch && (
                     <div className="mt-3 p-3 bg-muted/50 rounded-lg">
@@ -366,7 +375,6 @@ export default function AccountDetailPage() {
               <Card>
                 <CardContent className="p-4">
                   <h2 className="font-semibold mb-4">Tech Stack</h2>
-                  {/* primaryTechStack string ya array dono handle karo */}
                   {prospect.primaryTechStack ? (
                     Array.isArray(prospect.primaryTechStack) ? (
                       <div className="flex flex-wrap gap-2">
@@ -378,7 +386,7 @@ export default function AccountDetailPage() {
                       <Badge variant="outline">{prospect.primaryTechStack}</Badge>
                     )
                   ) : (
-                    <p className="text-sm text-muted-foreground">Tech stack data nahi hai. AI Enrich karo.</p>
+                    <p className="text-sm text-muted-foreground">No tech stack data available. Enrich with AI.</p>
                   )}
                   {prospect.techFitScore && (
                     <div className="mt-4 space-y-2">
@@ -411,9 +419,9 @@ export default function AccountDetailPage() {
                   </div>
                   {interactions.length === 0 ? (
                     <div className="p-8 text-center space-y-3">
-                      <p className="text-muted-foreground">Koi interactions nahi hain abhi.</p>
+                      <p className="text-muted-foreground">No interactions recorded yet.</p>
                       <Button variant="outline" size="sm" className="gap-2" onClick={() => setShowLogModal(true)}>
-                        <Plus className="h-4 w-4" />First interaction log karo
+                        <Plus className="h-4 w-4" />Log first interaction
                       </Button>
                     </div>
                   ) : (
@@ -438,6 +446,54 @@ export default function AccountDetailPage() {
                           {interaction.notes && (
                             <p className="mt-2 text-sm text-muted-foreground">{interaction.notes}</p>
                           )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* ── CHANGE 3: Contacts Tab Content ── */}
+            <TabsContent value="contacts" className="mt-4">
+              <Card>
+                <CardContent className="p-0">
+                  <div className="flex items-center justify-between p-4 border-b">
+                    <h2 className="font-semibold">Contacts ({contacts.length})</h2>
+                  </div>
+                  {contacts.length === 0 ? (
+                    <div className="p-8 text-center">
+                      <p className="text-muted-foreground">No contacts linked to this account.</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y">
+                      {contacts.map((contact) => (
+                        <div key={contact._id} className="p-4 flex items-center justify-between hover:bg-muted/30">
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-9 w-9">
+                              <AvatarFallback className="bg-primary/10 text-primary text-sm">
+                                {((contact.firstName?.[0] ?? "") + (contact.lastName?.[0] ?? "")).toUpperCase() || "?"}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="font-medium text-sm">
+                                {[contact.firstName, contact.lastName].filter(Boolean).join(" ") || "—"}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {contact.standardizedRoles ?? contact.functionalDomain ?? "—"}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {contact.email && (
+                              <Button variant="ghost" size="sm" className="gap-1 text-xs h-7">
+                                <Mail className="h-3 w-3" />{contact.email}
+                              </Button>
+                            )}
+                            <Button variant="ghost" size="sm" className="h-7 text-xs" asChild>
+                              <Link href={`/contacts/${contact._id}`}>View</Link>
+                            </Button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -487,25 +543,31 @@ export default function AccountDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Primary Contact */}
-          {prospect.contacts && prospect.contacts.length > 0 && (
+          {/* Primary Contact — display from contacts state */}
+          {contacts.length > 0 && (
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="font-semibold">Right POC</h2>
                   <Badge className="bg-primary text-white"><Sparkles className="h-3 w-3 mr-1" />AI</Badge>
                 </div>
-                {prospect.contacts.filter(c => c.isPrimary).slice(0, 1).map((contact, i) => (
-                  <div key={i}>
+                {contacts.filter(c => c.isPrimary).slice(0, 1).concat(
+                  contacts.filter(c => !c.isPrimary).slice(0, 1)
+                ).slice(0, 1).map((contact) => (
+                  <div key={contact._id}>
                     <div className="flex items-center gap-3 mb-3">
                       <Avatar className="h-10 w-10">
                         <AvatarFallback className="bg-primary text-white">
-                          {contact.name?.slice(0, 2).toUpperCase()}
+                          {((contact.firstName?.[0] ?? "") + (contact.lastName?.[0] ?? "")).toUpperCase() || "?"}
                         </AvatarFallback>
                       </Avatar>
                       <div>
-                        <p className="font-medium">{contact.name}</p>
-                        <p className="text-sm text-muted-foreground">{contact.designation}</p>
+                        <p className="font-medium">
+                          {[contact.firstName, contact.lastName].filter(Boolean).join(" ") || "—"}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {contact.standardizedRoles ?? contact.functionalDomain ?? "—"}
+                        </p>
                       </div>
                     </div>
                     {contact.email && (
@@ -526,7 +588,7 @@ export default function AccountDetailPage() {
                 <Sparkles className="h-4 w-4 text-primary" />AI Enrichment
               </h2>
               <p className="text-sm text-muted-foreground mb-3">
-                AI se prospect ko enrich karo — tech stack, intent signals, strategic value.
+                Use AI to enrich the prospect with tech stack, intent signals, and strategic value.
               </p>
               <Button className="w-full gap-2" onClick={handleEnrich} disabled={isEnriching}>
                 {isEnriching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
@@ -566,7 +628,7 @@ export default function AccountDetailPage() {
             </div>
             <div className="space-y-2">
               <Label>Notes</Label>
-              <Textarea placeholder="Kya hua is interaction mein..." value={logNotes}
+              <Textarea placeholder="What happened during this interaction..." value={logNotes}
                 onChange={(e) => setLogNotes(e.target.value)} rows={3} />
             </div>
             {logMsg && (
