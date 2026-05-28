@@ -3,33 +3,36 @@
 // ─────────────────────────────────────────────
 // Segments / ICP List Page
 // APIs:
-//   GET /api/icp                     → all ICPs
-//   DELETE /api/icp/:id              → delete
-//   GET /api/search/prospects        → account count per industry
-// Account count: multiple industries → parallel calls → sum
+//   GET /api/icp           → all ICPs
+//   DELETE /api/icp/:id    → delete
+//   GET /api/icp/:id/match-prospects → exact match count
+// Click → /accounts page with all ICP filters applied
 // ─────────────────────────────────────────────
 
 import { useEffect, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import { Plus, Loader2, Target, Trash2, ChevronLeft, ChevronRight, Users, Building2 } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
+import {
+  Plus, Loader2, Target, Trash2,
+  ChevronLeft, ChevronRight, Users, Building2
+} from "lucide-react"
+import { Button }            from "@/components/ui/button"
+import { Badge }             from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
-import { api } from "@/lib/api"
-import type { ICP } from "@/types"
+import { api }               from "@/lib/api"
+import type { ICP }          from "@/types"
 
 export default function SegmentsPage() {
   const router = useRouter()
 
-  const [icps, setIcps] = useState<ICP[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [total, setTotal] = useState(0)
-  const [totalPages, setTotalPages] = useState(1)
-  const [currentPage, setCurrentPage] = useState(1)
-  const [accountCounts, setAccountCounts] = useState<Record<string, number>>({})
-  const [countsLoading, setCountsLoading] = useState(false)
+  const [icps,         setIcps]         = useState<ICP[]>([])
+  const [isLoading,    setIsLoading]    = useState(true)
+  const [total,        setTotal]        = useState(0)
+  const [totalPages,   setTotalPages]   = useState(1)
+  const [currentPage,  setCurrentPage]  = useState(1)
+  const [accountCounts,setAccountCounts]= useState<Record<string, number>>({})
+  const [countsLoading,setCountsLoading]= useState(false)
 
-  // GET /api/icp
+  // GET /api/icp — all ICP profiles
   const fetchIcps = useCallback(async () => {
     setIsLoading(true)
     try {
@@ -46,7 +49,8 @@ export default function SegmentsPage() {
 
   useEffect(() => { fetchIcps() }, [fetchIcps])
 
-  // Account count — multiple industries ka sum
+  // GET /api/icp/:id/match-prospects — exact match count
+  // Ek hi API call — accurate count milega
   useEffect(() => {
     if (!icps || icps.length === 0) return
     let cancelled = false
@@ -56,24 +60,17 @@ export default function SegmentsPage() {
       try {
         const counts = await Promise.all(
           icps.map(async (icp) => {
-            if (!icp.industries || icp.industries.length === 0) return { id: icp._id, count: 0 }
-
-            if (icp.industries.length === 1) {
+            try {
               const res = await api.get<any>(
-                `/search/prospects?primaryIndustry=${encodeURIComponent(icp.industries[0])}&page=1&limit=1`
-              ).catch(() => null)
-              return { id: icp._id, count: res?.data?.pagination?.total || res?.pagination?.total || 0 }
-            }
-
-            // Multiple industries — sum karo
-            const results = await Promise.all(
-              icp.industries.map(ind =>
-                api.get<any>(`/search/prospects?primaryIndustry=${encodeURIComponent(ind)}&page=1&limit=1`).catch(() => null)
+                `/icp/${icp._id}/match-prospects?page=1&limit=1`
               )
-            )
-            const industryTotal = results.reduce((sum, res) =>
-              sum + (res?.data?.pagination?.total || res?.pagination?.total || 0), 0)
-            return { id: icp._id, count: industryTotal }
+              return {
+                id:    icp._id,
+                count: res?.pagination?.total || res?.data?.pagination?.total || 0,
+              }
+            } catch {
+              return { id: icp._id, count: 0 }
+            }
           })
         )
         if (cancelled) return
@@ -91,6 +88,61 @@ export default function SegmentsPage() {
     return () => { cancelled = true }
   }, [icps])
 
+  // ── ICP card click — accounts page pe saare filters leke jao ─────────────
+  // ICP ke saare filters URL params mein daalo
+  // Accounts page inhe read karke filter apply karega
+  const handleIcpClick = (icp: ICP) => {
+    const params = new URLSearchParams()
+
+    // Industries — saari industries daalo, sirf pehli nahi
+    if (icp.industries?.length) {
+      icp.industries.forEach(ind => params.append("industryInclude[]", ind))
+    }
+
+    // Business models
+    if ((icp as any).businessModels?.length) {
+      ;(icp as any).businessModels.forEach((bm: string) =>
+        params.append("businessModelInclude[]", bm)
+      )
+    }
+
+    // Countries
+    if (icp.countries?.length) {
+      icp.countries.forEach(c => params.append("countryInclude[]", c))
+    }
+
+    // Employee ranges
+    if ((icp as any).employeeRanges?.length) {
+      ;(icp as any).employeeRanges.forEach((e: string) =>
+        params.append("employeesInclude[]", e)
+      )
+    }
+
+    // Annual revenues
+    if ((icp as any).annualRevenues?.length) {
+      ;(icp as any).annualRevenues.forEach((r: string) =>
+        params.append("revenueInclude[]", r)
+      )
+    }
+
+    // Intent signals
+    if ((icp as any).intentSignals?.length) {
+      ;(icp as any).intentSignals.forEach((s: string) =>
+        params.append("intentSignalInclude[]", s)
+      )
+    }
+
+    // Min tech fit score
+    if (icp.minTechFitScore) {
+      params.set("techFitScoreMin", String(icp.minTechFitScore))
+    }
+
+    // Segment name — accounts page header mein dikhane ke liye
+    params.set("segmentName", icp.name)
+
+    router.push(`/accounts?${params.toString()}`)
+  }
+
   // DELETE /api/icp/:id
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
@@ -107,7 +159,9 @@ export default function SegmentsPage() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Workspace</p>
+          <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">
+            Workspace
+          </p>
           <h1 className="text-2xl font-bold">Segments & ICP</h1>
           <p className="text-sm text-muted-foreground">{total} ICP profiles saved</p>
         </div>
@@ -116,14 +170,20 @@ export default function SegmentsPage() {
         </Button>
       </div>
 
-      {isLoading && <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>}
+      {isLoading && (
+        <div className="flex justify-center py-16">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      )}
 
       {!isLoading && icps.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
           <Target className="h-12 w-12 text-muted-foreground/40" />
           <div>
             <p className="font-medium">Koi ICP nahi hai abhi</p>
-            <p className="text-sm text-muted-foreground">Pehla ICP banao — system automatically matching prospects dhundh dega.</p>
+            <p className="text-sm text-muted-foreground">
+              Pehla ICP banao — system automatically matching prospects dhundh dega.
+            </p>
           </div>
           <Button onClick={() => router.push("/segments/icp-builder")}>Create ICP</Button>
         </div>
@@ -133,8 +193,11 @@ export default function SegmentsPage() {
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {icps.map((icp) => (
-              <Card key={icp._id} className="hover:shadow-md transition-shadow cursor-pointer"
-                onClick={() => router.push(`/accounts?industry=${encodeURIComponent(icp.industries?.[0] || "")}`)}>
+              <Card
+                key={icp._id}
+                className="hover:shadow-md transition-shadow cursor-pointer"
+                onClick={() => handleIcpClick(icp)}
+              >
                 <CardContent className="p-4 space-y-3">
 
                   <div className="flex items-start justify-between gap-2">
@@ -143,10 +206,12 @@ export default function SegmentsPage() {
                   </div>
 
                   {(icp as any).description && (
-                    <p className="text-sm text-muted-foreground line-clamp-2">{(icp as any).description}</p>
+                    <p className="text-sm text-muted-foreground line-clamp-2">
+                      {(icp as any).description}
+                    </p>
                   )}
 
-                  {/* Account count */}
+                  {/* Exact match count — /api/icp/:id/match-prospects se */}
                   <div>
                     {countsLoading && accountCounts[icp._id] === undefined ? (
                       <div className="flex items-center gap-2">
@@ -155,8 +220,12 @@ export default function SegmentsPage() {
                       </div>
                     ) : (
                       <>
-                        <p className="text-3xl font-bold text-primary">{accountCounts[icp._id] ?? "—"}</p>
-                        <p className="text-xs text-muted-foreground uppercase tracking-wide">Matching Accounts</p>
+                        <p className="text-3xl font-bold text-primary">
+                          {accountCounts[icp._id] ?? "—"}
+                        </p>
+                        <p className="text-xs text-muted-foreground uppercase tracking-wide">
+                          Matching Accounts
+                        </p>
                       </>
                     )}
                   </div>
@@ -168,14 +237,16 @@ export default function SegmentsPage() {
                         <Badge key={ind} variant="secondary" className="text-xs">{ind}</Badge>
                       ))}
                       {icp.industries.length > 3 && (
-                        <Badge variant="outline" className="text-xs">+{icp.industries.length - 3}</Badge>
+                        <Badge variant="outline" className="text-xs">
+                          +{icp.industries.length - 3}
+                        </Badge>
                       )}
                     </div>
                   )}
 
-                  {icp.businessModels && icp.businessModels.length > 0 && (
+                  {(icp as any).businessModels?.length > 0 && (
                     <div className="flex gap-1 flex-wrap">
-                      {icp.businessModels.map((bm) => (
+                      {(icp as any).businessModels.map((bm: string) => (
                         <Badge key={bm} variant="outline" className="text-xs">{bm}</Badge>
                       ))}
                     </div>
@@ -183,15 +254,32 @@ export default function SegmentsPage() {
 
                   <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground pt-1 border-t">
                     {icp.minTechFitScore && (
-                      <div>Min Score: <span className="font-medium text-foreground">{icp.minTechFitScore}</span></div>
+                      <div>
+                        Min Score:{" "}
+                        <span className="font-medium text-foreground">{icp.minTechFitScore}</span>
+                      </div>
                     )}
                     {icp.countries && icp.countries.length > 0 && (
-                      <div>Countries: <span className="font-medium text-foreground">{icp.countries.slice(0, 2).join(", ")}</span></div>
+                      <div>
+                        Countries:{" "}
+                        <span className="font-medium text-foreground">
+                          {icp.countries.slice(0, 2).join(", ")}
+                        </span>
+                      </div>
                     )}
-                    {icp.employeeRanges && icp.employeeRanges.length > 0 && (
-                      <div>Size: <span className="font-medium text-foreground">{icp.employeeRanges[0]}</span></div>
+                    {(icp as any).employeeRanges?.length > 0 && (
+                      <div>
+                        Size:{" "}
+                        <span className="font-medium text-foreground">
+                          {(icp as any).employeeRanges[0]}
+                        </span>
+                      </div>
                     )}
-                    <div>{new Date(icp.createdAt ?? "").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</div>
+                    <div>
+                      {new Date(icp.createdAt ?? "").toLocaleDateString("en-IN", {
+                        day: "numeric", month: "short", year: "numeric",
+                      })}
+                    </div>
                   </div>
 
                   {(icp as any).buyerPersona?.targetSeniorities?.length > 0 && (
@@ -204,15 +292,24 @@ export default function SegmentsPage() {
                   )}
 
                   <div className="flex gap-2 pt-1">
-                    <Button variant="outline" size="sm" className="flex-1 text-xs"
-                      onClick={(e) => { e.stopPropagation(); router.push(`/segments/icp-builder?id=${icp._id}`) }}>
+                    <Button
+                      variant="outline" size="sm" className="flex-1 text-xs"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        router.push(`/segments/icp-builder?id=${icp._id}`)
+                      }}
+                    >
                       View & Edit
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-500"
-                      onClick={(e) => handleDelete(icp._id, e)}>
+                    <Button
+                      variant="ghost" size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-red-500"
+                      onClick={(e) => handleDelete(icp._id, e)}
+                    >
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
+
                 </CardContent>
               </Card>
             ))}
@@ -220,12 +317,22 @@ export default function SegmentsPage() {
 
           {totalPages > 1 && (
             <div className="flex items-center justify-between pt-2">
-              <p className="text-sm text-muted-foreground">Page {currentPage} of {totalPages} — {total} total</p>
+              <p className="text-sm text-muted-foreground">
+                Page {currentPage} of {totalPages} — {total} total
+              </p>
               <div className="flex gap-2">
-                <Button variant="outline" size="icon" className="h-8 w-8" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>
+                <Button
+                  variant="outline" size="icon" className="h-8 w-8"
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(p => p - 1)}
+                >
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
-                <Button variant="outline" size="icon" className="h-8 w-8" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)}>
+                <Button
+                  variant="outline" size="icon" className="h-8 w-8"
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage(p => p + 1)}
+                >
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>

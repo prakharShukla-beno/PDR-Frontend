@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"  // ← URL params padhne ke liye
 import {
   Search, Upload, Download, Plus, SlidersHorizontal,
   X, Pencil, ChevronLeft, ChevronRight, Loader2
@@ -18,27 +19,79 @@ import type { Prospect } from "@/types"
 import { FilterPanel, FilterState, EMPTY_FILTERS, buildFilterQuery, countActiveFilters } from "@/components/filters/FilterPanel"
 
 export default function AccountsPage() {
-  const [prospects, setProspects]       = useState<Prospect[]>([])
-  const [total, setTotal]               = useState(0)
-  const [totalPages, setTotalPages]     = useState(1)
-  const [isLoading, setIsLoading]       = useState(true)
-  const [search, setSearch]             = useState("")
-  const [showFilters, setShowFilters]   = useState(false)
-  const [filters, setFilters]           = useState<FilterState>(EMPTY_FILTERS)
+  const searchParams = useSearchParams()  // ← Segment se aaye URL params
+
+  const [prospects, setProspects]           = useState<Prospect[]>([])
+  const [total, setTotal]                   = useState(0)
+  const [totalPages, setTotalPages]         = useState(1)
+  const [isLoading, setIsLoading]           = useState(true)
+  const [search, setSearch]                 = useState("")
+  const [showFilters, setShowFilters]       = useState(false)
+  const [filters, setFilters]               = useState<FilterState>(EMPTY_FILTERS)
   const [appliedFilters, setAppliedFilters] = useState<FilterState>(EMPTY_FILTERS)
-  const [currentPage, setCurrentPage]   = useState(1)
+  const [currentPage, setCurrentPage]       = useState(1)
   const [recordsPerPage, setRecordsPerPage] = useState(10)
-  const [selectedIds, setSelectedIds]   = useState<string[]>([])
-  const [uploadFile, setUploadFile]     = useState<File | null>(null)
-  const [isUploading, setIsUploading]   = useState(false)
-  const [uploadMsg, setUploadMsg]       = useState("")
-  const [showAddModal, setShowAddModal] = useState(false)
-  const [isAdding, setIsAdding]         = useState(false)
-  const [addMsg, setAddMsg]             = useState("")
+  const [selectedIds, setSelectedIds]       = useState<string[]>([])
+  const [uploadFile, setUploadFile]         = useState<File | null>(null)
+  const [isUploading, setIsUploading]       = useState(false)
+  const [uploadMsg, setUploadMsg]           = useState("")
+  const [showAddModal, setShowAddModal]     = useState(false)
+  const [isAdding, setIsAdding]             = useState(false)
+  const [addMsg, setAddMsg]                 = useState("")
+  const [segmentName, setSegmentName]       = useState("")  // ← Segment name header mein
   const [newAccount, setNewAccount] = useState({
     accountName: "", website: "", primaryIndustry: "",
     businessModel: "", country: "", hqLocationCity: "", source: "",
   })
+
+  // ── URL params se filters read karo — Segment click pe apply hoga ──────────
+  // Jab bhi URL params change hote hain (segment click), filters update ho jaate hain
+  useEffect(() => {
+    if (!searchParams) return
+
+    // Segment name — header mein dikhane ke liye
+    const name = searchParams.get("segmentName")
+    if (name) setSegmentName(name)
+
+    // Check karo koi segment filter aaya hai kya
+    const hasSegmentFilter =
+      searchParams.has("industryInclude[]") ||
+      searchParams.has("countryInclude[]") ||
+      searchParams.has("techFitScoreMin") ||
+      searchParams.has("employeesInclude[]") ||
+      searchParams.has("revenueInclude[]") ||
+      searchParams.has("intentSignalInclude[]") ||
+      searchParams.has("businessModelInclude[]")
+
+    if (!hasSegmentFilter) return
+
+    // URL params se FilterState banao
+    const newFilters: FilterState = {
+      ...EMPTY_FILTERS,
+      // Industries
+      industryInclude:      searchParams.getAll("industryInclude[]"),
+      // Countries
+      countryInclude:       searchParams.getAll("countryInclude[]"),
+      // Employees
+      employeesInclude:     searchParams.getAll("employeesInclude[]"),
+      // Revenue
+      revenueInclude:       searchParams.getAll("revenueInclude[]"),
+      // Intent signals
+      intentSignalInclude:  searchParams.getAll("intentSignalInclude[]"),
+      // Business models
+      businessModelInclude: searchParams.getAll("businessModelInclude[]"),
+      // Tech fit score
+      techFitScoreMin: searchParams.get("techFitScoreMin")
+        ? Number(searchParams.get("techFitScoreMin"))
+        : 0,
+      techFitScoreMax: 100,
+    }
+
+    // Filters apply karo
+    setAppliedFilters(newFilters)
+    setFilters(newFilters)
+    setCurrentPage(1)
+  }, [searchParams])
 
   const activeCount = countActiveFilters(appliedFilters)
 
@@ -73,17 +126,17 @@ export default function AccountsPage() {
     const f = appliedFilters
     const rem = (key: keyof FilterState, val: string) =>
       setAppliedFilters(p => ({ ...p, [key]: (p[key] as string[]).filter(v => v !== val) }))
-    f.industryInclude.forEach(v     => chips.push({ label: `Industry: ${v}`,      onRemove: () => rem("industryInclude", v) }))
-    f.industryExclude.forEach(v     => chips.push({ label: `NOT Industry: ${v}`,  onRemove: () => rem("industryExclude", v) }))
-    f.countryInclude.forEach(v      => chips.push({ label: `Country: ${v}`,       onRemove: () => rem("countryInclude", v) }))
-    f.countryExclude.forEach(v      => chips.push({ label: `NOT Country: ${v}`,   onRemove: () => rem("countryExclude", v) }))
-    f.cityInclude.forEach(v         => chips.push({ label: `City: ${v}`,          onRemove: () => rem("cityInclude", v) }))
-    f.cityExclude.forEach(v         => chips.push({ label: `NOT City: ${v}`,      onRemove: () => rem("cityExclude", v) }))
-    f.salesPriorityInclude.forEach(v=> chips.push({ label: `Priority: ${v}`,      onRemove: () => rem("salesPriorityInclude", v) }))
-    f.intentSignalInclude.forEach(v => chips.push({ label: `Intent: ${v}`,        onRemove: () => rem("intentSignalInclude", v) }))
-    f.clvRankingInclude.forEach(v   => chips.push({ label: `CLV: ${v}`,           onRemove: () => rem("clvRankingInclude", v) }))
-    f.employeesInclude.forEach(v    => chips.push({ label: `Employees: ${v}`,     onRemove: () => rem("employeesInclude", v) }))
-    f.revenueInclude.forEach(v      => chips.push({ label: `Revenue: ${v}`,       onRemove: () => rem("revenueInclude", v) }))
+    f.industryInclude.forEach(v      => chips.push({ label: `Industry: ${v}`,      onRemove: () => rem("industryInclude", v) }))
+    f.industryExclude.forEach(v      => chips.push({ label: `NOT Industry: ${v}`,  onRemove: () => rem("industryExclude", v) }))
+    f.countryInclude.forEach(v       => chips.push({ label: `Country: ${v}`,       onRemove: () => rem("countryInclude", v) }))
+    f.countryExclude.forEach(v       => chips.push({ label: `NOT Country: ${v}`,   onRemove: () => rem("countryExclude", v) }))
+    f.cityInclude.forEach(v          => chips.push({ label: `City: ${v}`,          onRemove: () => rem("cityInclude", v) }))
+    f.cityExclude.forEach(v          => chips.push({ label: `NOT City: ${v}`,      onRemove: () => rem("cityExclude", v) }))
+    f.salesPriorityInclude.forEach(v => chips.push({ label: `Priority: ${v}`,      onRemove: () => rem("salesPriorityInclude", v) }))
+    f.intentSignalInclude.forEach(v  => chips.push({ label: `Intent: ${v}`,        onRemove: () => rem("intentSignalInclude", v) }))
+    f.clvRankingInclude.forEach(v    => chips.push({ label: `CLV: ${v}`,           onRemove: () => rem("clvRankingInclude", v) }))
+    f.employeesInclude.forEach(v     => chips.push({ label: `Employees: ${v}`,     onRemove: () => rem("employeesInclude", v) }))
+    f.revenueInclude.forEach(v       => chips.push({ label: `Revenue: ${v}`,       onRemove: () => rem("revenueInclude", v) }))
     if (f.techFitScoreMin > 0 || f.techFitScoreMax < 100)
       chips.push({ label: `Score: ${f.techFitScoreMin}-${f.techFitScoreMax}`, onRemove: () => setAppliedFilters(p => ({ ...p, techFitScoreMin: 0, techFitScoreMax: 100 })) })
     return chips
@@ -157,15 +210,44 @@ export default function AccountsPage() {
       <div className="p-6 pb-0 space-y-4 flex-shrink-0">
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Master View</p>
-            <h1 className="text-2xl font-bold text-foreground">Accounts</h1>
+            <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">
+              Master View
+            </p>
+            <h1 className="text-2xl font-bold text-foreground">
+              Accounts
+              {/* Segment se aaya hai to segment name dikhao */}
+              {segmentName && (
+                <span className="ml-2 text-base font-normal text-primary">
+                  — {segmentName}
+                </span>
+              )}
+            </h1>
             <p className="text-sm text-muted-foreground">{total} accounts</p>
           </div>
           <div className="flex gap-3">
+            {/* Segment filter laga hua hai to clear button dikhao */}
+            {segmentName && (
+              <Button
+                variant="outline"
+                className="gap-2 text-muted-foreground"
+                onClick={() => {
+                  setSegmentName("")
+                  setAppliedFilters(EMPTY_FILTERS)
+                  setFilters(EMPTY_FILTERS)
+                  // URL clean karo
+                  window.history.replaceState({}, "", "/accounts")
+                }}
+              >
+                <X className="h-4 w-4" />
+                Clear Segment Filter
+              </Button>
+            )}
             <label className="cursor-pointer">
               <input type="file" accept=".xlsx,.csv" className="hidden"
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) { setUploadFile(f); setUploadMsg("") } }} />
-              <Button variant="outline" className="gap-2" asChild><span><Upload className="h-4 w-4" />Import</span></Button>
+              <Button variant="outline" className="gap-2" asChild>
+                <span><Upload className="h-4 w-4" />Import</span>
+              </Button>
             </label>
             {uploadFile && (
               <Button variant="outline" className="gap-2 text-primary border-primary" onClick={handleUpload} disabled={isUploading}>
@@ -188,14 +270,29 @@ export default function AccountsPage() {
             <Input placeholder="Search by name or domain..." className="pl-9 bg-white"
               value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
-          <Button variant="outline" className={`gap-2 bg-white ${activeCount > 0 ? "border-primary text-primary" : ""}`}
-            onClick={() => { setFilters(appliedFilters); setShowFilters(true) }}>
+          <Button
+            variant="outline"
+            className={`gap-2 bg-white ${activeCount > 0 ? "border-primary text-primary" : ""}`}
+            onClick={() => { setFilters(appliedFilters); setShowFilters(true) }}
+          >
             <SlidersHorizontal className="h-4 w-4" />
             Filters
-            {activeCount > 0 && <Badge className="bg-primary text-white text-xs h-4 w-4 p-0 flex items-center justify-center">{activeCount}</Badge>}
+            {activeCount > 0 && (
+              <Badge className="bg-primary text-white text-xs h-4 w-4 p-0 flex items-center justify-center">
+                {activeCount}
+              </Badge>
+            )}
           </Button>
           {activeCount > 0 && (
-            <Button variant="ghost" size="sm" className="text-muted-foreground gap-1" onClick={() => setAppliedFilters(EMPTY_FILTERS)}>
+            <Button
+              variant="ghost" size="sm"
+              className="text-muted-foreground gap-1"
+              onClick={() => {
+                setAppliedFilters(EMPTY_FILTERS)
+                setSegmentName("")
+                window.history.replaceState({}, "", "/accounts")
+              }}
+            >
               <X className="h-3 w-3" />Clear all
             </Button>
           )}
@@ -278,7 +375,9 @@ export default function AccountsPage() {
                     </td>
                     <td className="p-4">
                       <div className="flex items-center gap-1.5">
-                        <span className={`h-2 w-2 rounded-full ${p.salesPriority?.startsWith("P1") ? "bg-green-500" : p.salesPriority?.startsWith("P2") ? "bg-yellow-500" : "bg-gray-400"}`} />
+                        <span className={`h-2 w-2 rounded-full
+                          ${p.salesPriority?.startsWith("P1") ? "bg-green-500" :
+                            p.salesPriority?.startsWith("P2") ? "bg-yellow-500" : "bg-gray-400"}`} />
                         <span className="text-sm">
                           {p.salesPriority?.startsWith("P1") ? "Sales-Ready" :
                            p.salesPriority?.startsWith("P2") ? "Nurturing" : p.salesPriority ?? "New"}
@@ -293,7 +392,9 @@ export default function AccountsPage() {
         </div>
 
         <div className="flex items-center justify-between py-4">
-          <span className="text-sm text-muted-foreground">TOTAL: <span className="text-primary font-medium">{total} accounts</span></span>
+          <span className="text-sm text-muted-foreground">
+            TOTAL: <span className="text-primary font-medium">{total} accounts</span>
+          </span>
           <div className="flex items-center gap-1">
             <Button variant="ghost" size="icon" className="h-8 w-8" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft className="h-4 w-4" /></Button>
             {getPageNumbers().map((page, i) =>
