@@ -40,7 +40,9 @@ export default function DuplicatesPage() {
       const res = await api.get<any>(
         `/duplicates?status=${statusFilter}&page=${currentPage}&limit=10`
       )
-      setDuplicates(res.data?.duplicates || res.data || res.duplicates || [])
+      const rawDuplicates = res.data?.duplicates || res.data || res.duplicates || []
+      // null prospectId wale records filter karo — frontend crash nahi hoga
+      setDuplicates(rawDuplicates.filter((d: any) => d.prospectId1 !== null && d.prospectId2 !== null))
       setTotal(res.data?.pagination?.total || res.pagination?.total || 0)
       setTotalPages(res.data?.pagination?.totalPages || res.pagination?.totalPages || 1)
     } catch (err) {
@@ -81,12 +83,14 @@ export default function DuplicatesPage() {
   }
 
   // ── Prospect name helper ────────────────────
-  const getProspectName = (p: Prospect | string) => {
+  const getProspectName = (p: Prospect | string | null) => {
+    if (!p) return "Unknown"
     if (typeof p === "string") return p
     return p.accountName ?? "Unknown"
   }
 
-  const getProspectDetail = (p: Prospect | string, field: keyof Prospect) => {
+  const getProspectDetail = (p: Prospect | string | null, field: keyof Prospect) => {
+    if (!p) return "—"
     if (typeof p === "string") return "—"
     return (p[field] as string) ?? "—"
   }

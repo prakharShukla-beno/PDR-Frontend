@@ -16,6 +16,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { api, ApiError } from "@/lib/api"
 import type { Contact, Prospect } from "@/types"
 import { FilterPanel, FilterState, EMPTY_FILTERS, buildFilterQuery, countActiveFilters } from "@/components/filters/FilterPanel"
+import { DuplicateReviewModal } from "@/components/import/DuplicateReviewModal"
+//import DuplicateReviewModal from "@/components/import/DuplicateReviewModal"
 
 const FUNCTIONAL_DOMAINS = [
   "Corporate Strategy","Technology & Digital","Data & AI","Finance & Accounting",
@@ -53,6 +55,9 @@ export default function ContactsPage() {
   const [recordsPerPage, setRecordsPerPage] = useState(10)
   const [selectedIds, setSelectedIds]   = useState<string[]>([])
   const [uploadFile, setUploadFile]     = useState<File | null>(null)
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false)
+  const [pendingDuplicates, setPendingDuplicates]   = useState<any[]>([])
+  const [importLogId, setImportLogId]               = useState<string>("")
   const [isUploading, setIsUploading]   = useState(false)
   const [uploadMsg, setUploadMsg]       = useState("")
   const [showAddModal, setShowAddModal] = useState(false)
@@ -145,20 +150,47 @@ export default function ContactsPage() {
     } catch { alert("Delete failed.") }
   }
 
-  const handleUpload = async () => {
+
+
+
+
+
+
+
+const handleUpload = async () => {
     if (!uploadFile) return
     setIsUploading(true); setUploadMsg("")
     try {
-      const formData = new FormData(); formData.append("file", uploadFile)
-      await api.upload<any>("/import/contacts", formData)
-      setUploadMsg("✅ Import started. You will be notified when it completes.")
+      const formData = new FormData()
+      formData.append("file", uploadFile)
+      const res = await api.upload<any>("/import/contacts", formData)
+
+      const result     = res?.data || res
+      const duplicates = result?.duplicates || []
+      const logId      = result?.importLogId?.toString() || ""
+
+      if (duplicates.length > 0) {
+        setPendingDuplicates(duplicates)
+        setImportLogId(logId)
+        setShowDuplicateModal(true)
+        setUploadMsg(`⚠️ ${duplicates.length} duplicates found — review karo`)
+      } else {
+        const saved = result?.successCount ?? result?.savedCount ?? 0
+        setUploadMsg(`✅ Import complete — ${saved} contacts added`)
+        setTimeout(fetchContacts, 1000)
+      }
       setUploadFile(null)
-      setTimeout(fetchContacts, 2000)
     } catch (err) {
       if (err instanceof ApiError) setUploadMsg(`❌ ${err.message}`)
       else setUploadMsg("❌ Upload failed.")
-    } finally { setIsUploading(false) }
+    } finally {
+      setIsUploading(false)
+    }
   }
+
+
+
+
 
   const handleAddContact = async () => {
     if (!newContact.accountId) { setAddMsg("❌ Selecting an account is required."); return }
@@ -487,6 +519,21 @@ export default function ContactsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Duplicate Review Modal — contact import ke baad */}
+      <DuplicateReviewModal
+        isOpen={showDuplicateModal}
+        onClose={() => setShowDuplicateModal(false)}
+        duplicates={pendingDuplicates}
+        importLogId={importLogId}
+        resolveEndpoint="/import/contacts/resolve-duplicates"
+        onResolved={() => {
+          setShowDuplicateModal(false)
+          setPendingDuplicates([])
+          setUploadMsg("✅ Duplicates resolved — import complete!")
+          fetchContacts()
+        }}
+      />
     </div>
   )
 }

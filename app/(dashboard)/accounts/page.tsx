@@ -17,6 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { api, ApiError } from "@/lib/api"
 import type { Prospect } from "@/types"
 import { FilterPanel, FilterState, EMPTY_FILTERS, buildFilterQuery, countActiveFilters } from "@/components/filters/FilterPanel"
+import { DuplicateReviewModal } from "@/components/import/DuplicateReviewModal"
 
 export default function AccountsPage() {
   const searchParams = useSearchParams()  // Segment URL parameters
@@ -39,6 +40,9 @@ export default function AccountsPage() {
   const [isAdding, setIsAdding]             = useState(false)
   const [addMsg, setAddMsg]                 = useState("")
   const [segmentName, setSegmentName]       = useState("")  // ← Segment name header mein
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false)
+  const [pendingDuplicates, setPendingDuplicates]   = useState<any[]>([])
+  const [importLogId, setImportLogId]               = useState("")
   const [newAccount, setNewAccount] = useState({
     accountName: "", website: "", primaryIndustry: "",
     businessModel: "", country: "", hqLocationCity: "", source: "",
@@ -155,9 +159,23 @@ export default function AccountsPage() {
     setIsUploading(true)
     try {
       const formData = new FormData(); formData.append("file", uploadFile)
-      await api.upload<any>("/import/excel", formData)
-      setUploadMsg("✅ Import started. You will be notified when it completes.")
-      setUploadFile(null); setTimeout(fetchProspects, 2000)
+      const res = await api.upload<any>("/import/excel", formData)
+
+      // Response check — duplicates hain?
+      const result = res?.data || res
+      const duplicates = result?.duplicates || []
+
+      if (duplicates.length > 0) {
+        // Duplicate modal dikhao
+        setPendingDuplicates(duplicates)
+        setImportLogId(result?.importLogId || "")
+        setShowDuplicateModal(true)
+        setUploadMsg(`✅ ${result?.successCount || 0} records saved. ${duplicates.length} duplicates need review.`)
+      } else {
+        setUploadMsg(`✅ Import complete — ${result?.successCount || 0} records saved.`)
+        setTimeout(fetchProspects, 1500)
+      }
+      setUploadFile(null)
     } catch (err) {
       if (err instanceof ApiError) setUploadMsg(`❌ ${err.message}`)
     } finally { setIsUploading(false) }
@@ -493,6 +511,26 @@ export default function AccountsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Duplicate Review Modal — upload ke baad dikhega */}
+      {showDuplicateModal && (
+        <DuplicateReviewModal
+          isOpen={showDuplicateModal}
+          duplicates={pendingDuplicates}
+          importLogId={importLogId}
+          onComplete={(results) => {
+            setShowDuplicateModal(false)
+            setPendingDuplicates([])
+            setUploadMsg(`✅ Done — ${results?.merged || 0} merged, ${results?.skipped || 0} skipped, ${results?.kept_both || 0} kept as new.`)
+            fetchProspects()
+          }}
+          onClose={() => {
+            setShowDuplicateModal(false)
+            setPendingDuplicates([])
+            fetchProspects()
+          }}
+        />
+      )}
     </div>
   )
 }
