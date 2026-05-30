@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, useCallback } from "react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
 import {
   Search, Upload, Plus, X, Pencil, SlidersHorizontal,
@@ -16,7 +17,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { api, ApiError } from "@/lib/api"
 import type { Contact, Prospect } from "@/types"
 import { FilterPanel, FilterState, EMPTY_FILTERS, buildFilterQuery, countActiveFilters } from "@/components/filters/FilterPanel"
-import { DuplicateReviewModal } from "@/components/import/DuplicateReviewModal"
 //import DuplicateReviewModal from "@/components/import/DuplicateReviewModal"
 
 const FUNCTIONAL_DOMAINS = [
@@ -43,6 +43,7 @@ const DOMAIN_COLORS: Record<string, string> = {
 }
 
 export default function ContactsPage() {
+  const router = useRouter()
   const [contacts, setContacts]         = useState<Contact[]>([])
   const [total, setTotal]               = useState(0)
   const [totalPages, setTotalPages]     = useState(1)
@@ -55,9 +56,6 @@ export default function ContactsPage() {
   const [recordsPerPage, setRecordsPerPage] = useState(10)
   const [selectedIds, setSelectedIds]   = useState<string[]>([])
   const [uploadFile, setUploadFile]     = useState<File | null>(null)
-  const [showDuplicateModal, setShowDuplicateModal] = useState(false)
-  const [pendingDuplicates, setPendingDuplicates]   = useState<any[]>([])
-  const [importLogId, setImportLogId]               = useState<string>("")
   const [isUploading, setIsUploading]   = useState(false)
   const [uploadMsg, setUploadMsg]       = useState("")
   const [showAddModal, setShowAddModal] = useState(false)
@@ -170,10 +168,8 @@ const handleUpload = async () => {
       const logId      = result?.importLogId?.toString() || ""
 
       if (duplicates.length > 0) {
-        setPendingDuplicates(duplicates)
-        setImportLogId(logId)
-        setShowDuplicateModal(true)
-        setUploadMsg(`⚠️ ${duplicates.length} duplicates found — review karo`)
+        setUploadMsg(`✅ ${result?.successCount || 0} contacts saved. ${duplicates.length} duplicates need review.`)
+        setTimeout(() => router.push("/duplicates"), 1200)
       } else {
         const saved = result?.successCount ?? result?.savedCount ?? 0
         setUploadMsg(`✅ Import complete — ${saved} contacts added`)
@@ -521,19 +517,6 @@ const handleUpload = async () => {
       </Dialog>
 
       {/* Duplicate Review Modal — contact import ke baad */}
-      <DuplicateReviewModal
-        isOpen={showDuplicateModal}
-        onClose={() => setShowDuplicateModal(false)}
-        duplicates={pendingDuplicates}
-        importLogId={importLogId}
-        resolveEndpoint="/import/contacts/resolve-duplicates"
-        onResolved={() => {
-          setShowDuplicateModal(false)
-          setPendingDuplicates([])
-          setUploadMsg("✅ Duplicates resolved — import complete!")
-          fetchContacts()
-        }}
-      />
     </div>
   )
 }

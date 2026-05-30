@@ -219,9 +219,12 @@ export interface Interaction {
 export interface Duplicate {
   _id: string
   prospectId1: Prospect | string
-  prospectId2: Prospect | string
+  prospectId2?: Prospect | string | null
+  newData?: Record<string, any> | null
+  source?: "import" | "manual"
+  importLogId?: string
   matchFields?: string[]
-  status: "pending" | "merged" | "dismissed"
+  status: "pending" | "merged" | "skipped" | "kept_both" | "dismissed"
   reviewedBy?: User | string
   reviewedAt?: string
   createdAt?: string
