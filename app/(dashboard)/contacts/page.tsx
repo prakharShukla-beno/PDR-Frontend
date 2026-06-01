@@ -516,7 +516,7 @@ const handleUpload = async () => {
         </DialogContent>
       </Dialog>
 
-      {/* Duplicate Review Modal — contact import ke baad */}
+      {/* Duplicate Review Modal — shown after contact import */}
     </div>
   )
 }

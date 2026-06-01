@@ -71,7 +71,7 @@ export function DuplicateReviewModal({
   onComplete, onResolved, onClose,
 }: Props) {
 
-  // Contact import ke liye contact fields, account ke liye account fields
+  // Contact import uses contact fields, account import uses account fields
   const isContactImport = resolveEndpoint?.includes("contacts")
   const DISPLAY_FIELDS  = isContactImport ? CONTACT_FIELDS : ACCOUNT_FIELDS
 

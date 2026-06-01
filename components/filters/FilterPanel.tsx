@@ -162,7 +162,7 @@ export const buildFilterQuery = (f: FilterState, mode: "accounts" | "contacts" =
 }
 
 // ─── IncExcPicker Component ────────────────────────────────────────────────────
-// Har filter ke liye Include/Exclude toggle with chips
+// Include/Exclude toggle with chips for each filter
 interface IncExcPickerProps {
   label:      string
   options:    string[]

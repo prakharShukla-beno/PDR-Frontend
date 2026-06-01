@@ -5,7 +5,7 @@
 // Reference: akshayji.lovable.app/app/insights
 // APIs:
 //   GET /api/dashboard/top-prospects  → ranked accounts
-//   GET /api/dashboard/summary        → pattern detection ke liye
+//   GET /api/dashboard/summary        → for pattern detection
 //   GET /api/dashboard/by-industry    → trend data
 // ─────────────────────────────────────────────
 

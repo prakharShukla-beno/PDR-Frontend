@@ -36,7 +36,7 @@ export interface Contact {
   // Account reference fields
   accountName?: string
 
-  // Denormalized account fields — filter ke liye
+  // Denormalized account fields — for filtering
   accountIndustry?: string
   accountCountry?: string
   accountCity?: string

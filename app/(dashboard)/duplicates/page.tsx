@@ -16,7 +16,6 @@ import type { Duplicate, Prospect } from "@/types"
 
 const LIMIT = 20
 
-// ── Fields shown in comparison ────────────────────────────────────────────────
 const ACCOUNT_FIELDS = [
   { key: "accountName",      label: "Account Name"   },
   { key: "primaryIndustry",  label: "Industry"       },
@@ -64,7 +63,6 @@ const isContactDup = (dup: Duplicate) => {
 
 const getVal = (obj: any, key: string) => obj?.[key] ?? "—"
 
-// ── Status badge ──────────────────────────────────────────────────────────────
 const StatusBadge = ({ status }: { status: string }) => {
   const map: Record<string, string> = {
     pending:   "bg-amber-50 text-amber-700 border-amber-200",
@@ -84,7 +82,6 @@ const StatusBadge = ({ status }: { status: string }) => {
   )
 }
 
-// ── Single duplicate row ──────────────────────────────────────────────────────
 function DuplicateRow({
   dup, onAction, actionId, selected, onSelect,
 }: {
@@ -211,18 +208,19 @@ function DuplicateRow({
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function DuplicatesPage() {
-  const [duplicates,   setDuplicates]   = useState<Duplicate[]>([])
-  const [isLoading,    setIsLoading]    = useState(true)
-  const [total,        setTotal]        = useState(0)
-  const [totalPages,   setTotalPages]   = useState(1)
-  const [currentPage,  setCurrentPage]  = useState(1)
-  const [statusFilter, setStatusFilter] = useState("pending")
-  const [actionId,     setActionId]     = useState<string | null>(null)
-  const [toast,        setToast]        = useState<{ msg: string; ok: boolean } | null>(null)
-  const [selectedIds,  setSelectedIds]  = useState<string[]>([])
-  const [bulkLoading,  setBulkLoading]  = useState(false)
+  const [duplicates,    setDuplicates]    = useState<Duplicate[]>([])
+  const [isLoading,     setIsLoading]     = useState(true)
+  const [total,         setTotal]         = useState(0)
+  const [totalPages,    setTotalPages]    = useState(1)
+  const [currentPage,   setCurrentPage]   = useState(1)
+  const [statusFilter,  setStatusFilter]  = useState("pending")
+  const [actionId,      setActionId]      = useState<string | null>(null)
+  const [toast,         setToast]         = useState<{ msg: string; ok: boolean } | null>(null)
+  const [selectedIds,   setSelectedIds]   = useState<string[]>([])
+  const [allPagesSelected, setAllPagesSelected] = useState(false) // ← selection across all pages
+  const [fetchingAllIds,   setFetchingAllIds]   = useState(false) // ← loading state
+  const [bulkLoading,   setBulkLoading]   = useState(false)
 
-  // ── Refs to avoid stale closures + infinite loops ─────────────────────────
   const pageRef   = useRef(currentPage)
   const statusRef = useRef(statusFilter)
   pageRef.current   = currentPage
@@ -233,10 +231,10 @@ export default function DuplicatesPage() {
     setTimeout(() => setToast(null), 3000)
   }
 
-  // ── Core fetch — direct params, no useCallback dependency array ───────────
   const fetchDuplicates = useCallback(async (page: number, status: string) => {
     setIsLoading(true)
     setSelectedIds([])
+    setAllPagesSelected(false)
     try {
       const res = await api.get<any>(
         `/duplicates?status=${status}&page=${page}&limit=${LIMIT}`
@@ -253,28 +251,65 @@ export default function DuplicatesPage() {
     } finally {
       setIsLoading(false)
     }
-  }, []) // ← empty — no re-creation
+  }, [])
 
-  // ── Initial load ──────────────────────────────────────────────────────────
   useEffect(() => {
     fetchDuplicates(1, "pending")
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // ── Status change — reset page + fetch ───────────────────────────────────
   const handleStatusChange = (val: string) => {
     setStatusFilter(val)
     setCurrentPage(1)
     fetchDuplicates(1, val)
   }
 
-  // ── Page change ───────────────────────────────────────────────────────────
   const handlePageChange = (newPage: number) => {
     setCurrentPage(newPage)
     fetchDuplicates(newPage, statusRef.current)
   }
 
-  // ── Single action ─────────────────────────────────────────────────────────
+  // ── Select All on current page ────────────────────────────────────────────
+  const pendingDups  = duplicates.filter(d => d.status === "pending")
+  const pageAllSelected = pendingDups.length > 0 && pendingDups.every(d => selectedIds.includes(d._id))
+  const someSelected    = selectedIds.length > 0
+
+  const togglePageSelect = () => {
+    if (pageAllSelected) {
+      setSelectedIds([])
+      setAllPagesSelected(false)
+    } else {
+      setSelectedIds(pendingDups.map(d => d._id))
+    }
+  }
+
+  // ── Select ALL records across all pages ───────────────────────────────────
+  const selectAllPages = async () => {
+    setFetchingAllIds(true)
+    try {
+      // Fetch all IDs from backend — only _id field
+      const res = await api.get<any>(
+        `/duplicates?status=${statusRef.current}&page=1&limit=999999&fields=_id`
+      )
+      const raw = res.data?.data || res.data?.duplicates || res.data || []
+      const allIds = raw
+        .filter((d: any) => d?.prospectId1 != null)
+        .map((d: any) => d._id)
+      setSelectedIds(allIds)
+      setAllPagesSelected(true)
+      showToast(`✅ All ${allIds.length} records selected`)
+    } catch (err) {
+      showToast("❌ Could not select all records", false)
+    } finally {
+      setFetchingAllIds(false)
+    }
+  }
+
+  const clearSelection = () => {
+    setSelectedIds([])
+    setAllPagesSelected(false)
+  }
+
   const handleAction = async (id: string, action: "merge" | "skip" | "keep-both") => {
     setActionId(id)
     try {
@@ -289,7 +324,6 @@ export default function DuplicatesPage() {
     }
   }
 
-  // ── Bulk action ───────────────────────────────────────────────────────────
   const handleBulkAction = async (action: "merge" | "skip" | "keep-both") => {
     if (!selectedIds.length) return
     setBulkLoading(true)
@@ -305,18 +339,10 @@ export default function DuplicatesPage() {
     } finally {
       setBulkLoading(false)
       setSelectedIds([])
+      setAllPagesSelected(false)
     }
   }
 
-  const pendingDups = duplicates.filter(d => d.status === "pending")
-  const allSelected = pendingDups.length > 0 && pendingDups.every(d => selectedIds.includes(d._id))
-  const someSelected = selectedIds.length > 0
-
-  const toggleSelectAll = () => {
-    setSelectedIds(allSelected ? [] : pendingDups.map(d => d._id))
-  }
-
-  // ── Page number buttons ───────────────────────────────────────────────────
   const getPageNumbers = () => {
     const pages: (number | string)[] = []
     if (totalPages <= 7) {
@@ -324,9 +350,7 @@ export default function DuplicatesPage() {
     } else {
       pages.push(1)
       if (currentPage > 3) pages.push("...")
-      for (let i = Math.max(2, currentPage - 1); i <= Math.min(totalPages - 1, currentPage + 1); i++) {
-        pages.push(i)
-      }
+      for (let i = Math.max(2, currentPage - 1); i <= Math.min(totalPages - 1, currentPage + 1); i++) pages.push(i)
       if (currentPage < totalPages - 2) pages.push("...")
       pages.push(totalPages)
     }
@@ -336,7 +360,6 @@ export default function DuplicatesPage() {
   return (
     <div className="p-6 space-y-5 max-w-7xl mx-auto">
 
-      {/* Toast */}
       {toast && (
         <div className={`fixed top-4 right-4 z-50 border shadow-lg rounded-lg px-4 py-3 text-sm font-medium ${toast.ok ? "bg-white border-green-200" : "bg-white border-red-200"}`}>
           {toast.msg}
@@ -350,9 +373,6 @@ export default function DuplicatesPage() {
           <h1 className="text-2xl font-bold">Duplicates</h1>
           <p className="text-sm text-muted-foreground">
             {total} total · Page {currentPage} of {totalPages}
-            {statusFilter === "pending" && pendingDups.length > 0 && (
-              <span className="text-amber-600 font-medium ml-1">· {pendingDups.length} on this page</span>
-            )}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -376,38 +396,115 @@ export default function DuplicatesPage() {
           <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
           <div className="text-sm text-amber-800">
             <strong>{total} duplicate records</strong> need your review ({totalPages} pages × {LIMIT}/page).
-            Click any row to expand and compare. Use bulk actions to resolve multiple at once.
+            Click any row to expand and compare.
           </div>
         </div>
       )}
 
-      {/* Bulk action bar */}
+      {/* ── Bulk action bar ── */}
       {statusFilter === "pending" && pendingDups.length > 0 && (
-        <div className={`flex items-center gap-3 rounded-lg border px-4 py-2.5 transition-colors ${someSelected ? "border-primary bg-primary/5" : "border-border bg-muted/30"}`}>
-          <button className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground" onClick={toggleSelectAll}>
-            {allSelected ? <CheckSquare className="h-4 w-4 text-primary" /> : <Square className="h-4 w-4" />}
-            {allSelected ? "Deselect All" : `Select All (${pendingDups.length})`}
-          </button>
+        <div className={`rounded-lg border px-4 py-2.5 space-y-2 transition-colors ${someSelected ? "border-primary bg-primary/5" : "border-border bg-muted/30"}`}>
 
-          {someSelected && (
-            <>
-              <span className="text-muted-foreground text-xs">|</span>
-              <span className="text-sm font-medium text-primary">{selectedIds.length} selected</span>
-              <div className="flex items-center gap-2 ml-auto">
-                <span className="text-xs text-muted-foreground">Bulk:</span>
-                <Button size="sm" className="gap-1.5 bg-green-600 hover:bg-green-700 text-white h-7 text-xs" disabled={bulkLoading} onClick={() => handleBulkAction("merge")}>
-                  {bulkLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <GitMerge className="h-3 w-3" />}Merge
-                </Button>
-                <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs" disabled={bulkLoading} onClick={() => handleBulkAction("skip")}>
-                  {bulkLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <SkipForward className="h-3 w-3" />}Skip
-                </Button>
-                <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs text-blue-700 border-blue-200 hover:bg-blue-50" disabled={bulkLoading} onClick={() => handleBulkAction("keep-both")}>
-                  {bulkLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Copy className="h-3 w-3" />}Keep Both
-                </Button>
+          {/* Row 1 — Select controls */}
+          <div className="flex items-center gap-3">
+            <button
+              className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+              onClick={togglePageSelect}
+            >
+              {pageAllSelected
+                ? <CheckSquare className="h-4 w-4 text-primary" />
+                : <Square className="h-4 w-4" />}
+              {pageAllSelected
+                ? `Deselect Page (${pendingDups.length})`
+                : `Select Page (${pendingDups.length})`}
+            </button>
+
+            {/* "Select all N" banner — Apollo style */}
+            {pageAllSelected && !allPagesSelected && total > LIMIT && (
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground">|</span>
+                <span className="text-muted-foreground">
+                  Only {pendingDups.length} on this page are selected.
+                </span>
+                <button
+                  className="text-primary font-medium hover:underline flex items-center gap-1"
+                  onClick={selectAllPages}
+                  disabled={fetchingAllIds}
+                >
+                  {fetchingAllIds
+                    ? <><Loader2 className="h-3 w-3 animate-spin" /> Fetching...</>
+                    : `Select all ${total}`
+                  }
+                </button>
               </div>
-            </>
+            )}
+
+            {/* All pages selected indicator */}
+            {allPagesSelected && (
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground">|</span>
+                <span className="text-primary font-medium">
+                  ✓ All {selectedIds.length} records selected
+                </span>
+                <button
+                  className="text-muted-foreground hover:text-foreground underline text-xs"
+                  onClick={clearSelection}
+                >
+                  Clear
+                </button>
+              </div>
+            )}
+
+            {someSelected && !allPagesSelected && !pageAllSelected && (
+              <span className="text-sm font-medium text-primary ml-1">
+                {selectedIds.length} selected
+              </span>
+            )}
+          </div>
+
+          {/* Row 2 — Bulk action buttons */}
+          {someSelected && (
+            <div className="flex items-center gap-2 pt-1 border-t border-border/50">
+              <span className="text-xs text-muted-foreground">
+                for selected records:
+              </span>
+              <Button
+                size="sm"
+                className="gap-1.5 bg-green-600 hover:bg-green-700 text-white h-7 text-xs"
+                disabled={bulkLoading}
+                onClick={() => handleBulkAction("merge")}
+              >
+                {bulkLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <GitMerge className="h-3 w-3" />}
+                Merge Selected
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5 h-7 text-xs"
+                disabled={bulkLoading}
+                onClick={() => handleBulkAction("skip")}
+              >
+                {bulkLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <SkipForward className="h-3 w-3" />}
+                Skip Selected
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5 h-7 text-xs text-blue-700 border-blue-200 hover:bg-blue-50"
+                disabled={bulkLoading}
+                onClick={() => handleBulkAction("keep-both")}
+              >
+                {bulkLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Copy className="h-3 w-3" />}
+                Keep Both Selected
+              </Button>
+              <button
+                className="text-xs text-muted-foreground hover:text-foreground ml-auto"
+                onClick={clearSelection}
+              >
+                Clear selection
+              </button>
+            </div>
           )}
-          {!someSelected && <span className="text-xs text-muted-foreground ml-2">Select records to apply bulk actions</span>}
         </div>
       )}
 
@@ -422,7 +519,9 @@ export default function DuplicatesPage() {
       {!isLoading && duplicates.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
           <CheckCircle className="h-12 w-12 text-green-400" />
-          <p className="font-medium">No duplicates {statusFilter === "pending" ? "pending review" : `with status: ${statusFilter}`}</p>
+          <p className="font-medium">
+            {statusFilter === "pending" ? "No pending duplicates" : `No ${statusFilter} duplicates`}
+          </p>
           <p className="text-sm text-muted-foreground">
             {statusFilter === "pending" ? "All reviewed!" : "Try a different status filter."}
           </p>
@@ -439,13 +538,15 @@ export default function DuplicatesPage() {
               onAction={handleAction}
               actionId={actionId}
               selected={selectedIds.includes(dup._id)}
-              onSelect={(id, checked) => setSelectedIds(prev => checked ? [...prev, id] : prev.filter(x => x !== id))}
+              onSelect={(id, checked) =>
+                setSelectedIds(prev => checked ? [...prev, id] : prev.filter(x => x !== id))
+              }
             />
           ))}
         </div>
       )}
 
-      {/* Pagination — hamesha dikhao agar data hai */}
+      {/* Pagination */}
       {!isLoading && total > 0 && (
         <div className="flex items-center justify-between pt-2 border-t">
           <p className="text-sm text-muted-foreground">

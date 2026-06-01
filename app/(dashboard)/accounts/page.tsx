@@ -67,7 +67,7 @@ export default function AccountsPage() {
 
     if (!hasSegmentFilter) return
 
-    // URL params se FilterState banao
+    // Build FilterState from URL params
     const newFilters: FilterState = {
       ...EMPTY_FILTERS,
       // Industries
@@ -159,7 +159,7 @@ export default function AccountsPage() {
       const formData = new FormData(); formData.append("file", uploadFile)
       const res = await api.upload<any>("/import/excel", formData)
 
-      // Response check — duplicates hain?
+      // Response check — are there duplicates?
       const result = res?.data || res
       const duplicates = result?.duplicates || []
 
@@ -238,7 +238,7 @@ export default function AccountsPage() {
             <p className="text-sm text-muted-foreground">{total} accounts</p>
           </div>
           <div className="flex gap-3">
-            {/* Segment filter laga hua hai to clear button dikhao */}
+            {/* Show clear button if a segment filter is applied */}
             {segmentName && (
               <Button
                 variant="outline"
@@ -437,8 +437,7 @@ export default function AccountsPage() {
         <Button variant="ghost" size="sm" className={`gap-2 ${hasSelection ? "text-foreground" : "text-muted-foreground/50"}`} disabled={!hasSelection}>
           <Pencil className="h-4 w-4" />EDIT
         </Button>
-        <Button variant="outline" size="sm" disabled={!hasSelection} className={!hasSelection ? "opacity-50" : ""}>ADD TO CAMPAIGN</Button>
-        <Button variant="outline" size="sm" disabled={!hasSelection} className={!hasSelection ? "opacity-50" : ""}>START DIALING</Button>
+        <Button variant="outline" size="sm" disabled={!hasSelection} className={!hasSelection ? "opacity-50" : ""}>ADD TO SEGMENT</Button>
         <div className="flex items-center gap-2 ml-4 border-l pl-4">
           <Checkbox
             checked={selectedIds.length === total && total > 0}
@@ -507,7 +506,7 @@ export default function AccountsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Duplicate Review Modal — upload ke baad dikhega */}
+      {/* Duplicate Review Modal — shown after upload */}
     </div>
   )
 }

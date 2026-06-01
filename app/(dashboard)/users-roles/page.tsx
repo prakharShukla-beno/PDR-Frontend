@@ -4,8 +4,8 @@
 // Users & Roles Page
 // Reference: akshayji.lovable.app/app/users
 // Backend user management API not available yet
-// Current logged-in user dikhao + static permissions matrix
-// API: GET /api/auth/me (agar ho) ya AuthContext se
+// Show current logged-in user + static permissions matrix
+// API: GET /api/auth/me (if available) or from AuthContext
 // ─────────────────────────────────────────────
 
 import { useState } from "react"
