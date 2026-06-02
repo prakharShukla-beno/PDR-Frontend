@@ -82,6 +82,13 @@ export default function AccountDetailPage() {
     servicePitch: "",
   })
 
+  // ── Scoring state ───────────────────────────
+  const [scoreBreakdown, setScoreBreakdown] = useState<any>(null)
+  const [showOverrideModal, setShowOverrideModal] = useState(false)
+  const [overrideTier, setOverrideTier] = useState("")
+  const [overrideReason, setOverrideReason] = useState("")
+  const [isRecalculating, setIsRecalculating] = useState(false)
+
   // ── CHANGE 2: GET prospect + interactions + contacts ─────────────
   useEffect(() => {
     const fetchAll = async () => {
@@ -95,6 +102,14 @@ export default function AccountDetailPage() {
         setProspect(prospectRes.data)
         setInteractions(interactionsRes.data || [])
         setContacts(contactsRes.data?.contacts || [])
+        
+        // Fetch score breakdown if available
+        try {
+          const scoreRes = await api.get<any>(`/prospects/${id}/score-breakdown`)
+          setScoreBreakdown(scoreRes.data)
+        } catch {
+          // Score breakdown not available yet
+        }
       } catch (err) {
         console.error("Account detail error:", err)
       } finally {
@@ -302,6 +317,7 @@ export default function AccountDetailPage() {
                 )}
               </TabsTrigger>
               <TabsTrigger value="sources">Sources</TabsTrigger>
+              <TabsTrigger value="scoring">Scoring</TabsTrigger>
             </TabsList>
 
             {/* AI Insights Tab */}
@@ -521,6 +537,133 @@ export default function AccountDetailPage() {
                 </CardContent>
               </Card>
             </TabsContent>
+
+            {/* Scoring Breakdown Tab */}
+            <TabsContent value="scoring" className="mt-4">
+              <Card>
+                <CardContent className="p-6">
+                  <div className="space-y-6">
+                    {scoreBreakdown ? (
+                      <>
+                        <div>
+                          <h2 className="font-semibold mb-4 flex items-center justify-between">
+                            Scoring Formula
+                            <Button 
+                              size="sm" 
+                              onClick={async () => {
+                                setIsRecalculating(true)
+                                try {
+                                  await api.post(`/prospects/${id}/calculate-score`)
+                                  const res = await api.get<any>(`/prospects/${id}/score-breakdown`)
+                                  setScoreBreakdown(res.data)
+                                } catch (err) {
+                                  console.error("Recalc error:", err)
+                                }
+                                setIsRecalculating(false)
+                              }}
+                              disabled={isRecalculating}
+                              className="gap-2"
+                            >
+                              {isRecalculating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                              Recalculate
+                            </Button>
+                          </h2>
+                          
+                          <div className="space-y-3">
+                            {scoreBreakdown.scoring && (
+                              <>
+                                <div className="flex justify-between p-3 bg-muted/30 rounded-lg">
+                                  <span className="text-sm">Revenue Points:</span>
+                                  <span className="font-medium">{scoreBreakdown.scoring.revenuePoints}</span>
+                                </div>
+                                <div className="flex justify-between p-3 bg-muted/30 rounded-lg">
+                                  <span className="text-sm">Strategy Bonus:</span>
+                                  <span className="font-medium">+{scoreBreakdown.scoring.strategyBonus}</span>
+                                </div>
+                                <div className="flex justify-between p-3 bg-muted/30 rounded-lg">
+                                  <span className="text-sm">Industry Multiplier:</span>
+                                  <span className="font-medium">×{scoreBreakdown.scoring.industryMultiplier.toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between p-3 bg-muted/30 rounded-lg">
+                                  <span className="text-sm">Tech Fit Multiplier:</span>
+                                  <span className="font-medium">×{scoreBreakdown.scoring.techFitMultiplier.toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between p-3 bg-primary/10 rounded-lg border-2 border-primary">
+                                  <span className="font-semibold">Final Score:</span>
+                                  <span className="font-bold text-lg text-primary">{Math.round(scoreBreakdown.scoring.finalScore)}</span>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        {scoreBreakdown.tier && (
+                          <div className="pt-4 border-t">
+                            <h3 className="font-semibold mb-3">Tier Assignment</h3>
+                            <div className="space-y-2">
+                              <div className="flex justify-between p-3 bg-muted/30 rounded-lg">
+                                <span className="text-sm">Tier:</span>
+                                <Badge className={
+                                  scoreBreakdown.tier.tier === "Tier A" ? "bg-green-600" :
+                                  scoreBreakdown.tier.tier === "Tier B" ? "bg-blue-600" :
+                                  "bg-gray-600"
+                                }>
+                                  {scoreBreakdown.tier.tier}
+                                </Badge>
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-1">{scoreBreakdown.tier.assignment}</p>
+                              <p className="text-xs text-muted-foreground">{scoreBreakdown.tier.resourceAllocation}</p>
+                            </div>
+                          </div>
+                        )}
+
+                        {scoreBreakdown.priority && (
+                          <div className="pt-4 border-t">
+                            <h3 className="font-semibold mb-3">Priority Assignment</h3>
+                            <div className="space-y-2">
+                              <div className="flex justify-between p-3 bg-muted/30 rounded-lg">
+                                <span className="text-sm">Priority:</span>
+                                <Badge>{scoreBreakdown.priority.priority}</Badge>
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-1">{scoreBreakdown.priority.description}</p>
+                              <p className="text-xs text-primary font-medium">→ {scoreBreakdown.priority.action}</p>
+                            </div>
+                          </div>
+                        )}
+
+                        <Button 
+                          variant="outline" 
+                          className="w-full mt-4"
+                          onClick={() => setShowOverrideModal(true)}
+                        >
+                          <Pencil className="h-4 w-4 mr-2" />
+                          Override Tier (Manual)
+                        </Button>
+                      </>
+                    ) : (
+                      <div className="p-8 text-center space-y-3">
+                        <p className="text-muted-foreground">No scoring data available.</p>
+                        <Button 
+                          size="sm"
+                          onClick={async () => {
+                            try {
+                              await api.post(`/prospects/${id}/calculate-score`)
+                              const res = await api.get<any>(`/prospects/${id}/score-breakdown`)
+                              setScoreBreakdown(res.data)
+                            } catch (err) {
+                              console.error("Score error:", err)
+                            }
+                          }}
+                          className="gap-2"
+                        >
+                          <Sparkles className="h-4 w-4" />Calculate Score
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
           </Tabs>
         </div>
 
@@ -698,6 +841,71 @@ export default function AccountDetailPage() {
             <Button onClick={handleSaveEdit} disabled={isSaving} className="gap-2">
               {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {isSaving ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Override Tier Modal ── */}
+      <Dialog open={showOverrideModal} onOpenChange={setShowOverrideModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Override Tier Assignment</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              Manually override the tier assignment with an audit trail for future reference.
+            </p>
+            <div className="space-y-2">
+              <Label>New Tier *</Label>
+              <Select value={overrideTier} onValueChange={setOverrideTier}>
+                <SelectTrigger><SelectValue placeholder="Select new tier" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Tier A (Strategic)">Tier A — Strategic (Revenue ≥ $100M)</SelectItem>
+                  <SelectItem value="Tier B (Core)">Tier B — Core (Mid-Market)</SelectItem>
+                  <SelectItem value="Tier C (Mass)">Tier C — Mass (Small Biz)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Reason for Override *</Label>
+              <Textarea 
+                placeholder="e.g. Strategic partnership, expansion plans, existing customer..." 
+                value={overrideReason}
+                onChange={(e) => setOverrideReason(e.target.value)}
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowOverrideModal(false)
+              setOverrideTier("")
+              setOverrideReason("")
+            }}>Cancel</Button>
+            <Button 
+              onClick={async () => {
+                if (!overrideTier || !overrideReason) return
+                try {
+                  await api.put(`/prospects/${id}/override-tier`, {
+                    newTier: overrideTier,
+                    reason: overrideReason
+                  })
+                  // Refresh prospect data
+                  const res = await api.get<any>(`/prospects/${id}`)
+                  setProspect(res.data)
+                  // Refresh score breakdown
+                  const scoreRes = await api.get<any>(`/prospects/${id}/score-breakdown`)
+                  setScoreBreakdown(scoreRes.data)
+                  setShowOverrideModal(false)
+                  setOverrideTier("")
+                  setOverrideReason("")
+                } catch (err) {
+                  console.error("Override error:", err)
+                }
+              }}
+              disabled={!overrideTier || !overrideReason}
+              className="gap-2"
+            >
+              Save Override
             </Button>
           </DialogFooter>
         </DialogContent>

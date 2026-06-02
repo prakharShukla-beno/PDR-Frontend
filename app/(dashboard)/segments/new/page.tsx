@@ -21,14 +21,13 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Switch }            from "@/components/ui/switch"
 import { api }               from "@/lib/api"
 
-// Filter options — must match backend enum values exactly
 const INDUSTRIES      = ["BFSI","IT & ITES","SaaS","Fintech","E-commerce","Healthcare","EdTech","Logistics","Manufacturing","Retail & CPG","Media & Telecom","Real Estate"]
 const BUSINESS_MODELS = ["B2B","B2C","B2B2C","D2C","E-Commerce","Marketplace"]
 const EMPLOYEE_RANGES = ["1-50","51-200","201-1,000","1,001-5,000","5,000+"]
 const REVENUE_RANGES  = ["Seed <$1M","Early $1M-$10M","Scale-Up $10M-$50M","Mid-Market $50M-$250M","Corporate $250M-$1B","Enterprise $1B+"]
 const PRIORITIES      = ["P1 (Tier A+Active)","P2 (Tier B+Active)","P3 (Tier A+Cold)","P4 (Tier B+Cold)"]
-const INTENT_SIGNALS  = ["Hyper-Growth Mode","Cost Containment","Risk Mitigation","Modernization Mandate","Capital Event","Strategic Pivot","Regulatory Action"]
-const COUNTRIES       = ["India","UAE","Singapore","USA","UK","Australia","Canada","Germany"]
+
+const COUNTRIES = ["India","UAE","Singapore","USA","UK","Australia","Canada","Germany"]
 
 // Toggle value in array
 const toggle = (arr: string[], val: string) =>
@@ -37,13 +36,13 @@ const toggle = (arr: string[], val: string) =>
 export default function NewSegmentPage() {
   const router       = useRouter()
   const searchParams = useSearchParams()
-  const fromIcpId    = searchParams.get("from_icp") // ICP id if coming from ICP tab
+  const fromIcpId    = searchParams.get("from_icp")
 
   // Segment meta
   const [name,        setName]        = useState("")
   const [description, setDescription] = useState("")
   const [isShared,    setIsShared]    = useState(false)
-  const [icpName,     setIcpName]     = useState("") // display only — shows which ICP was used
+  const [icpName,     setIcpName]     = useState("")
 
   // Filter state
   const [industries,      setIndustries]      = useState<string[]>([])
@@ -52,8 +51,8 @@ export default function NewSegmentPage() {
   const [employeeRanges,  setEmployeeRanges]  = useState<string[]>([])
   const [annualRevenues,  setAnnualRevenues]  = useState<string[]>([])
   const [salesPriorities, setSalesPriorities] = useState<string[]>([])
-  const [intentSignals,   setIntentSignals]   = useState<string[]>([])
-  const [minScore,        setMinScore]        = useState("")
+  // REMOVED: intentSignals state
+  // REMOVED: minScore state
 
   // Preview state
   const [previewCount,  setPreviewCount]  = useState<number | null>(null)
@@ -61,30 +60,24 @@ export default function NewSegmentPage() {
   const [isPreviewing,  setIsPreviewing]  = useState(false)
 
   // Save state
-  const [isSaving, setIsSaving] = useState(false)
-  const [saveMsg,  setSaveMsg]  = useState("")
+  const [isSaving,     setIsSaving]     = useState(false)
+  const [saveMsg,      setSaveMsg]      = useState("")
   const [isLoadingIcp, setIsLoadingIcp] = useState(false)
 
-  // If from_icp param is present — load ICP filters and prefill
+  // Load ICP filters if coming from ICP page
   useEffect(() => {
     if (!fromIcpId) return
     setIsLoadingIcp(true)
     api.get<any>(`/icp/${fromIcpId}`)
       .then(res => {
-        // Backend returns { success: true, data: icpObject }
         const icp = res.data?.data ?? res.data
         if (!icp) return
-
-        // Prefill all filter fields from ICP
         if (icp.industries?.length)     setIndustries(icp.industries)
         if (icp.businessModels?.length) setBusinessModels(icp.businessModels)
         if (icp.countries?.length)      setCountries(icp.countries)
         if (icp.employeeRanges?.length) setEmployeeRanges(icp.employeeRanges)
         if (icp.annualRevenues?.length) setAnnualRevenues(icp.annualRevenues)
-        if (icp.intentSignals?.length)  setIntentSignals(icp.intentSignals)
-        if (icp.minTechFitScore)        setMinScore(String(icp.minTechFitScore))
 
-        // Prefill name as "ICP Name — Segment"
         setName(`${icp.name} — Segment`)
         setDescription(icp.description || "")
         setIcpName(icp.name)
@@ -93,7 +86,7 @@ export default function NewSegmentPage() {
       .finally(() => setIsLoadingIcp(false))
   }, [fromIcpId])
 
-  // Build filters object from current selections
+  // Build filters object — only send what is selected
   const buildFilters = () => {
     const f: any = {}
     if (industries.length)      f.industries      = industries
@@ -102,18 +95,19 @@ export default function NewSegmentPage() {
     if (employeeRanges.length)  f.employeeRanges  = employeeRanges
     if (annualRevenues.length)  f.annualRevenues  = annualRevenues
     if (salesPriorities.length) f.salesPriorities = salesPriorities
-    if (intentSignals.length)   f.intentSignals   = intentSignals
-    if (minScore)               f.minTechFitScore = Number(minScore)
+    // REMOVED: intentSignals
+    // REMOVED: minTechFitScore
     return f
   }
 
+  // Check if at least one filter is selected
   const hasFilters =
     industries.length > 0 || businessModels.length > 0 ||
     countries.length  > 0 || employeeRanges.length  > 0 ||
-    annualRevenues.length > 0 || salesPriorities.length > 0 ||
-    intentSignals.length  > 0 || minScore !== ""
+    annualRevenues.length > 0 || salesPriorities.length > 0
+    // REMOVED: intentSignals and minScore from hasFilters check
 
-  // POST /api/segments/preview — get live count without saving
+  // POST /api/segments/preview — live count without saving
   const fetchPreview = useCallback(async () => {
     if (!hasFilters) {
       setPreviewCount(null)
@@ -131,19 +125,17 @@ export default function NewSegmentPage() {
       setIsPreviewing(false)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [industries, businessModels, countries, employeeRanges, annualRevenues, salesPriorities, intentSignals, minScore])
+  }, [industries, businessModels, countries, employeeRanges, annualRevenues, salesPriorities])
 
-  // Debounce preview — wait 600ms after last filter change
   useEffect(() => {
     const timer = setTimeout(fetchPreview, 600)
     return () => clearTimeout(timer)
   }, [fetchPreview])
 
-  // POST /api/segments — save segment + take snapshot
+  // POST /api/segments — save segment and take snapshot
   const handleSave = async () => {
     if (!name.trim())  { setSaveMsg("❌ Segment name is required."); return }
     if (!hasFilters)   { setSaveMsg("❌ Select at least one filter."); return }
-
     setIsSaving(true)
     setSaveMsg("")
     try {
@@ -162,7 +154,7 @@ export default function NewSegmentPage() {
     }
   }
 
-  // Reusable chip selector
+  // Reusable chip selector component
   const ChipGroup = ({ label, options, selected, onToggle }: {
     label: string
     options: string[]
@@ -200,7 +192,7 @@ export default function NewSegmentPage() {
   return (
     <div className="flex flex-col h-[calc(100vh-56px)]">
 
-      {/* ── Header ── */}
+      {/* Header */}
       <div className="p-6 pb-4 border-b flex-shrink-0">
         <Link href="/segments"
           className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-4">
@@ -212,7 +204,6 @@ export default function NewSegmentPage() {
               Segment Builder
             </p>
             <h1 className="text-2xl font-bold">New Segment</h1>
-            {/* Show ICP source if prefilled */}
             {icpName && (
               <div className="flex items-center gap-2 mt-1">
                 <Brain className="h-4 w-4 text-purple-600" />
@@ -238,7 +229,7 @@ export default function NewSegmentPage() {
         </div>
       </div>
 
-      {/* ── Main content ── */}
+      {/* Main content */}
       <div className="flex-1 overflow-auto p-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 max-w-7xl">
 
@@ -272,7 +263,9 @@ export default function NewSegmentPage() {
                 <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/20">
                   <div>
                     <p className="text-sm font-medium">Share with Team</p>
-                    <p className="text-xs text-muted-foreground">All team members can see this segment</p>
+                    <p className="text-xs text-muted-foreground">
+                      All team members can see this segment
+                    </p>
                   </div>
                   <Switch checked={isShared} onCheckedChange={setIsShared} />
                 </div>
@@ -285,32 +278,52 @@ export default function NewSegmentPage() {
                 <p className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">
                   Company Filters
                 </p>
-                <ChipGroup label="Industries"      options={INDUSTRIES}      selected={industries}      onToggle={v => setIndustries(toggle(industries, v))} />
-                <ChipGroup label="Business Models" options={BUSINESS_MODELS} selected={businessModels}  onToggle={v => setBusinessModels(toggle(businessModels, v))} />
-                <ChipGroup label="Countries"       options={COUNTRIES}       selected={countries}       onToggle={v => setCountries(toggle(countries, v))} />
-                <ChipGroup label="Employee Range"  options={EMPLOYEE_RANGES} selected={employeeRanges}  onToggle={v => setEmployeeRanges(toggle(employeeRanges, v))} />
-                <ChipGroup label="Annual Revenue"  options={REVENUE_RANGES}  selected={annualRevenues}  onToggle={v => setAnnualRevenues(toggle(annualRevenues, v))} />
+                <ChipGroup
+                  label="Industries"
+                  options={INDUSTRIES}
+                  selected={industries}
+                  onToggle={v => setIndustries(toggle(industries, v))}
+                />
+                <ChipGroup
+                  label="Business Models"
+                  options={BUSINESS_MODELS}
+                  selected={businessModels}
+                  onToggle={v => setBusinessModels(toggle(businessModels, v))}
+                />
+                <ChipGroup
+                  label="Countries"
+                  options={COUNTRIES}
+                  selected={countries}
+                  onToggle={v => setCountries(toggle(countries, v))}
+                />
+                <ChipGroup
+                  label="Employee Range"
+                  options={EMPLOYEE_RANGES}
+                  selected={employeeRanges}
+                  onToggle={v => setEmployeeRanges(toggle(employeeRanges, v))}
+                />
+                <ChipGroup
+                  label="Annual Revenue"
+                  options={REVENUE_RANGES}
+                  selected={annualRevenues}
+                  onToggle={v => setAnnualRevenues(toggle(annualRevenues, v))}
+                />
               </CardContent>
             </Card>
 
-            {/* Sales intelligence */}
+            {/* Sales Priority only — Intent Signals and Min Score removed */}
             <Card>
               <CardContent className="p-6 space-y-6">
                 <p className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">
                   Sales Intelligence
                 </p>
-                <ChipGroup label="Sales Priority" options={PRIORITIES}     selected={salesPriorities} onToggle={v => setSalesPriorities(toggle(salesPriorities, v))} />
-                <ChipGroup label="Intent Signals" options={INTENT_SIGNALS} selected={intentSignals}   onToggle={v => setIntentSignals(toggle(intentSignals, v))} />
-                <div className="space-y-1.5">
-                  <Label>Minimum Tech Fit Score (0–100)</Label>
-                  <Input
-                    type="number" min={0} max={100}
-                    placeholder="e.g. 70"
-                    className="w-32"
-                    value={minScore}
-                    onChange={e => setMinScore(e.target.value)}
-                  />
-                </div>
+                <ChipGroup
+                  label="Sales Priority"
+                  options={PRIORITIES}
+                  selected={salesPriorities}
+                  onToggle={v => setSalesPriorities(toggle(salesPriorities, v))}
+                />
+     
               </CardContent>
             </Card>
 
@@ -325,7 +338,9 @@ export default function NewSegmentPage() {
                   <p className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                     Live Preview
                   </p>
-                  {isPreviewing && <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />}
+                  {isPreviewing && (
+                    <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
+                  )}
                 </div>
 
                 {!hasFilters ? (
@@ -339,7 +354,7 @@ export default function NewSegmentPage() {
                   </div>
                 ) : (
                   <>
-                    {/* Count */}
+                    {/* Match count */}
                     <div>
                       <p className="text-4xl font-bold text-primary">{previewCount ?? 0}</p>
                       <p className="text-xs text-muted-foreground uppercase tracking-wide">
@@ -349,21 +364,29 @@ export default function NewSegmentPage() {
 
                     {/* Active filter badges */}
                     <div className="flex flex-wrap gap-1">
-                      {industries.map(v      => <Badge key={v} variant="secondary" className="text-xs">{v}</Badge>)}
-                      {countries.map(v       => <Badge key={v} variant="outline"   className="text-xs">{v}</Badge>)}
-                      {salesPriorities.map(v => <Badge key={v} variant="outline"   className="text-xs">{v}</Badge>)}
-                      {minScore && <Badge variant="outline" className="text-xs">Score ≥ {minScore}</Badge>}
+                      {industries.map(v      => (
+                        <Badge key={v} variant="secondary" className="text-xs">{v}</Badge>
+                      ))}
+                      {countries.map(v       => (
+                        <Badge key={v} variant="outline" className="text-xs">{v}</Badge>
+                      ))}
+                      {salesPriorities.map(v => (
+                        <Badge key={v} variant="outline" className="text-xs">{v}</Badge>
+                      ))}
+                      {/* REMOVED: minScore badge */}
                     </div>
 
-                    {/* Top 5 accounts */}
+                    {/* Top 5 matching accounts */}
                     {topAccounts.length > 0 && (
                       <div className="space-y-2 pt-2 border-t">
                         <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
                           Top accounts
                         </p>
                         {topAccounts.map((a: any) => (
-                          <div key={a._id}
-                            className="flex items-center justify-between py-1.5 border-b last:border-0">
+                          <div
+                            key={a._id}
+                            className="flex items-center justify-between py-1.5 border-b last:border-0"
+                          >
                             <div>
                               <p className="text-sm font-medium leading-tight">{a.accountName}</p>
                               <p className="text-xs text-muted-foreground">
@@ -385,7 +408,9 @@ export default function NewSegmentPage() {
                 )}
 
                 {saveMsg && (
-                  <div className="text-sm px-3 py-2 rounded-lg border bg-muted/20">{saveMsg}</div>
+                  <div className="text-sm px-3 py-2 rounded-lg border bg-muted/20">
+                    {saveMsg}
+                  </div>
                 )}
 
                 <Button
@@ -393,7 +418,10 @@ export default function NewSegmentPage() {
                   onClick={handleSave}
                   disabled={isSaving || !hasFilters || !name.trim()}
                 >
-                  {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  {isSaving
+                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                    : <Save className="h-4 w-4" />
+                  }
                   {isSaving ? "Saving..." : "Save Segment"}
                 </Button>
 

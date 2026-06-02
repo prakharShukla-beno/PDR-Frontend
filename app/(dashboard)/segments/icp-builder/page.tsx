@@ -40,7 +40,7 @@ const REVENUE_RANGES  = [
 
 // Regions — image 1 reference
 const REGIONS = [
-  { label: "Asia-Pacific (APAC)",   countries: ["China","Japan","India","Australia","South Korea","Indonesia","Singapore"] },
+  { label: "Asia-Pacific (APAC)",   countries: ["China","Japan","India","Pakistan","Australia","South Korea","Indonesia","Singapore"] },
   { label: "Middle East",           countries: ["Saudi Arabia","UAE","Israel","Qatar","Kuwait","Jordan","Oman"] },
   { label: "Africa",                countries: ["Nigeria","South Africa","Kenya","Egypt","Ghana","Ethiopia"] },
   { label: "Europe",                countries: ["Germany","UK","France","Italy","Spain","Netherlands","Switzerland"] },

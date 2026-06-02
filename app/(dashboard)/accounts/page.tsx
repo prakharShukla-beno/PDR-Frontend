@@ -269,6 +269,23 @@ export default function AccountsPage() {
               </Button>
             )}
             <Button variant="outline" className="gap-2"><Download className="h-4 w-4" />Export</Button>
+            <Button 
+              variant="outline" 
+              className="gap-2" 
+              onClick={async () => {
+                try {
+                  await api.post(`/prospects/re-tier`, {})
+                  alert("Re-tiering all accounts...")
+                  await new Promise(r => setTimeout(r, 1000))
+                  fetchProspects()
+                } catch (err) {
+                  console.error("Re-tier error:", err)
+                  alert("Error re-tiering accounts")
+                }
+              }}
+            >
+              <Loader2 className="h-4 w-4" />Re-Tier All
+            </Button>
             <Button className="gap-2 bg-primary hover:bg-primary/90" onClick={() => setShowAddModal(true)}>
               <Plus className="h-4 w-4" />Add Account
             </Button>
@@ -340,6 +357,8 @@ export default function AccountsPage() {
                 <th className="p-4 font-medium">Employees</th>
                 <th className="p-4 font-medium">Location</th>
                 <th className="p-4 font-medium">TechFit Score</th>
+                <th className="p-4 font-medium">Final Score</th>
+                <th className="p-4 font-medium">Tier</th>
                 <th className="p-4 font-medium">CLV</th>
                 <th className="p-4 font-medium">Priority</th>
               </tr>
@@ -348,13 +367,13 @@ export default function AccountsPage() {
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className="animate-pulse">
-                    {Array.from({ length: 8 }).map((_, j) => (
+                    {Array.from({ length: 10 }).map((_, j) => (
                       <td key={j} className="p-4"><div className="h-4 bg-muted rounded" /></td>
                     ))}
                   </tr>
                 ))
               ) : prospects.length === 0 ? (
-                <tr><td colSpan={8} className="p-12 text-center text-muted-foreground">
+                <tr><td colSpan={10} className="p-12 text-center text-muted-foreground">
                   {activeCount > 0 ? "No accounts match the filter criteria." : "No accounts available."}
                 </td></tr>
               ) : (
@@ -377,6 +396,26 @@ export default function AccountsPage() {
                       <div className={`flex h-10 w-10 items-center justify-center rounded-full border-2 font-semibold text-sm ${getScoreColor(p.techFitScore)}`}>
                         {p.techFitScore ?? "—"}
                       </div>
+                    </td>
+                    <td className="p-4">
+                      <div className={`flex h-10 w-10 items-center justify-center rounded-full border-2 font-semibold text-sm ${
+                        p.finalScore && p.finalScore >= 60 ? "bg-green-50 text-green-700 border-green-200" :
+                        p.finalScore && p.finalScore >= 30 ? "bg-blue-50 text-blue-700 border-blue-200" :
+                        "bg-gray-50 text-gray-600 border-gray-200"
+                      }`}>
+                        {p.finalScore !== undefined ? Math.round(p.finalScore) : "—"}
+                      </div>
+                    </td>
+                    <td className="p-4">
+                      <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium border
+                        ${p.finalScore && p.finalScore >= 60 ? "bg-green-50 text-green-700 border-green-200" :
+                          p.finalScore && p.finalScore >= 30 ? "bg-blue-50 text-blue-700 border-blue-200" :
+                          p.finalScore !== undefined ? "bg-red-50 text-red-700 border-red-200" :
+                          "bg-gray-50 text-gray-600 border-gray-200"}`}>
+                        {p.finalScore && p.finalScore >= 60 ? "Tier A" :
+                         p.finalScore && p.finalScore >= 30 ? "Tier B" :
+                         p.finalScore !== undefined ? "Tier C" : "—"}
+                      </span>
                     </td>
                     <td className="p-4">
                       <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium border

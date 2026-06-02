@@ -102,3 +102,45 @@ export const api = {
   upload: <T>(endpoint: string, formData: FormData) =>
     request<T>(endpoint, { method: "POST", body: formData, isFormData: true }),
 }
+
+// ─── Prospects: Scoring & Tiering ─────────────────────────────────────────────
+
+/**
+ * Calculate and update score for a single prospect
+ */
+export const calculateProspectScore = (prospectId: string) =>
+  api.post(`/prospects/${prospectId}/calculate-score`)
+
+/**
+ * Recalculate scores for all prospects (bulk re-tier)
+ */
+export const reTierAllAccounts = () =>
+  api.post(`/prospects/re-tier`, {})
+
+/**
+ * Get detailed scoring breakdown for a prospect
+ */
+export const getScoreBreakdown = (prospectId: string) =>
+  api.get(`/prospects/${prospectId}/score-breakdown`)
+
+/**
+ * Manually override tier assignment with audit trail
+ */
+export const overrideTier = (prospectId: string, data: {
+  newTier: string
+  reason: string
+  overriddenBy?: string
+}) =>
+  api.put(`/prospects/${prospectId}/override-tier`, data)
+
+/**
+ * Get prospects filtered by tier (for dashboard filters)
+ */
+export const getProspectsByTier = (tier: string, page = 1, limit = 20) =>
+  api.get(`/prospects?tier=${tier}&page=${page}&limit=${limit}`)
+
+/**
+ * Get prospects filtered by priority (for war room matrix)
+ */
+export const getProspectsByPriority = (priority: string, page = 1, limit = 20) =>
+  api.get(`/prospects?priority=${priority}&page=${page}&limit=${limit}`)
