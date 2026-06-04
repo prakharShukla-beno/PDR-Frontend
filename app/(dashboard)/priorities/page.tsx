@@ -30,10 +30,10 @@ export default function PrioritiesPage() {
       try {
         // Fetch prospects grouped by priority
         const [p1Res, p2Res, p3Res, p4Res] = await Promise.all([
-          api.get<any>("/prospects?priority=P1&limit=100"),
-          api.get<any>("/prospects?priority=P2&limit=100"),
-          api.get<any>("/prospects?priority=P3&limit=100"),
-          api.get<any>("/prospects?priority=P4&limit=100"),
+          api.get<any>("/prospects?salesPriority=P1%20(Tier%20A%2BActive)&limit=100"),
+          api.get<any>("/prospects?salesPriority=P2%20(Tier%20B%2BActive)&limit=100"),
+          api.get<any>("/prospects?salesPriority=P3%20(Tier%20A%2BCold)&limit=100"),
+          api.get<any>("/prospects?salesPriority=P4%20(Tier%20B%2BCold)&limit=100"),
         ])
 
         const matrix: Record<string, MatrixCell> = {

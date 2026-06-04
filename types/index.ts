@@ -113,9 +113,10 @@ export interface Prospect {
   noOfEmployees?: string
 
   // Tech fields
-  primaryTechStack?: string | string[]
-  secondaryTechStack?: string
-  tertiaryTechStack?: string
+  primaryTechStack?: string[]
+  secondaryTechStack?: string[]
+  tertiaryTechStack?: string[]
+  technologyAlignment?: string
   techAdoptionProfile?: string
   infrastructureRisk?: string
   techFitScore?: number

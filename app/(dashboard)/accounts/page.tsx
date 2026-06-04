@@ -6,7 +6,7 @@ import Link from "next/link"
 import { useSearchParams } from "next/navigation"  // For reading URL params
 import {
   Search, Upload, Download, Plus, SlidersHorizontal,
-  X, Pencil, ChevronLeft, ChevronRight, Loader2
+  X, Pencil, ChevronLeft, ChevronRight, Loader2, TrendingUp
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -37,6 +37,8 @@ export default function AccountsPage() {
   const [uploadFile, setUploadFile]         = useState<File | null>(null)
   const [isUploading, setIsUploading]       = useState(false)
   const [uploadMsg, setUploadMsg]           = useState("")
+  const [isReTiering, setIsReTiering]       = useState(false)
+  const [reTierMsg, setReTierMsg]           = useState("")
   const [showAddModal, setShowAddModal]     = useState(false)
   const [isAdding, setIsAdding]             = useState(false)
   const [addMsg, setAddMsg]                 = useState("")
@@ -44,7 +46,13 @@ export default function AccountsPage() {
   const [newAccount, setNewAccount] = useState({
     accountName: "", website: "", primaryIndustry: "",
     businessModel: "", country: "", hqLocationCity: "", source: "",
+    technologyAlignment: "", financialCapacity: "",
+    strategicValue: "", marginPotential: "",
+    annualRevenue: "", noOfEmployees: "",
+    intentSignal: "", historyTrigger: "", servicePitch: "",
+    techAdoptionProfile: "", infrastructureRisk: "", commercialCategory: "",
   })
+  const [newTechStack, setNewTechStack] = useState<string[]>([])
 
   // ── Load filters from URL params for segment links ──────────
   // Update filters whenever URL params change
@@ -180,13 +188,26 @@ export default function AccountsPage() {
     if (!newAccount.accountName.trim()) { setAddMsg("❌ Account name is required."); return }
     setIsAdding(true); setAddMsg("")
     try {
-      const payload: any = { ...newAccount, source: newAccount.source || "manual" }
-      Object.keys(payload).forEach(k => { if (!payload[k]) delete payload[k] })
+      const payload: any = {
+        ...newAccount,
+        source: newAccount.source || "manual",
+        primaryTechStack: newTechStack.length > 0 ? newTechStack : undefined,
+      }
+      Object.keys(payload).forEach(k => { if (!payload[k] && payload[k] !== 0) delete payload[k] })
       await api.post("/prospects", payload)
-      setAddMsg("✅ Account created successfully!")
+      setAddMsg("✅ Account created!")
       setTimeout(() => {
         setShowAddModal(false); setAddMsg("")
-        setNewAccount({ accountName: "", website: "", primaryIndustry: "", businessModel: "", country: "", hqLocationCity: "", source: "" })
+        setNewAccount({
+          accountName: "", website: "", primaryIndustry: "",
+          businessModel: "", country: "", hqLocationCity: "", source: "",
+          technologyAlignment: "", financialCapacity: "",
+          strategicValue: "", marginPotential: "",
+          annualRevenue: "", noOfEmployees: "",
+          intentSignal: "", historyTrigger: "", servicePitch: "",
+          techAdoptionProfile: "", infrastructureRisk: "", commercialCategory: "",
+        })
+        setNewTechStack([])
         fetchProspects()
       }, 1000)
     } catch (err) {
@@ -496,45 +517,268 @@ export default function AccountsPage() {
       />
 
       <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogDescription className="sr-only">Create a new account.</DialogDescription>
           <DialogHeader><DialogTitle>Add New Account</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-2 max-h-[60vh] overflow-y-auto pr-1">
-            <div className="space-y-1">
-              <Label>Account Name *</Label>
-              <Input placeholder="e.g. Acme Corp" value={newAccount.accountName}
-                onChange={(e) => setNewAccount(p => ({ ...p, accountName: e.target.value }))} />
+          <div className="space-y-5 py-2">
+
+            {/* ── Section 1: Basic Info ── */}
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                Basic Info
+              </p>
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <Label>Account Name *</Label>
+                  <Input placeholder="e.g. Acme Corp"
+                    value={newAccount.accountName}
+                    onChange={(e) => setNewAccount(p => ({ ...p, accountName: e.target.value }))} />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label>Website</Label>
+                    <Input placeholder="acme.com"
+                      value={newAccount.website}
+                      onChange={(e) => setNewAccount(p => ({ ...p, website: e.target.value }))} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Country</Label>
+                    <Input placeholder="e.g. India"
+                      value={newAccount.country}
+                      onChange={(e) => setNewAccount(p => ({ ...p, country: e.target.value }))} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>City</Label>
+                    <Input placeholder="e.g. Bangalore"
+                      value={newAccount.hqLocationCity}
+                      onChange={(e) => setNewAccount(p => ({ ...p, hqLocationCity: e.target.value }))} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Source</Label>
+                    <Select value={newAccount.source} onValueChange={(v) => setNewAccount(p => ({ ...p, source: v }))}>
+                      <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                      <SelectContent>
+                        {["manual","linkedin","referral","website","event","other"].map(s => (
+                          <SelectItem key={s} value={s}>{s}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Industry</Label>
+                    <Select value={newAccount.primaryIndustry} onValueChange={(v) => setNewAccount(p => ({ ...p, primaryIndustry: v }))}>
+                      <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                      <SelectContent>
+                        {["BFSI","IT & ITES","SaaS","Fintech","E-commerce","Healthcare","EdTech","Logistics","Manufacturing","Retail & CPG","Media & Telecom","Real Estate"].map(i => (
+                          <SelectItem key={i} value={i}>{i}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Business Model</Label>
+                    <Select value={newAccount.businessModel} onValueChange={(v) => setNewAccount(p => ({ ...p, businessModel: v }))}>
+                      <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                      <SelectContent>
+                        {["B2B","B2C","B2B2C","D2C","E-Commerce","Marketplace"].map(m => (
+                          <SelectItem key={m} value={m}>{m}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Employees</Label>
+                    <Select value={newAccount.noOfEmployees} onValueChange={(v) => setNewAccount(p => ({ ...p, noOfEmployees: v }))}>
+                      <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                      <SelectContent>
+                        {["1-50","51-200","201-1,000","1,001-5,000","5,000+"].map(e => (
+                          <SelectItem key={e} value={e}>{e}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Annual Revenue</Label>
+                    <Select value={newAccount.annualRevenue} onValueChange={(v) => setNewAccount(p => ({ ...p, annualRevenue: v }))}>
+                      <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                      <SelectContent>
+                        {["Seed <$1M","Early $1M-$10M","Scale-Up $10M-$50M","Mid-Market $50M-$250M","Corporate $250M-$1B","Enterprise $1B+"].map(r => (
+                          <SelectItem key={r} value={r}>{r}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1"><Label>Website</Label>
-                <Input placeholder="acme.com" value={newAccount.website}
-                  onChange={(e) => setNewAccount(p => ({ ...p, website: e.target.value }))} /></div>
-              <div className="space-y-1"><Label>Country</Label>
-                <Input placeholder="e.g. India" value={newAccount.country}
-                  onChange={(e) => setNewAccount(p => ({ ...p, country: e.target.value }))} /></div>
+
+            {/* ── Section 2: Scoring Inputs ── */}
+            <div className="border-t pt-4">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+                Scoring Inputs
+              </p>
+              <p className="text-xs text-muted-foreground mb-3">
+                These fields are used to calculate the Final Score automatically.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label>Technology Alignment <span className="text-primary text-xs">(gatekeeper)</span></Label>
+                  <Select value={newAccount.technologyAlignment} onValueChange={(v) => setNewAccount(p => ({ ...p, technologyAlignment: v }))}>
+                    <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Core Match">Core Match — modern stack ×1.0</SelectItem>
+                      <SelectItem value="Adjacent Match">Adjacent Match — partial ×0.5</SelectItem>
+                      <SelectItem value="No Match">No Match — legacy ×0 (disqualified)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Financial Capacity</Label>
+                  <Select value={newAccount.financialCapacity} onValueChange={(v) => setNewAccount(p => ({ ...p, financialCapacity: v }))}>
+                    <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Enterprise">Enterprise &gt;$200M — 50 pts</SelectItem>
+                      <SelectItem value="Mid-Market">Mid-Market $50M-$200M — 25 pts</SelectItem>
+                      <SelectItem value="Small Business">Small Business &lt;$50M — 10 pts</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Strategic Value</Label>
+                  <Select value={newAccount.strategicValue} onValueChange={(v) => setNewAccount(p => ({ ...p, strategicValue: v }))}>
+                    <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Market Maker">Market Maker +40</SelectItem>
+                      <SelectItem value="VC Backed">VC Backed +20</SelectItem>
+                      <SelectItem value="Standard">Standard +0</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Margin Potential</Label>
+                  <Select value={newAccount.marginPotential} onValueChange={(v) => setNewAccount(p => ({ ...p, marginPotential: v }))}>
+                    <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="High Margins">High Margins ×1.2</SelectItem>
+                      <SelectItem value="Standard Margins">Standard Margins ×1.0</SelectItem>
+                      <SelectItem value="Low Margins">Low Margins ×0.8</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Intent Signal</Label>
+                  <Select value={newAccount.intentSignal} onValueChange={(v) => setNewAccount(p => ({ ...p, intentSignal: v }))}>
+                    <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                    <SelectContent>
+                      {["Hyper-Growth Mode","Cost Containment","Risk Mitigation","Modernization Mandate","Capital Event","Regulatory Action","Earnings Shock","Strategic Pivot","Security Incident","Job Postings"].map(v => (
+                        <SelectItem key={v} value={v}>{v}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>History Trigger</Label>
+                  <Select value={newAccount.historyTrigger} onValueChange={(v) => setNewAccount(p => ({ ...p, historyTrigger: v }))}>
+                    <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                    <SelectContent>
+                      {["M&A Activity","Capital Event","Leadership Shakeup","Regulatory Action","Earnings Shock","Security Incident","Strategic Pivot","Job Postings"].map(v => (
+                        <SelectItem key={v} value={v}>{v}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1"><Label>Industry</Label>
-                <Select value={newAccount.primaryIndustry} onValueChange={(v) => setNewAccount(p => ({ ...p, primaryIndustry: v }))}>
-                  <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                  <SelectContent>
-                    {["SaaS","Fintech","Healthcare","E-commerce","Logistics","Manufacturing","EdTech","BFSI","IT & ITES"].map(i => (
-                      <SelectItem key={i} value={i}>{i}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select></div>
-              <div className="space-y-1"><Label>Business Model</Label>
-                <Select value={newAccount.businessModel} onValueChange={(v) => setNewAccount(p => ({ ...p, businessModel: v }))}>
-                  <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                  <SelectContent>
-                    {["B2B","B2C","B2B2C","D2C","E-Commerce","Marketplace"].map(m => (
-                      <SelectItem key={m} value={m}>{m}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select></div>
+
+            {/* ── Section 3: Tech Profile ── */}
+            <div className="border-t pt-4">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                Tech Profile
+              </p>
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div className="space-y-1">
+                  <Label>Adoption Profile</Label>
+                  <Select value={newAccount.techAdoptionProfile} onValueChange={(v) => setNewAccount(p => ({ ...p, techAdoptionProfile: v }))}>
+                    <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                    <SelectContent>
+                      {["Innovator","Early Adopter","Mainstream","Laggard","Leapfrog"].map(v => (
+                        <SelectItem key={v} value={v}>{v}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Infrastructure Risk</Label>
+                  <Select value={newAccount.infrastructureRisk} onValueChange={(v) => setNewAccount(p => ({ ...p, infrastructureRisk: v }))}>
+                    <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                    <SelectContent>
+                      {["End-of-Life (EOL)","Data Silos","Security Gaps","Scalability Lock","Shadow IT","Clean (Greenfield)"].map(v => (
+                        <SelectItem key={v} value={v}>{v}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Tech Stack multi-select by category */}
+              <Label className="text-sm font-medium">Tech Stack (multi-select)</Label>
+              <p className="text-xs text-muted-foreground mb-2">Click tools to add. Selected tools shown below.</p>
+              <div className="space-y-3 border rounded-lg p-3 bg-muted/20 max-h-48 overflow-y-auto">
+                {[
+                  { cat: "Cloud",    tools: ["AWS","Microsoft Azure","Google Cloud (GCP)","Oracle Cloud","Digital Ocean","On-Premise"] },
+                  { cat: "CRM/ERP",  tools: ["Salesforce","HubSpot","SAP S/4HANA","MS Dynamics 365","Zoho","Odoo"] },
+                  { cat: "Frontend", tools: ["React","Angular","Vue.js","Next.js","Flutter (Web)"] },
+                  { cat: "Backend",  tools: ["Python","Node.js","Java (Spring)","PHP (Laravel)",".NET Core","Go"] },
+                  { cat: "Database", tools: ["PostgreSQL","MySQL","MongoDB (NoSQL)","Snowflake","Redis"] },
+                  { cat: "DevOps",   tools: ["Docker","Kubernetes","GitHub Actions","Terraform","Jenkins"] },
+                  { cat: "Security", tools: ["CrowdStrike","Okta","Palo Alto Networks","Cloudflare","Splunk"] },
+                  { cat: "E-comm",   tools: ["Shopify","Magento","WooCommerce","BigCommerce"] },
+                ].map(({ cat, tools }) => (
+                  <div key={cat}>
+                    <p className="text-xs font-semibold text-muted-foreground mb-1">{cat}</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {tools.map(tool => {
+                        const selected = newTechStack.includes(tool)
+                        return (
+                          <button
+                            key={tool}
+                            type="button"
+                            onClick={() => setNewTechStack(prev =>
+                              prev.includes(tool) ? prev.filter(t => t !== tool) : [...prev, tool]
+                            )}
+                            className={`px-2.5 py-1 rounded-full text-xs border font-medium transition-colors ${
+                              selected
+                                ? "bg-primary text-white border-primary"
+                                : "bg-white text-muted-foreground border-border hover:border-primary hover:text-primary"
+                            }`}
+                          >
+                            {selected ? "✓ " : ""}{tool}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Selected tools display */}
+              {newTechStack.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {newTechStack.map(tool => (
+                    <span key={tool}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary/10 text-primary text-xs rounded-full border border-primary/20">
+                      {tool}
+                      <button onClick={() => setNewTechStack(p => p.filter(t => t !== tool))}
+                        className="ml-0.5 hover:text-red-500">×</button>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
-            {addMsg && <div className="text-sm px-3 py-2 rounded-lg border">{addMsg}</div>}
+
+            {addMsg && <div className="text-sm px-3 py-2 rounded-lg border bg-muted/20">{addMsg}</div>}
           </div>
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowAddModal(false)}>Cancel</Button>
             <Button onClick={handleAddAccount} disabled={isAdding} className="gap-2">
