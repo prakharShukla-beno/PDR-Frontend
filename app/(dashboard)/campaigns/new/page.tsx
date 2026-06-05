@@ -122,7 +122,7 @@ export default function CampaignWizardPage() {
   // ── Final Submit — POST /api/campaigns ──────
   const handleLaunch = async () => {
     if (!campaignName.trim()) {
-      setCreateMsg("❌ Campaign name zaroori hai.")
+      setCreateMsg("❌ Campaign name is required.")
       return
     }
     setIsCreating(true)
@@ -262,7 +262,7 @@ export default function CampaignWizardPage() {
           {currentStep === 2 && (
             <div className="space-y-4">
               <h2 className="font-semibold text-lg">Define your goal</h2>
-              <p className="text-sm text-muted-foreground">Is campaign ka primary objective kya hai?</p>
+              <p className="text-sm text-muted-foreground">What is the primary objective of this campaign?</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {GOALS.map((goal) => (
                   <div
@@ -294,7 +294,7 @@ export default function CampaignWizardPage() {
             <div className="space-y-4">
               <h2 className="font-semibold text-lg">Write your prompt</h2>
               <p className="text-sm text-muted-foreground">
-                AI is prompt ke basis pe outreach message draft karega.
+                AI will draft the outreach message based on this prompt.
               </p>
               <div className="space-y-1">
                 <Label>Campaign Name *</Label>
@@ -417,7 +417,7 @@ export default function CampaignWizardPage() {
                 >
                   <Calendar className="h-6 w-6 text-muted-foreground mb-2" />
                   <p className="font-medium">Save as Draft</p>
-                  <p className="text-xs text-muted-foreground mt-1">Baad mein launch kar sakte ho</p>
+                  <p className="text-xs text-muted-foreground mt-1">You can launch it later</p>
                 </div>
               </div>
 

@@ -162,7 +162,7 @@ export const buildFilterQuery = (f: FilterState, mode: "accounts" | "contacts" =
 }
 
 // ─── IncExcPicker Component ────────────────────────────────────────────────────
-// Har filter ke liye Include/Exclude toggle with chips
+// Include/Exclude toggle with chips for each filter
 interface IncExcPickerProps {
   label:      string
   options:    string[]
@@ -329,7 +329,7 @@ export function FilterPanel({ isOpen, onClose, filters, onChange, onApply, mode 
         // Fallback options
         setFilterOptions({
           industries:    ["BFSI","IT & ITES","SaaS","Fintech","E-commerce","Healthcare","EdTech","Logistics","Manufacturing","Retail & CPG","Media & Telecom","Real Estate"],
-          countries:     ["United States","United Kingdom","India","Singapore","UAE","Australia","Canada","Germany","France"],
+          countries:     ["United States","United Kingdom","India","Pakistan","Singapore","UAE","Australia","Canada","Germany","France"],
           cities:        ["San Francisco","New York","London","Bangalore","Mumbai","Singapore","Dubai"],
           businessModels:["B2B","B2C","D2C","E-Commerce","B2B2C","Marketplace"],
           employeeBands: ["1-50","51-200","201-1,000","1,001-5,000","5,000+"],

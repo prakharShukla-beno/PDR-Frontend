@@ -36,7 +36,7 @@ export interface Contact {
   // Account reference fields
   accountName?: string
 
-  // Denormalized account fields — filter ke liye
+  // Denormalized account fields — for filtering
   accountIndustry?: string
   accountCountry?: string
   accountCity?: string
@@ -113,9 +113,10 @@ export interface Prospect {
   noOfEmployees?: string
 
   // Tech fields
-  primaryTechStack?: string | string[]
-  secondaryTechStack?: string
-  tertiaryTechStack?: string
+  primaryTechStack?: string[]
+  secondaryTechStack?: string[]
+  tertiaryTechStack?: string[]
+  technologyAlignment?: string
   techAdoptionProfile?: string
   infrastructureRisk?: string
   techFitScore?: number
@@ -133,6 +134,13 @@ export interface Prospect {
   comments?: string
   isDuplicate?: boolean
 
+  // ── NEW Scoring & Tiering Fields ──────────────────────────────────────
+  finalScore?: number
+  scoringMetadata?: ScoringMetadata
+  status?: "active" | "disqualified" | "archived"
+  disqualificationReason?: string
+  disqualifiedAt?: string
+
   // Relations
   assignedTo?: User | string
   campaignIds?: string[]
@@ -141,6 +149,60 @@ export interface Prospect {
 
   createdAt?: string
   updatedAt?: string
+}
+
+// ─── Scoring & Tiering ────────────────────────────────────────────────────────
+export interface ScoringMetadata {
+  revenuePoints?: number
+  strategyBonus?: number
+  industryMultiplier?: number
+  techFitMultiplier?: number
+  calculatedAt?: Date
+}
+
+export interface ScoreBreakdown {
+  prospect: {
+    id: string
+    accountName: string
+    primaryIndustry?: string
+    annualRevenue?: string
+    strategicValue?: string
+    financialCapacity?: string
+  }
+  scoring: {
+    revenuePoints: number
+    strategyBonus: number
+    industryMultiplier: number
+    techFitMultiplier: number
+    finalScore: number
+  }
+  tier?: {
+    tier: string
+    assignment: string
+    resourceAllocation: string
+  }
+  priority?: {
+    priority: string
+    bucket: string
+    slaMinutes?: number
+    description: string
+    action: string
+  }
+  steps?: string[]
+  metadata?: ScoringMetadata
+}
+
+export interface TierBreakdown {
+  "Tier-A (Strategic)": number
+  "Tier-B (Core)": number
+  "Tier-C (Mass)": number
+}
+
+export interface PriorityBreakdown {
+  "P1 (Tier A+Active)": number
+  "P2 (Tier B+Active)": number
+  "P3 (Tier A+Cold)": number
+  "P4 (Tier B+Cold)": number
 }
 
 // ─── Enrichment ───────────────────────────────────────────────────────────────
@@ -219,9 +281,12 @@ export interface Interaction {
 export interface Duplicate {
   _id: string
   prospectId1: Prospect | string
-  prospectId2: Prospect | string
+  prospectId2?: Prospect | string | null
+  newData?: Record<string, any> | null
+  source?: "import" | "manual"
+  importLogId?: string
   matchFields?: string[]
-  status: "pending" | "merged" | "dismissed"
+  status: "pending" | "merged" | "skipped" | "kept_both" | "dismissed"
   reviewedBy?: User | string
   reviewedAt?: string
   createdAt?: string

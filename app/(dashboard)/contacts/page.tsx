@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, useCallback } from "react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
 import {
   Search, Upload, Plus, X, Pencil, SlidersHorizontal,
@@ -16,6 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { api, ApiError } from "@/lib/api"
 import type { Contact, Prospect } from "@/types"
 import { FilterPanel, FilterState, EMPTY_FILTERS, buildFilterQuery, countActiveFilters } from "@/components/filters/FilterPanel"
+//import DuplicateReviewModal from "@/components/import/DuplicateReviewModal"
 
 const FUNCTIONAL_DOMAINS = [
   "Corporate Strategy","Technology & Digital","Data & AI","Finance & Accounting",
@@ -41,6 +43,7 @@ const DOMAIN_COLORS: Record<string, string> = {
 }
 
 export default function ContactsPage() {
+  const router = useRouter()
   const [contacts, setContacts]         = useState<Contact[]>([])
   const [total, setTotal]               = useState(0)
   const [totalPages, setTotalPages]     = useState(1)
@@ -145,20 +148,45 @@ export default function ContactsPage() {
     } catch { alert("Delete failed.") }
   }
 
-  const handleUpload = async () => {
+
+
+
+
+
+
+
+const handleUpload = async () => {
     if (!uploadFile) return
     setIsUploading(true); setUploadMsg("")
     try {
-      const formData = new FormData(); formData.append("file", uploadFile)
-      await api.upload<any>("/import/contacts", formData)
-      setUploadMsg("✅ Import started. You will be notified when it completes.")
+      const formData = new FormData()
+      formData.append("file", uploadFile)
+      const res = await api.upload<any>("/import/contacts", formData)
+
+      const result     = res?.data || res
+      const duplicates = result?.duplicates || []
+      const logId      = result?.importLogId?.toString() || ""
+
+      if (duplicates.length > 0) {
+        setUploadMsg(`✅ ${result?.successCount || 0} contacts saved. ${duplicates.length} duplicates need review.`)
+        setTimeout(() => router.push("/duplicates"), 1200)
+      } else {
+        const saved = result?.successCount ?? result?.savedCount ?? 0
+        setUploadMsg(`✅ Import complete — ${saved} contacts added`)
+        setTimeout(fetchContacts, 1000)
+      }
       setUploadFile(null)
-      setTimeout(fetchContacts, 2000)
     } catch (err) {
       if (err instanceof ApiError) setUploadMsg(`❌ ${err.message}`)
       else setUploadMsg("❌ Upload failed.")
-    } finally { setIsUploading(false) }
+    } finally {
+      setIsUploading(false)
+    }
   }
+
+
+
+
 
   const handleAddContact = async () => {
     if (!newContact.accountId) { setAddMsg("❌ Selecting an account is required."); return }
@@ -487,6 +515,8 @@ export default function ContactsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Duplicate Review Modal — shown after contact import */}
     </div>
   )
 }

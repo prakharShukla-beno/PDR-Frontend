@@ -72,7 +72,7 @@ export default function CampaignsPage() {
   // ── POST /api/campaigns ─────────────────────
   const handleCreate = async () => {
     if (!newCampaign.name.trim()) {
-      setCreateMsg("❌ Campaign name zaroori hai.")
+      setCreateMsg("❌ Campaign name is required.")
       return
     }
     setIsCreating(true)
@@ -323,7 +323,7 @@ export default function CampaignsPage() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Quick Create Campaign</DialogTitle>
-            <DialogDescription className="sr-only">Naya campaign banao</DialogDescription>
+            <DialogDescription className="sr-only">Create a new campaign</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1">
@@ -333,7 +333,7 @@ export default function CampaignsPage() {
             </div>
             <div className="space-y-1">
               <Label>Description</Label>
-              <Textarea placeholder="Campaign ka purpose..." value={newCampaign.description}
+              <Textarea placeholder="Campaign purpose..." value={newCampaign.description}
                 onChange={(e) => setNewCampaign(p => ({ ...p, description: e.target.value }))} rows={2} />
             </div>
             <div className="space-y-1">
@@ -349,7 +349,7 @@ export default function CampaignsPage() {
             </div>
             <div className="space-y-1">
               <Label>AI Prompt (Optional)</Label>
-              <Textarea placeholder="AI ko kya karna hai..." value={newCampaign.promptUsed}
+              <Textarea placeholder="What should the AI do..." value={newCampaign.promptUsed}
                 onChange={(e) => setNewCampaign(p => ({ ...p, promptUsed: e.target.value }))} rows={3} />
             </div>
             {createMsg && <div className="text-sm px-3 py-2 rounded-lg border">{createMsg}</div>}
