@@ -13,7 +13,7 @@ import Link from "next/link"
 import {
   ArrowLeft, Loader2, Save, Users,
   Building2, Target, ChevronRight,
-  Globe, MapPin, X, Plus,
+  Globe, MapPin, X, Plus, Cpu,
 } from "lucide-react"
 import { Button }            from "@/components/ui/button"
 import { Input }             from "@/components/ui/input"
@@ -26,12 +26,58 @@ import { api }               from "@/lib/api"
 import type { Prospect }     from "@/types"
 
 // ── Static options ─────────────────────────────────────────────────────────────
-const INDUSTRY_OPTIONS = [
+// Step 1.2 — renamed from "Industries" to "Commercial Sector"
+const COMMERCIAL_SECTOR_OPTIONS = [
   "BFSI", "IT & ITES", "SaaS", "Fintech", "E-commerce",
   "Healthcare", "EdTech", "Logistics", "Manufacturing",
   "Retail & CPG", "Media & Telecom", "Real Estate",
 ]
+// Step 1.1 — Commercial Category (new field under Business Model)
+const COMMERCIAL_CATEGORY_OPTIONS = [
+  "Product Led", "SaaS / Subscriptions", "Professional Services",
+  "Retail / E-Com", "Network / Platform", "Regulated (Health/Fin)", "Public / Gov",
+]
 const BUSINESS_MODEL_OPTIONS = ["B2B", "B2C", "B2B2C", "D2C", "E-Commerce", "Marketplace"]
+
+// Step 2 — Tech Fit: 9 categories with tools (accordion + include/exclude like regions)
+const TECH_STACK_CATEGORIES = [
+  {
+    label: "Cloud Provider",
+    tools: ["AWS", "Microsoft Azure", "Google Cloud (GCP)", "Oracle Cloud", "Digital Ocean", "IBM Cloud", "On-Premise"],
+  },
+  {
+    label: "CRM & ERP",
+    tools: ["Salesforce", "HubSpot", "SAP S/4HANA", "MS Dynamics 365", "Oracle NetSuite", "Zoho", "Odoo", "Pipedrive"],
+  },
+  {
+    label: "Frontend Framework",
+    tools: ["React", "Angular", "Vue.js", "Next.js", "Svelte", "jQuery (Legacy)", "Flutter (Web)"],
+  },
+  {
+    label: "Backend / Language",
+    tools: ["Python (Django/Flask)", "Node.js", "Java (Spring)", "PHP (Laravel)", "Ruby on Rails", ".NET Core", "Go"],
+  },
+  {
+    label: "Database",
+    tools: ["PostgreSQL", "MySQL", "MongoDB (NoSQL)", "Oracle DB", "Snowflake", "Redis", "DynamoDB"],
+  },
+  {
+    label: "DevOps & CI/CD",
+    tools: ["Jenkins", "GitHub Actions", "GitLab CI", "Docker", "Kubernetes", "Terraform", "CircleCI", "Azure DevOps"],
+  },
+  {
+    label: "Marketing Tech",
+    tools: ["Marketo", "Mailchimp", "Klaviyo", "Adobe Experience Cloud", "Pardot", "Active Campaign"],
+  },
+  {
+    label: "E-commerce",
+    tools: ["Shopify", "Magento", "WooCommerce", "BigCommerce", "Salesforce Commerce Cloud"],
+  },
+  {
+    label: "Cybersecurity",
+    tools: ["CrowdStrike", "Okta", "Palo Alto Networks", "Zscaler", "Splunk", "Cloudflare"],
+  },
+]
 const EMPLOYEE_RANGES = ["1-50", "51-200", "201-500", "501-1,000", "1,001-5,000", "5,000+"]
 const REVENUE_RANGES  = [
   "Seed <$1M", "Early $1M-$10M", "Scale-Up $10M-$50M",
@@ -293,6 +339,7 @@ function ChipGroup({ label, options, selected, onToggle }: {
   )
 }
 
+
 // ══════════════════════════════════════════════════════════════════════════════
 // MAIN PAGE
 // ══════════════════════════════════════════════════════════════════════════════
@@ -306,10 +353,20 @@ export default function IcpBuilderPage() {
   const [description, setDescription] = useState("")
 
   // ── Company filters ─────────────────────────────────────────────────────────
-  const [industries,     setIndustries]     = useState<string[]>([])
-  const [businessModels, setBusinessModels] = useState<string[]>([])
-  const [employeeRanges, setEmployeeRanges] = useState<string[]>([])
-  const [revenues,       setRevenues]       = useState<string[]>([])
+  const [industries,           setIndustries]           = useState<string[]>([])
+  const [commercialCategories, setCommercialCategories] = useState<string[]>([]) // Step 1.1
+  const [businessModels,       setBusinessModels]       = useState<string[]>([])
+  const [employeeRanges,       setEmployeeRanges]       = useState<string[]>([])
+  const [revenues,             setRevenues]             = useState<string[]>([])
+
+  // ── Tech Fit (Step 2 — 4th tab) — same structure as Region ─────────────────
+  const [techCategoriesInclude, setTechCategoriesInclude] = useState<string[]>([]) // like regionsInclude
+  const [techCategoriesExclude, setTechCategoriesExclude] = useState<string[]>([]) // like regionsExclude
+  const [techStackExclude,      setTechStackExclude]      = useState<string[]>([]) // individual tool exclusions within included categories (like regionCountriesExclude)
+  const [techStackInclude,      setTechStackInclude]      = useState<string[]>([]) // kept for payload compat
+
+  // ── Validation error for Buyer Persona (Step 3) ──────────────────────────────
+  const [personaError, setPersonaError] = useState("")
 
   // ── Target Market ───────────────────────────────────────────────────────────
   const [regionsInclude,         setRegionsInclude]         = useState<string[]>([])
@@ -348,6 +405,11 @@ export default function IcpBuilderPage() {
         setBusinessModels(icp.businessModels ?? [])
         setEmployeeRanges(icp.employeeRanges ?? [])
         setRevenues(icp.annualRevenues ?? [])
+        setCommercialCategories(icp.commercialCategories ?? [])
+        setTechCategoriesInclude(icp.techCategoriesInclude ?? [])
+        setTechCategoriesExclude(icp.techCategoriesExclude ?? [])
+        setTechStackInclude(icp.techStackInclude ?? [])
+        setTechStackExclude(icp.techStackExclude ?? [])
         setRegionsInclude(icp.targetRegionsInclude ?? [])
         setRegionsExclude(icp.targetRegionsExclude ?? [])
         setRegionCountriesExclude(icp.targetRegionCountriesExclude ?? [])
@@ -404,8 +466,31 @@ export default function IcpBuilderPage() {
   }
 
   // POST /api/icp or PUT /api/icp/:id
+  // Tech Fit toggle helpers — exactly like region toggles
+  const toggleTechCategoryInclude = (cat: string) => {
+    const isRemoving = techCategoriesInclude.includes(cat)
+    setTechCategoriesInclude(prev => toggle(prev, cat))
+    setTechCategoriesExclude(prev => prev.filter(c => c !== cat))
+    // If removing a category, clean up its individual tool exclusions
+    if (isRemoving) {
+      const catTools = TECH_STACK_CATEGORIES.find(c => c.label === cat)?.tools ?? []
+      setTechStackExclude(prev => prev.filter(t => !catTools.includes(t)))
+    }
+  }
+  const toggleTechCategoryExclude = (cat: string) => {
+    setTechCategoriesExclude(prev => toggle(prev, cat))
+    setTechCategoriesInclude(prev => prev.filter(c => c !== cat))
+  }
+
   const handleSave = async () => {
     if (!name.trim()) { setSaveMsg("❌ ICP naam zaroori hai."); return }
+    // Step 3 — Buyer Persona mandatory validation
+    if (targetSeniorities.length === 0 && targetDepartments.length === 0 && targetDesignations.length === 0) {
+      setPersonaError("Please select at least one Seniority, Department, or Designation.")
+      setSaveMsg("❌ Buyer Persona is required before saving.")
+      return
+    }
+    setPersonaError("")
     setIsSaving(true)
     setSaveMsg("")
     try {
@@ -413,9 +498,16 @@ export default function IcpBuilderPage() {
         name: name.trim(),
         description:            description || undefined,
         industries,
+        commercialCategories,
         businessModels,
         employeeRanges,
         annualRevenues:          revenues,
+        techCategoriesInclude,
+        techCategoriesExclude,
+        techStackInclude: techCategoriesInclude.flatMap(cat =>
+          TECH_STACK_CATEGORIES.find(c => c.label === cat)?.tools ?? []
+        ).filter(t => !techStackExclude.includes(t)),
+        techStackExclude,
         targetRegionsInclude:          regionsInclude,
         targetRegionsExclude:          regionsExclude,
         targetRegionCountriesExclude:  regionCountriesExclude,
@@ -499,7 +591,18 @@ export default function IcpBuilderPage() {
                   <Badge variant="secondary" className="text-xs h-4 px-1">{marketCount}</Badge>
                 )}
               </TabsTrigger>
-              <TabsTrigger value="persona" className="flex-1">Buyer Persona</TabsTrigger>
+              <TabsTrigger value="techfit" className="flex-1 gap-1.5">
+                Tech Fit
+                {(techCategoriesInclude.length + techCategoriesExclude.length) > 0 && (
+                  <Badge variant="secondary" className="text-xs h-4 px-1">
+                    {techCategoriesInclude.length + techCategoriesExclude.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="persona" className="flex-1 gap-1.5">
+                Buyer Persona
+                {personaError && <span className="text-red-500 text-xs">*</span>}
+              </TabsTrigger>
             </TabsList>
 
             {/* ────────── COMPANY PROFILE TAB ────────── */}
@@ -527,12 +630,12 @@ export default function IcpBuilderPage() {
                 </CardContent>
               </Card>
 
-              {/* Industries */}
+              {/* Step 1.2 — Commercial Sector (renamed from Industries) */}
               <Card>
                 <CardContent className="p-4">
                   <ChipGroup
-                    label="Industries"
-                    options={INDUSTRY_OPTIONS}
+                    label="Commercial Sector"
+                    options={COMMERCIAL_SECTOR_OPTIONS}
                     selected={industries}
                     onToggle={v => setIndustries(p => toggle(p, v))}
                   />
@@ -547,6 +650,18 @@ export default function IcpBuilderPage() {
                     options={BUSINESS_MODEL_OPTIONS}
                     selected={businessModels}
                     onToggle={v => setBusinessModels(p => toggle(p, v))}
+                  />
+                </CardContent>
+              </Card>
+
+              {/* Step 1.1 — Commercial Category (new field under Business Model) */}
+              <Card>
+                <CardContent className="p-4">
+                  <ChipGroup
+                    label="Commercial Category"
+                    options={COMMERCIAL_CATEGORY_OPTIONS}
+                    selected={commercialCategories}
+                    onToggle={v => setCommercialCategories(p => toggle(p, v))}
                   />
                 </CardContent>
               </Card>
@@ -724,6 +839,119 @@ export default function IcpBuilderPage() {
               )}
             </TabsContent>
 
+            {/* ────────── TECH FIT TAB ────────── */}
+            <TabsContent value="techfit" className="mt-4 space-y-4">
+
+              {/* Category selector — exactly like Region */}
+              <Card>
+                <CardContent className="p-4 space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Cpu className="h-4 w-4 text-primary" />
+                    <h3 className="font-semibold">Tech Category</h3>
+                    <p className="text-xs text-muted-foreground ml-auto">
+                      Select a category to target all its tools
+                    </p>
+                  </div>
+
+                  {/* Step 1 — Include/Exclude categories (same as Regions) */}
+                  <IncludeExcludeChips
+                    label="Categories"
+                    options={TECH_STACK_CATEGORIES.map(c => c.label)}
+                    included={techCategoriesInclude}
+                    excluded={techCategoriesExclude}
+                    onInclude={toggleTechCategoryInclude}
+                    onExclude={toggleTechCategoryExclude}
+                  />
+
+                  {/* Step 2 — Show tools of included categories — click to exclude individually (same as countries in region) */}
+                  {techCategoriesInclude.length > 0 && (() => {
+                    const allToolsInIncludedCategories = techCategoriesInclude.flatMap(cat =>
+                      TECH_STACK_CATEGORIES.find(c => c.label === cat)?.tools ?? []
+                    )
+                    return (
+                      <div className="rounded-lg bg-green-50 border border-green-200 p-3 space-y-2">
+                        <p className="text-xs font-medium text-green-800">
+                          Tools included via categories — click any to exclude individually:
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {allToolsInIncludedCategories.map(tool => {
+                            const isExcluded = techStackExclude.includes(tool)
+                            return (
+                              <button
+                                key={tool}
+                                type="button"
+                                onClick={() =>
+                                  setTechStackExclude(prev =>
+                                    prev.includes(tool) ? prev.filter(x => x !== tool) : [...prev, tool]
+                                  )
+                                }
+                                title={isExcluded ? "Click to re-include" : "Click to exclude this tool"}
+                                className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border transition-colors ${
+                                  isExcluded
+                                    ? "bg-red-100 text-red-700 border-red-300 line-through opacity-70"
+                                    : "bg-green-100 text-green-700 border-green-300 hover:bg-red-50 hover:text-red-600 hover:border-red-300"
+                                }`}
+                              >
+                                {isExcluded ? <X className="h-2.5 w-2.5" /> : null}
+                                {tool}
+                              </button>
+                            )
+                          })}
+                        </div>
+                        {techStackExclude.filter(t => allToolsInIncludedCategories.includes(t)).length > 0 && (
+                          <p className="text-xs text-red-600 mt-1">
+                            ✗ Excluded: {techStackExclude.filter(t => allToolsInIncludedCategories.includes(t)).join(", ")}
+                          </p>
+                        )}
+                      </div>
+                    )
+                  })()}
+
+                  {/* Excluded categories — show their tools in red (same as excluded regions) */}
+                  {techCategoriesExclude.length > 0 && (
+                    <div className="rounded-lg bg-red-50 border border-red-200 p-3">
+                      <p className="text-xs font-medium text-red-800 mb-2">
+                        Tools excluded via categories:
+                      </p>
+                      <div className="flex flex-wrap gap-1">
+                        {techCategoriesExclude.flatMap(cat =>
+                          TECH_STACK_CATEGORIES.find(c => c.label === cat)?.tools ?? []
+                        ).map(tool => (
+                          <span key={tool} className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">
+                            {tool}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Summary */}
+              {(techCategoriesInclude.length + techCategoriesExclude.length) > 0 && (
+                <Card>
+                  <CardContent className="p-4 space-y-2">
+                    <h3 className="font-semibold text-sm">Tech Fit Summary</h3>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Included</p>
+                        <p className="font-medium text-green-700">
+                          {techCategoriesInclude.length > 0 ? techCategoriesInclude.join(", ") : "None"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Excluded</p>
+                        <p className="font-medium text-red-600">
+                          {techCategoriesExclude.length > 0 ? techCategoriesExclude.join(", ") : "None"}
+                          {techStackExclude.length > 0 && ` + ${techStackExclude.length} individual tools`}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
+
             {/* ────────── BUYER PERSONA TAB ────────── */}
             <TabsContent value="persona" className="mt-4 space-y-4">
               <Card>
@@ -731,28 +959,36 @@ export default function IcpBuilderPage() {
                   <div className="flex items-center gap-2">
                     <Users className="h-4 w-4 text-primary" />
                     <h3 className="font-semibold">Target Buyer Persona</h3>
+                    <span className="text-xs text-red-500 ml-1">* Required</span>
                   </div>
                   <p className="text-sm text-muted-foreground -mt-2">
                     Who to contact in a matching company — seniority, department, designation.
                   </p>
 
+                  {/* Step 3 — validation error */}
+                  {personaError && (
+                    <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
+                      ⚠ {personaError}
+                    </div>
+                  )}
+
                   <ChipGroup
                     label="Seniority Level"
                     options={SENIORITY_OPTIONS}
                     selected={targetSeniorities}
-                    onToggle={v => setTargetSeniorities(p => toggle(p, v))}
+                    onToggle={v => { setTargetSeniorities(p => toggle(p, v)); setPersonaError("") }}
                   />
                   <ChipGroup
                     label="Department"
                     options={DEPARTMENT_OPTIONS}
                     selected={targetDepartments}
-                    onToggle={v => setTargetDepartments(p => toggle(p, v))}
+                    onToggle={v => { setTargetDepartments(p => toggle(p, v)); setPersonaError("") }}
                   />
                   <ChipGroup
                     label="Designation"
                     options={DESIGNATION_OPTIONS}
                     selected={targetDesignations}
-                    onToggle={v => setTargetDesignations(p => toggle(p, v))}
+                    onToggle={v => { setTargetDesignations(p => toggle(p, v)); setPersonaError("") }}
                   />
                 </CardContent>
               </Card>

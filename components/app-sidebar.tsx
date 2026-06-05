@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation"
 import {
   LayoutDashboard, Building2, Target, Lightbulb,
   Megaphone, Users, Layers, Database, Copy,
-  FileText, UserCog, LogOut, Contact, Crosshair,
+  FileText, UserCog, LogOut, Contact,
 } from "lucide-react"
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup,
@@ -19,7 +19,6 @@ import { useAuth } from "@/context/AuthContext"
 const workspaceItems = [
   { title: "Dashboard",    icon: LayoutDashboard, href: "/dashboard" },
   { title: "Accounts",     icon: Building2,       href: "/accounts" },
-  { title: "Priorities",   icon: Crosshair,       href: "/priorities" },
   { title: "Contacts",     icon: Contact,         href: "/contacts" },  // ← NEW
   { title: "Segments & ICP", icon: Target,        href: "/segments" },
   { title: "Insights",     icon: Lightbulb,       href: "/insights" },

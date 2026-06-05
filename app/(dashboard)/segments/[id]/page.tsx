@@ -11,7 +11,7 @@ import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import {
   ArrowLeft, RefreshCw, Loader2,
-  ChevronLeft, ChevronRight, Clock,
+  ChevronLeft, ChevronRight, Clock, Sparkles, CheckCircle2,
 } from "lucide-react"
 import { Button }            from "@/components/ui/button"
 import { Badge }             from "@/components/ui/badge"
@@ -36,6 +36,11 @@ export default function SegmentDetailPage() {
   // Sync
   const [isSyncing, setIsSyncing] = useState(false)
   const [syncMsg,   setSyncMsg]   = useState("")
+
+  // Enrich & Score
+  const [isEnriching,   setIsEnriching]   = useState(false)
+  const [enrichMsg,     setEnrichMsg]     = useState("")
+  const [enrichStatus,  setEnrichStatus]  = useState<string>("")
 
   // GET /api/segments/:id — fetch segment info
   // Backend returns { success: true, data: segmentObject }
@@ -102,6 +107,26 @@ export default function SegmentDetailPage() {
     }
   }
 
+  // POST /api/segments/:id/enrich-score — run AI enrichment + scoring on all accounts
+  const handleEnrich = async () => {
+    setIsEnriching(true)
+    setEnrichMsg("")
+    try {
+      const res = await api.post<any>(`/segments/${id}/enrich-score`, {})
+      const data = res.data?.data ?? res.data
+      setEnrichMsg(`Done — ${data?.enrichedCount ?? 0} enriched, ${data?.scoredCount ?? 0} scored`)
+      await fetchSegment()
+      await fetchAccounts(1)
+      setCurrentPage(1)
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || "Enrichment failed. Please try again."
+      setEnrichMsg(msg)
+    } finally {
+      setIsEnriching(false)
+      setTimeout(() => setEnrichMsg(""), 6000)
+    }
+  }
+
   // Format last synced time
   const formatSyncTime = (dateStr?: string) => {
     if (!dateStr) return "Never synced"
@@ -160,21 +185,64 @@ export default function SegmentDetailPage() {
             </div>
           </div>
 
-          {/* Sync button */}
+          {/* Action buttons */}
           <div className="flex flex-col items-end gap-2">
-            <Button
-              variant="outline" className="gap-2"
-              onClick={handleSync}
-              disabled={isSyncing}
-            >
-              {isSyncing
-                ? <Loader2 className="h-4 w-4 animate-spin" />
-                : <RefreshCw className="h-4 w-4" />}
-              {isSyncing ? "Syncing..." : "Sync"}
-            </Button>
-            {syncMsg && <p className="text-xs text-muted-foreground">{syncMsg}</p>}
+            <div className="flex gap-2">
+              {/* Sync — refresh accounts from DB */}
+              <Button
+                variant="outline" className="gap-2"
+                onClick={handleSync}
+                disabled={isSyncing || isEnriching}
+              >
+                {isSyncing
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <RefreshCw className="h-4 w-4" />}
+                {isSyncing ? "Syncing..." : "Sync"}
+              </Button>
+
+              {/* Enrich & Score — run AI on all accounts, then score */}
+              <Button
+                className="gap-2 bg-violet-600 hover:bg-violet-700 text-white"
+                onClick={handleEnrich}
+                disabled={isEnriching || isSyncing}
+              >
+                {isEnriching
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <Sparkles className="h-4 w-4" />}
+                {isEnriching ? "Enriching..." : "Enrich & Score"}
+              </Button>
+            </div>
+
+            {syncMsg   && <p className="text-xs text-muted-foreground">{syncMsg}</p>}
+            {enrichMsg && (
+              <p className={`text-xs flex items-center gap-1 ${enrichMsg.startsWith("Done") ? "text-green-600" : "text-red-500"}`}>
+                {enrichMsg.startsWith("Done") && <CheckCircle2 className="h-3 w-3" />}
+                {enrichMsg}
+              </p>
+            )}
           </div>
         </div>
+
+        {/* Enrich status bar */}
+        {segment.enrichStatus && segment.enrichStatus !== "idle" && (
+          <div className={`mt-3 flex items-center gap-2 text-xs px-3 py-2 rounded-lg ${
+            segment.enrichStatus === "running"
+              ? "bg-violet-50 text-violet-700 border border-violet-200"
+              : segment.enrichStatus === "done"
+              ? "bg-green-50 text-green-700 border border-green-200"
+              : "bg-yellow-50 text-yellow-700 border border-yellow-200"
+          }`}>
+            {segment.enrichStatus === "running"
+              ? <Loader2 className="h-3 w-3 animate-spin" />
+              : <CheckCircle2 className="h-3 w-3" />}
+            {segment.enrichStatus === "running"
+              ? "AI Enrichment running in background..."
+              : `Enrichment done — ${segment.enrichedCount ?? 0} enriched, ${segment.scoredCount ?? 0} scored`}
+            {segment.lastEnrichedAt && (
+              <span className="ml-auto opacity-70">{formatSyncTime(segment.lastEnrichedAt)}</span>
+            )}
+          </div>
+        )}
 
         {/* Stats + filter badges */}
         <div className="flex items-center gap-6 mt-4">
@@ -252,14 +320,33 @@ export default function SegmentDetailPage() {
                     <td className="p-4 text-sm">{account.country || "—"}</td>
                     <td className="p-4 text-sm">{account.noOfEmployees || "—"}</td>
                     <td className="p-4">
-                      <div className={`flex h-9 w-9 items-center justify-center rounded-full border-2 font-bold text-sm ${
-                        (account.techFitScore ?? 0) >= 80
-                          ? "border-green-500 text-green-600"
-                          : (account.techFitScore ?? 0) >= 60
-                          ? "border-yellow-500 text-yellow-600"
-                          : "border-gray-300 text-gray-400"
-                      }`}>
-                        {account.techFitScore ?? "—"}
+                      <div className="flex flex-col items-start gap-1">
+                        {/* finalScore circle */}
+                        <div className={`flex h-9 w-9 items-center justify-center rounded-full border-2 font-bold text-sm ${
+                          (account.finalScore ?? 0) > 60
+                            ? "border-green-500 text-green-600 bg-green-50"
+                            : (account.finalScore ?? 0) >= 30
+                            ? "border-yellow-500 text-yellow-600 bg-yellow-50"
+                            : account.finalScore != null
+                            ? "border-red-400 text-red-500 bg-red-50"
+                            : "border-gray-300 text-gray-400"
+                        }`}>
+                          {account.finalScore ?? "—"}
+                        </div>
+                        {/* Tier badge */}
+                        {account.clvRanking && (
+                          <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${
+                            account.clvRanking.includes("A")
+                              ? "bg-green-100 text-green-700"
+                              : account.clvRanking.includes("B")
+                              ? "bg-yellow-100 text-yellow-700"
+                              : "bg-gray-100 text-gray-500"
+                          }`}>
+                            {account.clvRanking.includes("A") ? "Tier A"
+                              : account.clvRanking.includes("B") ? "Tier B"
+                              : "Tier C"}
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="p-4">
@@ -311,3 +398,4 @@ export default function SegmentDetailPage() {
     </div>
   )
 }
+
