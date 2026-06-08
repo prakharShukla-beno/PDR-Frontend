@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react"
 import {
-  Loader2, GitMerge, SkipForward, Copy,
+  Loader2, GitMerge, SkipForward, Copy, Trash2,
   ChevronLeft, ChevronRight, AlertTriangle,
   CheckCircle, Filter, ChevronDown, ChevronUp,
   CheckSquare, Square
@@ -86,7 +86,7 @@ function DuplicateRow({
   dup, onAction, actionId, selected, onSelect,
 }: {
   dup: Duplicate
-  onAction: (id: string, action: "merge" | "skip" | "keep-both") => void
+  onAction: (id: string, action: "merge" | "skip" | "keep-both" | "delete") => void
   actionId: string | null
   selected: boolean
   onSelect: (id: string, checked: boolean) => void
@@ -146,6 +146,9 @@ function DuplicateRow({
             </Button>
             <Button size="sm" variant="outline" className="gap-1.5 h-7 px-2.5 text-xs text-blue-700 border-blue-200 hover:bg-blue-50" disabled={loading} onClick={() => onAction(dup._id, "keep-both")}>
               {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Copy className="h-3 w-3" />}Keep Both
+            </Button>
+            <Button size="sm" variant="outline" className="gap-1.5 h-7 px-2.5 text-xs text-red-600 border-red-200 hover:bg-red-50" disabled={loading} onClick={() => onAction(dup._id, "delete")}>
+              {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}Delete
             </Button>
           </div>
         )}
@@ -310,11 +313,18 @@ export default function DuplicatesPage() {
     setAllPagesSelected(false)
   }
 
-  const handleAction = async (id: string, action: "merge" | "skip" | "keep-both") => {
+  const handleAction = async (id: string, action: "merge" | "skip" | "keep-both" | "delete") => {
     setActionId(id)
     try {
-      await api.put(`/duplicates/${id}/${action}`, {})
-      const labels: Record<string, string> = { merge: "Merged", skip: "Skipped", "keep-both": "Saved as new record" }
+      if (action === "delete") {
+        await api.delete(`/duplicates/${id}`)
+      } else {
+        await api.put(`/duplicates/${id}/${action}`, {})
+      }
+      const labels: Record<string, string> = {
+        merge: "Merged", skip: "Skipped",
+        "keep-both": "Saved as new record", delete: "Deleted",
+      }
       showToast(`✅ ${labels[action]} successfully`)
       fetchDuplicates(pageRef.current, statusRef.current)
     } catch (err: any) {
@@ -324,7 +334,7 @@ export default function DuplicatesPage() {
     }
   }
 
-  const handleBulkAction = async (action: "merge" | "skip" | "keep-both") => {
+  const handleBulkAction = async (action: "merge" | "skip" | "keep-both" | "delete") => {
     if (!selectedIds.length) return
     setBulkLoading(true)
     try {
@@ -496,6 +506,16 @@ export default function DuplicatesPage() {
               >
                 {bulkLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Copy className="h-3 w-3" />}
                 Keep Both Selected
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5 h-7 text-xs text-red-600 border-red-200 hover:bg-red-50"
+                disabled={bulkLoading}
+                onClick={() => handleBulkAction("delete")}
+              >
+                {bulkLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                Delete Selected
               </Button>
               <button
                 className="text-xs text-muted-foreground hover:text-foreground ml-auto"
