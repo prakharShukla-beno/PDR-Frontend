@@ -6,7 +6,7 @@
 //   POST /api/segments/preview → live count + top 5 accounts
 //   POST /api/segments         → save segment with snapshot
 
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback, useEffect, Suspense } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import {
@@ -33,7 +33,7 @@ const COUNTRIES = ["India","UAE","Singapore","USA","UK","Australia","Canada","Ge
 const toggle = (arr: string[], val: string) =>
   arr.includes(val) ? arr.filter(v => v !== val) : [...arr, val]
 
-export default function NewSegmentPage() {
+function NewSegmentPageContent() {
   const router       = useRouter()
   const searchParams = useSearchParams()
   const fromIcpId    = searchParams.get("from_icp")
@@ -432,5 +432,17 @@ export default function NewSegmentPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function NewSegmentPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    }>
+      <NewSegmentPageContent />
+    </Suspense>
   )
 }

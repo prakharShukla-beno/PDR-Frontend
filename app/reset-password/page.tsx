@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import { Eye, EyeOff, Loader2, CheckCircle, AlertCircle } from "lucide-react"
@@ -11,7 +11,7 @@ import { setToken, setStoredUser } from "@/lib/api"
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"
 
-export default function ResetPasswordPage() {
+function ResetPasswordPageContent() {
   const searchParams  = useSearchParams()
   const router        = useRouter()
   const token         = searchParams.get("token")
@@ -268,5 +268,17 @@ export default function ResetPasswordPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    }>
+      <ResetPasswordPageContent />
+    </Suspense>
   )
 }
