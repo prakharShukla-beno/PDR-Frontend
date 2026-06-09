@@ -1,5 +1,5 @@
 // const BASE_URL =  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"
-const BASE_URL = "http://localhost:5000/api"
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 // ─── Token helpers ────────────────────────────────────────────────────────────
 export const getToken = (): string | null => {
   if (typeof window === "undefined") return null
@@ -65,14 +65,17 @@ async function request<T>(endpoint: string, options: {
 
   const res = await fetch(`${BASE_URL}${endpoint}`, config)
 
-  if (res.status === 401) {
-    removeToken()
-    if (typeof window !== "undefined") window.location.href = "/"
-    throw new ApiError("Session expired. Please login again.", 401)
-  }
-
   let data: unknown
   try { data = await res.json() } catch { data = null }
+
+  if (res.status === 401) {
+    const isAuthAttempt = /^\/auth\/(login|register)/.test(endpoint)
+    if (!isAuthAttempt && getToken()) {
+      removeToken()
+      if (typeof window !== "undefined") window.location.href = "/"
+      throw new ApiError("Session expired. Please login again.", 401)
+    }
+  }
 
   if (!res.ok) {
     const message = (data as { message?: string })?.message || `Request failed (${res.status})`

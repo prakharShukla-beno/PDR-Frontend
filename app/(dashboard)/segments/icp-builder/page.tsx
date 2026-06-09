@@ -7,7 +7,7 @@
 //   PUT  /api/icp/:id          → update
 //   GET  /api/icp/:id/match-prospects → matching accounts
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, Suspense } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import {
@@ -23,15 +23,11 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Checkbox }          from "@/components/ui/checkbox"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { api }               from "@/lib/api"
+import { INDUSTRIES }        from "@/lib/taxonomy"
 import type { Prospect }     from "@/types"
 
-// ── Static options ─────────────────────────────────────────────────────────────
-// Step 1.2 — renamed from "Industries" to "Commercial Sector"
-const COMMERCIAL_SECTOR_OPTIONS = [
-  "BFSI", "IT & ITES", "SaaS", "Fintech", "E-commerce",
-  "Healthcare", "EdTech", "Logistics", "Manufacturing",
-  "Retail & CPG", "Media & Telecom", "Real Estate",
-]
+// Step 1.2 — Commercial Sector (synced with backend taxonomy.js)
+const COMMERCIAL_SECTOR_OPTIONS = [...INDUSTRIES]
 // Step 1.1 — Commercial Category (new field under Business Model)
 const COMMERCIAL_CATEGORY_OPTIONS = [
   "Product Led", "SaaS / Subscriptions", "Professional Services",
@@ -343,7 +339,7 @@ function ChipGroup({ label, options, selected, onToggle }: {
 // ══════════════════════════════════════════════════════════════════════════════
 // MAIN PAGE
 // ══════════════════════════════════════════════════════════════════════════════
-export default function IcpBuilderPage() {
+function IcpBuilderPageContent() {
   const searchParams = useSearchParams()
   const router       = useRouter()
   const editId       = searchParams.get("id")
@@ -1074,5 +1070,17 @@ export default function IcpBuilderPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function IcpBuilderPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    }>
+      <IcpBuilderPageContent />
+    </Suspense>
   )
 }
