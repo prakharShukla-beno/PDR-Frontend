@@ -23,15 +23,11 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Checkbox }          from "@/components/ui/checkbox"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { api }               from "@/lib/api"
+import { INDUSTRIES }        from "@/lib/taxonomy"
 import type { Prospect }     from "@/types"
 
-// ── Static options ─────────────────────────────────────────────────────────────
-// Step 1.2 — renamed from "Industries" to "Commercial Sector"
-const COMMERCIAL_SECTOR_OPTIONS = [
-  "BFSI", "IT & ITES", "SaaS", "Fintech", "E-commerce",
-  "Healthcare", "EdTech", "Logistics", "Manufacturing",
-  "Retail & CPG", "Media & Telecom", "Real Estate",
-]
+// Step 1.2 — Commercial Sector (synced with backend taxonomy.js)
+const COMMERCIAL_SECTOR_OPTIONS = [...INDUSTRIES]
 // Step 1.1 — Commercial Category (new field under Business Model)
 const COMMERCIAL_CATEGORY_OPTIONS = [
   "Product Led", "SaaS / Subscriptions", "Professional Services",
