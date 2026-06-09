@@ -1,5 +1,14 @@
-// const BASE_URL =  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+/** Normalize API base URL — handles trailing slashes and missing /api suffix */
+function getBaseUrl(): string {
+  const raw = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"
+  let base = raw.trim().replace(/\/+$/, "")
+  if (!base.endsWith("/api")) {
+    base = `${base}/api`
+  }
+  return base
+}
+
+const BASE_URL = getBaseUrl()
 // ─── Token helpers ────────────────────────────────────────────────────────────
 export const getToken = (): string | null => {
   if (typeof window === "undefined") return null
