@@ -7,7 +7,7 @@
 //   PUT  /api/icp/:id          → update
 //   GET  /api/icp/:id/match-prospects → matching accounts
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, Suspense } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import {
@@ -339,7 +339,7 @@ function ChipGroup({ label, options, selected, onToggle }: {
 // ══════════════════════════════════════════════════════════════════════════════
 // MAIN PAGE
 // ══════════════════════════════════════════════════════════════════════════════
-export default function IcpBuilderPage() {
+function IcpBuilderPageContent() {
   const searchParams = useSearchParams()
   const router       = useRouter()
   const editId       = searchParams.get("id")
@@ -1070,5 +1070,17 @@ export default function IcpBuilderPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function IcpBuilderPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    }>
+      <IcpBuilderPageContent />
+    </Suspense>
   )
 }
