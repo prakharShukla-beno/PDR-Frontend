@@ -133,6 +133,11 @@ export default function AccountDetailPage() {
   const [isEnriching, setIsEnriching] = useState(false)
   const [enrichMsg,   setEnrichMsg]   = useState("")
 
+  // ── Suggest POC state ────────────────────────────────────────────────────────
+  const [pocResult,       setPocResult]       = useState<any>(null)
+  const [isSuggestingPoc, setIsSuggestingPoc] = useState(false)
+  const [pocError,        setPocError]        = useState("")
+
   // ── Log Interaction modal ───────────────────────────────────────────────────
   const [showLogModal, setShowLogModal] = useState(false)
   const [logType,      setLogType]      = useState<InteractionType>("Call")
@@ -160,17 +165,17 @@ export default function AccountDetailPage() {
         const [prospectRes, interactionsRes, contactsRes] = await Promise.all([
           api.get<any>(`/prospects/${id}`),
           api.get<any>(`/interactions/prospect/${id}`),
-          api.get<any>(`/contacts?accountId=${id}&limit=50`),
+          api.get<any>(`/contacts/account/${id}`),
         ])
         // Backend: { success: true, data: prospect }
-        setProspect(prospectRes.data?.data ?? prospectRes.data)
-        setInteractions(interactionsRes.data?.data || interactionsRes.data || [])
-        setContacts(contactsRes.data?.contacts || contactsRes.data?.data?.contacts || [])
+        setProspect(prospectRes.data)
+        setInteractions(interactionsRes.data || [])
+        setContacts(contactsRes.data || [])
 
         // Load score breakdown silently — don't fail if not available yet
         try {
           const scoreRes = await api.get<any>(`/prospects/${id}/score-breakdown`)
-          setScoreData(scoreRes.data?.data ?? scoreRes.data)
+          setScoreData(scoreRes.data)
         } catch { /* not scored yet */ }
       } catch (err) {
         console.error("Account detail fetch error:", err)
@@ -188,7 +193,7 @@ export default function AccountDetailPage() {
     setCalcMsg("")
     try {
       const res = await api.post<any>(`/prospects/${id}/calculate-score`, {})
-      const result = res.data?.data ?? res.data
+      const result = res.data
 
       if (result?.disqualified) {
         setCalcMsg("⚠️ Account disqualified — no tech fit match")
@@ -201,8 +206,8 @@ export default function AccountDetailPage() {
         api.get<any>(`/prospects/${id}/score-breakdown`),
         api.get<any>(`/prospects/${id}`),
       ])
-      setScoreData(scoreRes.data?.data ?? scoreRes.data)
-      setProspect(prospectRes.data?.data ?? prospectRes.data)
+      setScoreData(scoreRes.data)
+      setProspect(prospectRes.data)
     } catch {
       setCalcMsg("❌ Calculation failed. Check fields and try again.")
     } finally {
@@ -225,8 +230,8 @@ export default function AccountDetailPage() {
         api.get<any>(`/prospects/${id}/score-breakdown`),
         api.get<any>(`/prospects/${id}`),
       ])
-      setScoreData(scoreRes.data?.data ?? scoreRes.data)
-      setProspect(prospectRes.data?.data ?? prospectRes.data)
+      setScoreData(scoreRes.data)
+      setProspect(prospectRes.data)
       setShowOverrideModal(false)
       setOverrideTier("")
       setOverridePriority("")
@@ -249,12 +254,29 @@ export default function AccountDetailPage() {
         api.get<any>(`/prospects/${id}`),
         api.get<any>(`/prospects/${id}/score-breakdown`),
       ])
-      setProspect(prospectRes.data?.data ?? prospectRes.data)
-      setScoreData(scoreRes.data?.data ?? scoreRes.data)
+      setProspect(prospectRes.data)
+      setScoreData(scoreRes.data)
     } catch {
       setEnrichMsg("❌ Enrichment failed. Check Gemini API key.")
     } finally {
       setIsEnriching(false)
+    }
+  }
+
+  // ── POST /api/prospects/:id/suggest-poc ──────────────────────────────────
+  // Calls Gemini to suggest best POC — scenario 1: existing contact, scenario 2: no contacts
+  const handleSuggestPoc = async () => {
+    if (isSuggestingPoc) return   // prevent double fire
+    setIsSuggestingPoc(true)
+    setPocError("")
+    setPocResult(null)
+    try {
+      const res = await api.post<any>(`/prospects/${id}/suggest-poc`, {})
+      setPocResult(res.data)
+    } catch {
+      setPocError("❌ POC suggestion failed. Try again.")
+    } finally {
+      setIsSuggestingPoc(false)
     }
   }
 
@@ -282,7 +304,7 @@ export default function AccountDetailPage() {
       const payload: any = {}
       Object.entries(editData).forEach(([k, v]) => { if (v) payload[k] = v })
       const res = await api.put<any>(`/prospects/${id}`, payload)
-      setProspect(res.data?.data ?? res.data)
+      setProspect(res.data)
       setSaveMsg("✅ Saved!")
       setTimeout(() => { setShowEditModal(false); setSaveMsg("") }, 1000)
     } catch {
@@ -305,7 +327,7 @@ export default function AccountDetailPage() {
       })
       setLogMsg("✅ Logged!")
       const res = await api.get<any>(`/interactions/prospect/${id}`)
-      setInteractions(res.data?.data || res.data || [])
+      setInteractions(res.data || [])
       setTimeout(() => { setShowLogModal(false); setLogNotes(""); setLogMsg("") }, 1000)
     } catch {
       setLogMsg("❌ Failed.")
@@ -802,11 +824,77 @@ export default function AccountDetailPage() {
             </TabsContent>
 
             {/* ══ CONTACTS TAB ═════════════════════════════════════════════════ */}
-            <TabsContent value="contacts" className="mt-4">
+            <TabsContent value="contacts" className="mt-4 space-y-4">
+              {/* AI Suggest POC result card */}
+              {pocResult && (
+                <Card className={pocResult.scenario === "contacts_exist"
+                  ? "border-green-300 bg-green-50/50"
+                  : "border-blue-300 bg-blue-50/50"}>
+                  <CardContent className="p-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        AI Recommended POC
+                      </p>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                        pocResult.confidenceLevel === "High"   ? "bg-green-100 text-green-700" :
+                        pocResult.confidenceLevel === "Medium" ? "bg-yellow-100 text-yellow-700" :
+                        "bg-gray-100 text-gray-600"
+                      }`}>
+                        {pocResult.confidenceLevel} confidence
+                      </span>
+                    </div>
+
+                    {pocResult.scenario === "contacts_exist" && pocResult.recommendedContact && (
+                      <div className="flex items-center gap-3 p-3 rounded-lg bg-white border border-green-200">
+                        <Avatar className="h-10 w-10">
+                          <AvatarFallback className="bg-green-600 text-white text-sm">
+                            {((pocResult.recommendedContact.firstName?.[0] ?? "") + (pocResult.recommendedContact.lastName?.[0] ?? "")).toUpperCase() || "?"}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1">
+                          <p className="font-semibold text-sm">
+                            {[pocResult.recommendedContact.firstName, pocResult.recommendedContact.lastName].filter(Boolean).join(" ") || "—"}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {pocResult.recommendedContact.standardizedRoles ?? pocResult.recommendedContact.functionalDomain ?? "—"}
+                          </p>
+                          {pocResult.recommendedContact.email && (
+                            <p className="text-xs text-muted-foreground">{pocResult.recommendedContact.email}</p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {pocResult.scenario === "no_contacts" && (
+                      <div className="p-3 rounded-lg bg-white border border-blue-200 space-y-1">
+                        <p className="text-sm font-semibold">Target: {pocResult.targetRole}</p>
+                        <p className="text-xs text-muted-foreground">Dept: {pocResult.targetDepartment}</p>
+                        <p className="text-xs text-blue-700 italic">{pocResult.searchSuggestion}</p>
+                        <Button size="sm" variant="outline" className="mt-2 h-7 text-xs gap-1 w-full"
+                          onClick={() => window.open(`https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(pocResult.targetRole + " " + prospect?.accountName)}`, "_blank")}>
+                          Search on LinkedIn ↗
+                        </Button>
+                      </div>
+                    )}
+
+                    <p className="text-xs text-muted-foreground italic">"{pocResult.reason}"</p>
+                  </CardContent>
+                </Card>
+              )}
+              {pocError && (
+                <div className="text-sm px-3 py-2 rounded-lg border bg-red-50 text-red-700">{pocError}</div>
+              )}
+
               <Card>
                 <CardContent className="p-0">
-                  <div className="p-4 border-b">
+                  <div className="p-4 border-b flex items-center justify-between">
                     <h2 className="font-semibold">Contacts ({contacts.length})</h2>
+                    <Button size="sm" variant="outline" className="gap-2 h-8 text-xs"
+                      onClick={handleSuggestPoc} disabled={isSuggestingPoc}>
+                      {isSuggestingPoc
+                        ? <><Loader2 className="h-3 w-3 animate-spin" />Suggesting...</>
+                        : <><Sparkles className="h-3 w-3" />Suggest POC</>}
+                    </Button>
                   </div>
                   {contacts.length === 0 ? (
                     <div className="p-8 text-center text-sm text-muted-foreground">
@@ -818,18 +906,28 @@ export default function AccountDetailPage() {
                         <div key={contact._id}
                           className="p-4 flex items-center justify-between hover:bg-muted/20">
                           <div className="flex items-center gap-3">
-                            <Avatar className="h-9 w-9">
-                              <AvatarFallback className="bg-primary/10 text-primary text-sm">
+                            <Avatar className="h-10 w-10">
+                              <AvatarFallback className={`text-sm font-medium ${contact.isPrimary ? "bg-primary text-white" : "bg-primary/10 text-primary"}`}>
                                 {((contact.firstName?.[0] ?? "") + (contact.lastName?.[0] ?? "")).toUpperCase() || "?"}
                               </AvatarFallback>
                             </Avatar>
                             <div>
-                              <p className="font-medium text-sm">
-                                {[contact.firstName, contact.lastName].filter(Boolean).join(" ") || "—"}
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium text-sm">
+                                  {[contact.firstName, contact.lastName].filter(Boolean).join(" ") || "—"}
+                                </p>
+                                {contact.isPrimary && (
+                                  <Badge className="bg-primary/10 text-primary text-[10px] px-1.5 py-0 h-4">Primary</Badge>
+                                )}
+                              </div>
+                              {/* Position / Role */}
+                              <p className="text-xs font-medium text-foreground/70 mt-0.5">
+                                {contact.standardizedRoles || contact.keyFocusAreas || "—"}
                               </p>
-                              <p className="text-xs text-muted-foreground">
-                                {contact.standardizedRoles ?? contact.functionalDomain ?? "—"}
-                              </p>
+                              {/* Department */}
+                              {contact.functionalDomain && (
+                                <p className="text-xs text-muted-foreground">{contact.functionalDomain}</p>
+                              )}
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
@@ -912,15 +1010,23 @@ export default function AccountDetailPage() {
                         <p className="font-medium text-sm">
                           {[contact.firstName, contact.lastName].filter(Boolean).join(" ") || "—"}
                         </p>
-                        <p className="text-xs text-muted-foreground">
-                          {contact.standardizedRoles ?? contact.functionalDomain ?? "—"}
+                        <p className="text-xs font-medium text-foreground/70">
+                          {contact.standardizedRoles || contact.keyFocusAreas || "—"}
                         </p>
+                        {contact.functionalDomain && (
+                          <p className="text-xs text-muted-foreground">{contact.functionalDomain}</p>
+                        )}
                       </div>
                     </div>
                     {contact.email && (
-                      <Button variant="outline" className="w-full gap-2 text-xs h-8">
-                        <Mail className="h-3 w-3" />{contact.email}
+                      <Button variant="outline" className="w-full gap-2 text-xs h-8" asChild>
+                        <a href={`mailto:${contact.email}`}>
+                          <Mail className="h-3 w-3" />{contact.email}
+                        </a>
                       </Button>
+                    )}
+                    {contacts.length > 1 && (
+                      <p className="text-xs text-muted-foreground text-center">+{contacts.length - 1} more contacts</p>
                     )}
                   </div>
                 ))}
