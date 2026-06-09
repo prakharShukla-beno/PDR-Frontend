@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { AuthProvider } from "@/context/AuthContext"
 import { MountedGate } from "@/components/mounted-gate"
+import { KeepAliveInit } from "@/components/keep-alive-init"
 import "./globals.css"
 
 const _geist = Geist({ subsets: ["latin"] })
@@ -22,6 +23,7 @@ export default function RootLayout({
     <html lang="en">
       <body className="font-sans antialiased">
         <AuthProvider>
+          <KeepAliveInit />
           <MountedGate>{children}</MountedGate>
         </AuthProvider>
         {process.env.NODE_ENV === "production" && <Analytics />}
