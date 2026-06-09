@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, Suspense } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"  // For reading URL params
@@ -19,7 +19,7 @@ import { api, ApiError } from "@/lib/api"
 import type { Prospect } from "@/types"
 import { FilterPanel, FilterState, EMPTY_FILTERS, buildFilterQuery, countActiveFilters } from "@/components/filters/FilterPanel"
 
-export default function AccountsPage() {
+function AccountsPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()  // Segment URL parameters
 
@@ -791,5 +791,21 @@ export default function AccountsPage() {
 
       {/* Duplicate Review Modal — shown after upload */}
     </div>
+  )
+}
+
+function AccountsPageFallback() {
+  return (
+    <div className="flex items-center justify-center h-[calc(100vh-56px)]">
+      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+    </div>
+  )
+}
+
+export default function AccountsPage() {
+  return (
+    <Suspense fallback={<AccountsPageFallback />}>
+      <AccountsPageContent />
+    </Suspense>
   )
 }
