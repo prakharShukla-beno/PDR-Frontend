@@ -421,13 +421,16 @@ function IcpBuilderPageContent() {
 
   useEffect(() => { if (editId) fetchMatches(editId) }, [editId])
 
-  // GET /api/icp/:id/match-prospects — { success, data: { prospects, pagination } }
+  // GET /api/icp/:id/match-prospects — { success, data: prospects[], pagination }
   const fetchMatches = async (icpId: string) => {
     setIsMatching(true)
     try {
       const res = await api.get<any>(`/icp/${icpId}/match-prospects?page=1&limit=20`)
-      setMatchedProspects(res.data?.data?.prospects || res.data?.prospects || [])
-      setMatchTotal(res.data?.data?.pagination?.total || res.data?.pagination?.total || 0)
+      const prospects = Array.isArray(res.data)
+        ? res.data
+        : (res.data?.prospects ?? [])
+      setMatchedProspects(prospects)
+      setMatchTotal(res.pagination?.total ?? res.data?.pagination?.total ?? 0)
     } catch (err) {
       console.error("Match error:", err)
     } finally {

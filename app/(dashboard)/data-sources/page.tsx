@@ -106,7 +106,15 @@ export default function DataSourcesPage() {
       const formData = new FormData()
       formData.append("file", uploadFile)
       const res = await api.upload<any>("/import/excel", formData)
-      setUploadMsg(`✅ Import complete — ${res.data?.successCount ?? 0} records added`)
+      const result = res?.data || res
+      const saved  = result?.successCount ?? 0
+      const total  = result?.totalRows ?? saved
+      const failed = result?.failedCount ?? 0
+      setUploadMsg(
+        failed > 0
+          ? `✅ Import complete — ${saved} of ${total} rows saved (${failed} skipped/errors).`
+          : `✅ Import complete — ${saved} of ${total} rows saved.`
+      )
       setUploadFile(null)
       // Refresh history
       const histRes = await api.get<any>("/dashboard/import-history")

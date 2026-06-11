@@ -82,6 +82,32 @@ export default function SegmentDetailPage() {
     fetchAccounts(1)
   }, [fetchSegment, fetchAccounts])
 
+  // Poll while background enrichment is running
+  useEffect(() => {
+    if (segment?.enrichStatus !== "running") return
+
+    setIsEnriching(true)
+    const timer = setInterval(async () => {
+      try {
+        const res = await api.get<any>(`/segments/${id}`)
+        const seg = res.data?.data ?? res.data
+        setSegment(seg)
+        if (seg.enrichStatus !== "running") {
+          clearInterval(timer)
+          setIsEnriching(false)
+          setEnrichMsg(
+            `Done — ${seg.enrichedCount ?? 0} enriched, ${seg.scoredCount ?? 0} scored`
+          )
+          await fetchAccounts(currentPage)
+        }
+      } catch (err) {
+        console.error("Enrich poll error:", err)
+      }
+    }, 3000)
+
+    return () => clearInterval(timer)
+  }, [segment?.enrichStatus, id, currentPage, fetchAccounts])
+
   const handlePageChange = (newPage: number) => {
     setCurrentPage(newPage)
     fetchAccounts(newPage)
@@ -112,16 +138,14 @@ export default function SegmentDetailPage() {
     setIsEnriching(true)
     setEnrichMsg("")
     try {
-      const res = await api.post<any>(`/segments/${id}/enrich-score`, {})
-      const data = res.data?.data ?? res.data
-      setEnrichMsg(`Done — ${data?.enrichedCount ?? 0} enriched, ${data?.scoredCount ?? 0} scored`)
-      await fetchSegment()
-      await fetchAccounts(1)
+      await api.post<any>(`/segments/${id}/enrich-score`, {})
+      setEnrichMsg("Enrichment started — running in background...")
+      const segRes = await api.get<any>(`/segments/${id}`)
+      setSegment(segRes.data?.data ?? segRes.data)
       setCurrentPage(1)
     } catch (err: any) {
-      const msg = err?.response?.data?.message || "Enrichment failed. Please try again."
+      const msg = err?.data?.message || err?.message || "Enrichment failed. Please try again."
       setEnrichMsg(msg)
-    } finally {
       setIsEnriching(false)
       setTimeout(() => setEnrichMsg(""), 6000)
     }

@@ -167,12 +167,19 @@ const handleUpload = async () => {
       const duplicates = result?.duplicates || []
       const logId      = result?.importLogId?.toString() || ""
 
+      const saved  = result?.successCount ?? result?.savedCount ?? 0
+      const total  = result?.totalRows ?? saved
+      const failed = result?.failedCount ?? 0
+      const summary = failed > 0
+        ? `${saved} of ${total} rows saved (${failed} skipped/errors)`
+        : `${saved} of ${total} rows saved`
+
       if (duplicates.length > 0) {
-        setUploadMsg(`✅ ${result?.successCount || 0} contacts saved. ${duplicates.length} duplicates need review.`)
+        setUploadMsg(`✅ ${summary}. ${duplicates.length} duplicates need review.`)
         setTimeout(() => router.push("/duplicates"), 1200)
       } else {
-        const saved = result?.successCount ?? result?.savedCount ?? 0
-        setUploadMsg(`✅ Import complete — ${saved} contacts added`)
+        setUploadMsg(`✅ Import complete — ${summary}.`)
+        setCurrentPage(1)
         setTimeout(fetchContacts, 1000)
       }
       setUploadFile(null)
@@ -397,6 +404,7 @@ const handleUpload = async () => {
                 <SelectItem value="10">10</SelectItem>
                 <SelectItem value="25">25</SelectItem>
                 <SelectItem value="50">50</SelectItem>
+                <SelectItem value="100">100</SelectItem>
               </SelectContent>
             </Select>
           </div>

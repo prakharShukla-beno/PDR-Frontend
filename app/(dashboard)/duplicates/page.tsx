@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { api }      from "@/lib/api"
 import type { Duplicate, Prospect } from "@/types"
 
-const LIMIT = 20
+const LIMIT = 100
 
 const ACCOUNT_FIELDS = [
   { key: "accountName",      label: "Account Name"   },

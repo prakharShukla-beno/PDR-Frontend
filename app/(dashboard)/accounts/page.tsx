@@ -171,11 +171,22 @@ function AccountsPageContent() {
       const result = res?.data || res
       const duplicates = result?.duplicates || []
 
-      if (duplicates.length > 0) {
-        setUploadMsg(`✅ ${result?.successCount || 0} records saved. ${duplicates.length} duplicates need review.`)
+      const saved     = result?.successCount ?? 0
+      const total     = result?.totalRows ?? saved
+      const failed    = result?.failedCount ?? 0
+      const dupCount  = duplicates.length
+      const errSample = (result?.errorDetails as string[] | undefined)?.[0]
+      let summary = `${saved} of ${total} rows saved`
+      if (dupCount > 0) summary += `, ${dupCount} duplicates for review`
+      if (failed > 0) summary += `, ${failed} errors`
+      if (errSample) summary += ` — e.g. ${errSample}`
+
+      if (dupCount > 0) {
+        setUploadMsg(`✅ ${summary}.`)
         setTimeout(() => router.push("/duplicates"), 1200)
       } else {
-        setUploadMsg(`✅ Import complete — ${result?.successCount || 0} records saved.`)
+        setUploadMsg(failed > 0 ? `⚠️ ${summary}.` : `✅ Import complete — ${summary}.`)
+        setCurrentPage(1)
         setTimeout(fetchProspects, 1500)
       }
       setUploadFile(null)
@@ -483,6 +494,7 @@ function AccountsPageContent() {
                 <SelectItem value="10">10</SelectItem>
                 <SelectItem value="25">25</SelectItem>
                 <SelectItem value="50">50</SelectItem>
+                <SelectItem value="100">100</SelectItem>
               </SelectContent>
             </Select>
           </div>
