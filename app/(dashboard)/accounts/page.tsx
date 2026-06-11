@@ -6,7 +6,7 @@ import Link from "next/link"
 import { useSearchParams } from "next/navigation"  // For reading URL params
 import {
   Search, Upload, Download, Plus, SlidersHorizontal,
-  X, Pencil, ChevronLeft, ChevronRight, Loader2, TrendingUp
+  X, ChevronLeft, ChevronRight, Loader2, Sparkles
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -34,6 +34,9 @@ function AccountsPageContent() {
   const [currentPage, setCurrentPage]       = useState(1)
   const [recordsPerPage, setRecordsPerPage] = useState(10)
   const [selectedIds, setSelectedIds]       = useState<string[]>([])
+  const [isAllSelected, setIsAllSelected]   = useState(false)
+  const [isEnriching, setIsEnriching]       = useState(false)
+  const [enrichMsg, setEnrichMsg]           = useState("")
   const [uploadFile, setUploadFile]         = useState<File | null>(null)
   const [isUploading, setIsUploading]       = useState(false)
   const [uploadMsg, setUploadMsg]           = useState("")
@@ -378,8 +381,11 @@ function AccountsPageContent() {
             <thead className="bg-muted/30 sticky top-0 z-10">
               <tr className="text-left text-xs text-muted-foreground uppercase tracking-wider">
                 <th className="p-4 w-10">
-                  <Checkbox checked={allPageSelected}
+                  <Checkbox
+                    checked={allPageSelected}
+                    ref={(el) => { if (el) { const input = el.querySelector('input'); if (input) input.indeterminate = hasSelection && !allPageSelected } }}
                     onCheckedChange={() => {
+                      setIsAllSelected(false)
                       if (allPageSelected) setSelectedIds(ids => ids.filter(id => !prospects.map(p => p._id).includes(id)))
                       else { const n = [...selectedIds]; prospects.forEach(p => { if (!n.includes(p._id)) n.push(p._id) }); setSelectedIds(n) }
                     }} />
@@ -478,6 +484,9 @@ function AccountsPageContent() {
         <div className="flex items-center justify-between py-4">
           <span className="text-sm text-muted-foreground">
             TOTAL: <span className="text-primary font-medium">{total} accounts</span>
+            {hasSelection && (
+              <span className="ml-2 text-muted-foreground">• <span className="text-foreground font-medium">{isAllSelected ? `All ${total}` : selectedIds.length} selected</span></span>
+            )}
           </span>
           <div className="flex items-center gap-1">
             <Button variant="ghost" size="icon" className="h-8 w-8" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft className="h-4 w-4" /></Button>
@@ -502,21 +511,61 @@ function AccountsPageContent() {
         <div className="h-20" />
       </div>
 
-      <div className="fixed bottom-0 left-[var(--sidebar-width)] right-0 bg-white border-t py-3 px-6 flex items-center justify-center gap-3 z-50 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
-        <Button variant="ghost" size="sm" className={`gap-2 ${hasSelection ? "text-foreground" : "text-muted-foreground/50"}`} disabled={!hasSelection} onClick={handleDelete}>
-          <X className="h-4 w-4" />DELETE
-        </Button>
-        <Button variant="ghost" size="sm" className={`gap-2 ${hasSelection ? "text-foreground" : "text-muted-foreground/50"}`} disabled={!hasSelection}>
-          <Pencil className="h-4 w-4" />EDIT
-        </Button>
-        <Button variant="outline" size="sm" disabled={!hasSelection} className={!hasSelection ? "opacity-50" : ""}>ADD TO SEGMENT</Button>
-        <div className="flex items-center gap-2 ml-4 border-l pl-4">
-          <Checkbox
-            checked={selectedIds.length === total && total > 0}
-            onCheckedChange={() => selectedIds.length === total ? setSelectedIds([]) : setSelectedIds(prospects.map(p => p._id))}
-          />
-          <span className="text-sm font-medium">SELECT ALL</span>
+      <div className="fixed bottom-0 left-[var(--sidebar-width)] right-0 bg-white border-t py-3 px-6 flex items-center justify-between z-50 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="sm" className={`gap-2 ${hasSelection ? "text-destructive hover:text-destructive" : "text-muted-foreground/40"}`} disabled={!hasSelection} onClick={handleDelete}>
+            <X className="h-4 w-4" />DELETE
+          </Button>
+          <Button variant="outline" size="sm" disabled={!hasSelection} className={!hasSelection ? "opacity-40" : ""}>ADD TO SEGMENT</Button>
+          <Button
+            variant="outline" size="sm"
+            disabled={!hasSelection || isEnriching}
+            className={`gap-2 ${!hasSelection ? "opacity-40" : "border-primary text-primary hover:bg-primary/5"}`}
+            onClick={async () => {
+              let ids = selectedIds
+              if (isAllSelected) {
+                try {
+                  const res = await api.get<any>(`/prospects?limit=99999`)
+                  ids = res.data?.prospects?.map((p: any) => p._id) || selectedIds
+                } catch { ids = selectedIds }
+              }
+              setIsEnriching(true)
+              setEnrichMsg(`⏳ Enriching ${ids.length} account${ids.length > 1 ? "s" : ""}... (this may take a minute)`)
+              try {
+                const res = await api.post<any>("/enrichment/bulk", { prospectIds: ids })
+                const { success = 0, failed = 0 } = res?.data || res || {}
+                if (failed > 0 && success === 0) {
+                  setEnrichMsg(`❌ Enrichment failed for all ${ids.length} accounts. Check Gemini API key.`)
+                } else if (failed > 0) {
+                  setEnrichMsg(`⚠️ ${success} enriched, ${failed} failed`)
+                } else {
+                  setEnrichMsg(`✅ ${ids.length} account${ids.length > 1 ? "s" : ""} enriched successfully!`)
+                }
+                setTimeout(() => { setEnrichMsg(""); fetchProspects() }, 3000)
+              } catch (err: any) {
+                const msg = err?.data?.message || err?.message || "Unknown error"
+                setEnrichMsg(`❌ Enrichment failed — ${msg}`)
+              } finally {
+                setIsEnriching(false)
+              }
+            }}
+          >
+            {isEnriching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            {isEnriching ? "Enriching..." : "AI ENRICH"}
+          </Button>
+          {enrichMsg && <span className="text-xs text-muted-foreground max-w-xs">{enrichMsg}</span>}
         </div>
+        <Button
+          variant={isAllSelected ? "default" : "outline"}
+          size="sm"
+          className={isAllSelected ? "bg-primary text-white" : ""}
+          onClick={() => {
+            if (isAllSelected) { setIsAllSelected(false); setSelectedIds([]) }
+            else { setIsAllSelected(true); setSelectedIds(prospects.map(p => p._id)) }
+          }}
+        >
+          {isAllSelected ? `✓ All ${total} Selected` : `Select All`}
+        </Button>
       </div>
 
       <FilterPanel

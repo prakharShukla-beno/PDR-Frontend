@@ -1,31 +1,24 @@
 "use client"
 
-// Segment detail page — shows stored accounts (no fresh query on every open)
-// APIs:
-//   GET  /api/segments/:id          → segment info + filter details
-//   GET  /api/segments/:id/accounts → paginated stored accounts
-//   POST /api/segments/:id/sync     → sync fresh data from DB
-
 import { useEffect, useState, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import {
   ArrowLeft, RefreshCw, Loader2,
-  ChevronLeft, ChevronRight, Clock, Sparkles, CheckCircle2,
+  ChevronLeft, ChevronRight, Clock, Sparkles, CheckCircle2, X,
 } from "lucide-react"
-import { Button }            from "@/components/ui/button"
-import { Badge }             from "@/components/ui/badge"
-import { api }               from "@/lib/api"
+import { Button }   from "@/components/ui/button"
+import { Badge }    from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
+import { api }      from "@/lib/api"
 
 export default function SegmentDetailPage() {
-  const { id }   = useParams<{ id: string }>()
-  const router   = useRouter()
+  const { id } = useParams<{ id: string }>()
+  const router = useRouter()
 
-  // Segment meta
   const [segment,     setSegment]     = useState<any>(null)
   const [isLoading,   setIsLoading]   = useState(true)
 
-  // Accounts
   const [accounts,    setAccounts]    = useState<any[]>([])
   const [total,       setTotal]       = useState(0)
   const [totalPages,  setTotalPages]  = useState(1)
@@ -33,22 +26,23 @@ export default function SegmentDetailPage() {
   const [acLoading,   setAcLoading]   = useState(false)
   const LIMIT = 10
 
-  // Sync
   const [isSyncing, setIsSyncing] = useState(false)
   const [syncMsg,   setSyncMsg]   = useState("")
 
-  // Enrich & Score
-  const [isEnriching,   setIsEnriching]   = useState(false)
-  const [enrichMsg,     setEnrichMsg]     = useState("")
-  const [enrichStatus,  setEnrichStatus]  = useState<string>("")
+  const [isEnriching,  setIsEnriching]  = useState(false)
+  const [enrichMsg,    setEnrichMsg]    = useState("")
 
-  // GET /api/segments/:id — fetch segment info
-  // Backend returns { success: true, data: segmentObject }
+  // Selection state
+  const [selectedIds,    setSelectedIds]    = useState<string[]>([])
+  const [isAllSelected,  setIsAllSelected]  = useState(false)
+  const [isBulkEnriching, setIsBulkEnriching] = useState(false)
+  const [bulkEnrichMsg,   setBulkEnrichMsg]   = useState("")
+  const [isDeleting,      setIsDeleting]      = useState(false)
+
   const fetchSegment = useCallback(async () => {
     setIsLoading(true)
     try {
       const res = await api.get<any>(`/segments/${id}`)
-      // Handle both wrapped and unwrapped responses
       setSegment(res.data?.data ?? res.data)
     } catch (err) {
       console.error("Segment fetch error:", err)
@@ -57,15 +51,10 @@ export default function SegmentDetailPage() {
     }
   }, [id])
 
-  // GET /api/segments/:id/accounts — fetch stored accounts (no fresh query)
-  // Backend returns { success: true, data: { accounts, total, page, totalPages } }
   const fetchAccounts = useCallback(async (page = 1) => {
     setAcLoading(true)
     try {
-      const res = await api.get<any>(
-        `/segments/${id}/accounts?page=${page}&limit=${LIMIT}`
-      )
-      // Response shape: { success, data: { accounts[], total, page, totalPages } }
+      const res = await api.get<any>(`/segments/${id}/accounts?page=${page}&limit=${LIMIT}`)
       const data = res.data?.data ?? res.data
       setAccounts(data?.accounts || [])
       setTotal(data?.total || 0)
@@ -82,10 +71,8 @@ export default function SegmentDetailPage() {
     fetchAccounts(1)
   }, [fetchSegment, fetchAccounts])
 
-  // Poll while background enrichment is running
   useEffect(() => {
     if (segment?.enrichStatus !== "running") return
-
     setIsEnriching(true)
     const timer = setInterval(async () => {
       try {
@@ -95,31 +82,28 @@ export default function SegmentDetailPage() {
         if (seg.enrichStatus !== "running") {
           clearInterval(timer)
           setIsEnriching(false)
-          setEnrichMsg(
-            `Done — ${seg.enrichedCount ?? 0} enriched, ${seg.scoredCount ?? 0} scored`
-          )
+          setEnrichMsg(`Done — ${seg.enrichedCount ?? 0} enriched, ${seg.scoredCount ?? 0} scored`)
           await fetchAccounts(currentPage)
         }
       } catch (err) {
         console.error("Enrich poll error:", err)
       }
     }, 3000)
-
     return () => clearInterval(timer)
   }, [segment?.enrichStatus, id, currentPage, fetchAccounts])
 
   const handlePageChange = (newPage: number) => {
     setCurrentPage(newPage)
     fetchAccounts(newPage)
+    setSelectedIds([])
+    setIsAllSelected(false)
   }
 
-  // POST /api/segments/:id/sync — run fresh query, update snapshot
   const handleSync = async () => {
     setIsSyncing(true)
     setSyncMsg("")
     try {
       const res = await api.post<any>(`/segments/${id}/sync`, {})
-      // Response: { success, message, data: updatedSegment }
       const count = res.data?.data?.matchCount ?? res.data?.matchCount
       setSyncMsg(`Synced — ${count} accounts found`)
       await fetchSegment()
@@ -133,7 +117,6 @@ export default function SegmentDetailPage() {
     }
   }
 
-  // POST /api/segments/:id/enrich-score — run AI enrichment + scoring on all accounts
   const handleEnrich = async () => {
     setIsEnriching(true)
     setEnrichMsg("")
@@ -151,7 +134,56 @@ export default function SegmentDetailPage() {
     }
   }
 
-  // Format last synced time
+  const handleDelete = async () => {
+    if (!selectedIds.length || !confirm(`Delete ${selectedIds.length} selected account(s)?`)) return
+    setIsDeleting(true)
+    try {
+      await Promise.all(selectedIds.map(id => api.delete(`/prospects/${id}`)))
+      setSelectedIds([])
+      setIsAllSelected(false)
+      await fetchAccounts(currentPage)
+      await fetchSegment()
+    } catch {
+      alert("Delete failed.")
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  const handleBulkEnrich = async () => {
+    let ids = selectedIds
+    if (isAllSelected) {
+      try {
+        const res = await api.get<any>(`/segments/${id}/accounts?page=1&limit=99999`)
+        const data = res.data?.data ?? res.data
+        ids = (data?.accounts || []).map((a: any) => a._id)
+        if (!ids.length) ids = selectedIds
+      } catch { ids = selectedIds }
+    }
+    setIsBulkEnriching(true)
+    setBulkEnrichMsg(`⏳ Enriching ${ids.length} account${ids.length > 1 ? "s" : ""}... (this may take a minute)`)
+    try {
+      const res = await api.post<any>("/enrichment/bulk", { prospectIds: ids })
+      const { success = 0, failed = 0 } = res?.data || res || {}
+      if (failed > 0 && success === 0) {
+        setBulkEnrichMsg(`❌ Enrichment failed for all accounts. Check Gemini API key.`)
+      } else if (failed > 0) {
+        setBulkEnrichMsg(`⚠️ ${success} enriched, ${failed} failed`)
+      } else {
+        setBulkEnrichMsg(`✅ ${ids.length} account${ids.length > 1 ? "s" : ""} enriched successfully!`)
+      }
+      setTimeout(() => { setBulkEnrichMsg(""); fetchAccounts(currentPage) }, 3000)
+    } catch (err: any) {
+      const msg = err?.data?.message || err?.message || "Unknown error"
+      setBulkEnrichMsg(`❌ Enrichment failed — ${msg}`)
+    } finally {
+      setIsBulkEnriching(false)
+    }
+  }
+
+  const allPageSelected = accounts.length > 0 && accounts.every(a => selectedIds.includes(a._id))
+  const hasSelection    = selectedIds.length > 0
+
   const formatSyncTime = (dateStr?: string) => {
     if (!dateStr) return "Never synced"
     const diff = Date.now() - new Date(dateStr).getTime()
@@ -175,9 +207,7 @@ export default function SegmentDetailPage() {
     return (
       <div className="p-6 text-center">
         <p className="text-muted-foreground">Segment not found.</p>
-        <Button variant="link" onClick={() => router.push("/segments")}>
-          Back to Segments
-        </Button>
+        <Button variant="link" onClick={() => router.push("/segments")}>Back to Segments</Button>
       </div>
     )
   }
@@ -209,30 +239,23 @@ export default function SegmentDetailPage() {
             </div>
           </div>
 
-          {/* Action buttons */}
           <div className="flex flex-col items-end gap-2">
             <div className="flex gap-2">
-              {/* Sync — refresh accounts from DB */}
               <Button
                 variant="outline" className="gap-2"
                 onClick={handleSync}
                 disabled={isSyncing || isEnriching}
               >
-                {isSyncing
-                  ? <Loader2 className="h-4 w-4 animate-spin" />
-                  : <RefreshCw className="h-4 w-4" />}
+                {isSyncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                 {isSyncing ? "Syncing..." : "Sync"}
               </Button>
 
-              {/* Enrich & Score — run AI on all accounts, then score */}
               <Button
                 className="gap-2 bg-violet-600 hover:bg-violet-700 text-white"
                 onClick={handleEnrich}
                 disabled={isEnriching || isSyncing}
               >
-                {isEnriching
-                  ? <Loader2 className="h-4 w-4 animate-spin" />
-                  : <Sparkles className="h-4 w-4" />}
+                {isEnriching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                 {isEnriching ? "Enriching..." : "Enrich & Score"}
               </Button>
             </div>
@@ -247,7 +270,6 @@ export default function SegmentDetailPage() {
           </div>
         </div>
 
-        {/* Enrich status bar */}
         {segment.enrichStatus && segment.enrichStatus !== "idle" && (
           <div className={`mt-3 flex items-center gap-2 text-xs px-3 py-2 rounded-lg ${
             segment.enrichStatus === "running"
@@ -268,7 +290,6 @@ export default function SegmentDetailPage() {
           </div>
         )}
 
-        {/* Stats + filter badges */}
         <div className="flex items-center gap-6 mt-4">
           <div>
             <p className="text-2xl font-bold text-primary">{segment.matchCount ?? 0}</p>
@@ -299,6 +320,17 @@ export default function SegmentDetailPage() {
           <table className="w-full">
             <thead className="bg-muted/30 sticky top-0">
               <tr className="text-left text-xs text-muted-foreground uppercase tracking-wider">
+                <th className="p-4 w-10">
+                  <Checkbox
+                    checked={allPageSelected}
+                    ref={(el) => { if (el) { const input = el.querySelector('input'); if (input) input.indeterminate = hasSelection && !allPageSelected } }}
+                    onCheckedChange={() => {
+                      setIsAllSelected(false)
+                      if (allPageSelected) setSelectedIds(ids => ids.filter(id => !accounts.map(a => a._id).includes(id)))
+                      else { const n = [...selectedIds]; accounts.forEach(a => { if (!n.includes(a._id)) n.push(a._id) }); setSelectedIds(n) }
+                    }}
+                  />
+                </th>
                 <th className="p-4 font-medium">Account</th>
                 <th className="p-4 font-medium">Industry</th>
                 <th className="p-4 font-medium">Country</th>
@@ -312,18 +344,14 @@ export default function SegmentDetailPage() {
               {acLoading ? (
                 Array.from({ length: LIMIT }).map((_, i) => (
                   <tr key={i} className="animate-pulse">
-                    <td className="p-4"><div className="h-4 w-32 bg-muted rounded" /></td>
-                    <td className="p-4"><div className="h-4 w-20 bg-muted rounded" /></td>
-                    <td className="p-4"><div className="h-4 w-16 bg-muted rounded" /></td>
-                    <td className="p-4"><div className="h-4 w-16 bg-muted rounded" /></td>
-                    <td className="p-4"><div className="h-8 w-8 bg-muted rounded-full" /></td>
-                    <td className="p-4"><div className="h-4 w-16 bg-muted rounded" /></td>
-                    <td className="p-4"><div className="h-4 w-24 bg-muted rounded" /></td>
+                    {Array.from({ length: 8 }).map((_, j) => (
+                      <td key={j} className="p-4"><div className="h-4 bg-muted rounded" /></td>
+                    ))}
                   </tr>
                 ))
               ) : accounts.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-12 text-center text-muted-foreground">
+                  <td colSpan={8} className="p-12 text-center text-muted-foreground">
                     No accounts in this segment. Click Sync to refresh.
                   </td>
                 </tr>
@@ -331,10 +359,19 @@ export default function SegmentDetailPage() {
                 accounts.map((account) => (
                   <tr
                     key={account._id}
-                    className="hover:bg-muted/20 transition-colors cursor-pointer"
-                    onClick={() => router.push(`/accounts/${account._id}`)}
+                    className="hover:bg-muted/20 transition-colors"
                   >
                     <td className="p-4">
+                      <Checkbox
+                        checked={selectedIds.includes(account._id)}
+                        onCheckedChange={() => setSelectedIds(ids =>
+                          ids.includes(account._id)
+                            ? ids.filter(i => i !== account._id)
+                            : [...ids, account._id]
+                        )}
+                      />
+                    </td>
+                    <td className="p-4 cursor-pointer" onClick={() => router.push(`/accounts/${account._id}`)}>
                       <div className="font-medium text-sm">{account.accountName}</div>
                       {account.website && (
                         <div className="text-xs text-muted-foreground">{account.website}</div>
@@ -345,7 +382,6 @@ export default function SegmentDetailPage() {
                     <td className="p-4 text-sm">{account.noOfEmployees || "—"}</td>
                     <td className="p-4">
                       <div className="flex flex-col items-start gap-1">
-                        {/* finalScore circle */}
                         <div className={`flex h-9 w-9 items-center justify-center rounded-full border-2 font-bold text-sm ${
                           (account.finalScore ?? 0) > 60
                             ? "border-green-500 text-green-600 bg-green-50"
@@ -357,7 +393,6 @@ export default function SegmentDetailPage() {
                         }`}>
                           {account.finalScore ?? "—"}
                         </div>
-                        {/* Tier badge */}
                         {account.clvRanking && (
                           <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${
                             account.clvRanking.includes("A")
@@ -396,30 +431,75 @@ export default function SegmentDetailPage() {
         </div>
 
         {/* Pagination */}
-        {!acLoading && total > LIMIT && (
+        {!acLoading && (
           <div className="flex items-center justify-between py-4">
-            <p className="text-sm text-muted-foreground">
-              Showing {((currentPage - 1) * LIMIT) + 1}–
-              {Math.min(currentPage * LIMIT, total)} of {total} accounts
-            </p>
-            <div className="flex items-center gap-1">
-              <Button variant="ghost" size="icon" className="h-8 w-8"
-                disabled={currentPage === 1}
-                onClick={() => handlePageChange(currentPage - 1)}>
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <span className="text-sm px-2">{currentPage} / {totalPages}</span>
-              <Button variant="ghost" size="icon" className="h-8 w-8"
-                disabled={currentPage === totalPages}
-                onClick={() => handlePageChange(currentPage + 1)}>
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
+            <span className="text-sm text-muted-foreground">
+              TOTAL: <span className="text-primary font-medium">{total} accounts</span>
+              {hasSelection && (
+                <span className="ml-2 text-muted-foreground">
+                  • <span className="text-foreground font-medium">
+                    {isAllSelected ? `All ${total}` : selectedIds.length} selected
+                  </span>
+                </span>
+              )}
+            </span>
+            {total > LIMIT && (
+              <div className="flex items-center gap-1">
+                <Button variant="ghost" size="icon" className="h-8 w-8"
+                  disabled={currentPage === 1}
+                  onClick={() => handlePageChange(currentPage - 1)}>
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="text-sm px-2">{currentPage} / {totalPages}</span>
+                <Button variant="ghost" size="icon" className="h-8 w-8"
+                  disabled={currentPage === totalPages}
+                  onClick={() => handlePageChange(currentPage + 1)}>
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
           </div>
         )}
+
+        <div className="h-20" />
+      </div>
+
+      {/* ── Bottom Action Bar ── */}
+      <div className="fixed bottom-0 left-[var(--sidebar-width)] right-0 bg-white border-t py-3 px-6 flex items-center justify-between z-50 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost" size="sm"
+            className={`gap-2 ${hasSelection ? "text-destructive hover:text-destructive" : "text-muted-foreground/40"}`}
+            disabled={!hasSelection || isDeleting}
+            onClick={handleDelete}
+          >
+            {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
+            DELETE
+          </Button>
+          <Button
+            variant="outline" size="sm"
+            disabled={!hasSelection || isBulkEnriching}
+            className={`gap-2 ${!hasSelection ? "opacity-40" : "border-primary text-primary hover:bg-primary/5"}`}
+            onClick={handleBulkEnrich}
+          >
+            {isBulkEnriching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            {isBulkEnriching ? "Enriching..." : "AI ENRICH"}
+          </Button>
+          {bulkEnrichMsg && <span className="text-xs text-muted-foreground max-w-xs">{bulkEnrichMsg}</span>}
+        </div>
+        <Button
+          variant={isAllSelected ? "default" : "outline"}
+          size="sm"
+          className={isAllSelected ? "bg-primary text-white" : ""}
+          onClick={() => {
+            if (isAllSelected) { setIsAllSelected(false); setSelectedIds([]) }
+            else { setIsAllSelected(true); setSelectedIds(accounts.map(a => a._id)) }
+          }}
+        >
+          {isAllSelected ? `✓ All ${total} Selected` : `Select All `}
+        </Button>
       </div>
 
     </div>
   )
 }
-

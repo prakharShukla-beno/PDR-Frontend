@@ -4,8 +4,8 @@ import { useEffect, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import {
-  Search, Upload, Plus, X, Pencil, SlidersHorizontal,
-  ChevronLeft, ChevronRight, Loader2, Users
+  Search, Upload, Plus, X, SlidersHorizontal,
+  ChevronLeft, ChevronRight, Loader2, Users, Sparkles
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -55,6 +55,9 @@ export default function ContactsPage() {
   const [currentPage, setCurrentPage]   = useState(1)
   const [recordsPerPage, setRecordsPerPage] = useState(10)
   const [selectedIds, setSelectedIds]   = useState<string[]>([])
+  const [isAllSelected, setIsAllSelected]   = useState(false)
+  const [isEnriching, setIsEnriching]       = useState(false)
+  const [enrichMsg, setEnrichMsg]           = useState("")
   const [uploadFile, setUploadFile]     = useState<File | null>(null)
   const [isUploading, setIsUploading]   = useState(false)
   const [uploadMsg, setUploadMsg]       = useState("")
@@ -300,8 +303,11 @@ const handleUpload = async () => {
             <thead className="bg-muted/30 sticky top-0 z-10">
               <tr className="text-left text-xs text-muted-foreground uppercase tracking-wider">
                 <th className="p-4 w-10">
-                  <Checkbox checked={allPageSelected}
+                  <Checkbox
+                    checked={allPageSelected}
+                    ref={(el) => { if (el) { const input = el.querySelector('input'); if (input) input.indeterminate = hasSelection && !allPageSelected } }}
                     onCheckedChange={() => {
+                      setIsAllSelected(false)
                       if (allPageSelected) setSelectedIds(ids => ids.filter(id => !contacts.map(c => c._id).includes(id)))
                       else { const n = [...selectedIds]; contacts.forEach(c => { if (!n.includes(c._id)) n.push(c._id) }); setSelectedIds(n) }
                     }} />
@@ -388,7 +394,7 @@ const handleUpload = async () => {
         </div>
 
         <div className="flex items-center justify-between py-4">
-          <span className="text-sm text-muted-foreground">TOTAL: <span className="text-primary font-medium">{total} contacts</span></span>
+          <span className="text-sm text-muted-foreground">TOTAL: <span className="text-primary font-medium">{total} contacts</span>{hasSelection && (<span className="ml-2 text-muted-foreground">• <span className="text-foreground font-medium">{isAllSelected ? `All ${total}` : selectedIds.length} selected</span></span>)}</span>
           <div className="flex items-center gap-1">
             <Button variant="ghost" size="icon" className="h-8 w-8" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft className="h-4 w-4" /></Button>
             {getPageNumbers().map((page, i) =>
@@ -412,22 +418,60 @@ const handleUpload = async () => {
         <div className="h-20" />
       </div>
 
-      <div className="fixed bottom-0 left-[var(--sidebar-width)] right-0 bg-white border-t py-3 px-6 flex items-center justify-center gap-3 z-50 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
-        <Button variant="ghost" size="sm" className={`gap-2 ${hasSelection ? "text-foreground" : "text-muted-foreground/50"}`} disabled={!hasSelection} onClick={handleDelete}>
-          <X className="h-4 w-4" />DELETE
-        </Button>
-        <Button variant="ghost" size="sm" className={`gap-2 ${hasSelection ? "text-foreground" : "text-muted-foreground/50"}`} disabled={!hasSelection}>
-          <Pencil className="h-4 w-4" />EDIT
-        </Button>
-        <Button variant="outline" size="sm" disabled={!hasSelection} className={!hasSelection ? "opacity-50" : ""}>ADD TO CAMPAIGN</Button>
-        <Button variant="outline" size="sm" disabled={!hasSelection} className={!hasSelection ? "opacity-50" : ""}>SEND EMAIL</Button>
-        <div className="flex items-center gap-2 ml-4 border-l pl-4">
-          <Checkbox
-            checked={selectedIds.length === total && total > 0}
-            onCheckedChange={() => selectedIds.length === total ? setSelectedIds([]) : setSelectedIds(contacts.map(c => c._id))}
-          />
-          <span className="text-sm font-medium">SELECT ALL</span>
+      <div className="fixed bottom-0 left-[var(--sidebar-width)] right-0 bg-white border-t py-3 px-6 flex items-center justify-between z-50 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="sm" className={`gap-2 ${hasSelection ? "text-destructive hover:text-destructive" : "text-muted-foreground/40"}`} disabled={!hasSelection} onClick={handleDelete}>
+            <X className="h-4 w-4" />DELETE
+          </Button>
+          <Button variant="outline" size="sm" disabled={!hasSelection} className={!hasSelection ? "opacity-40" : ""}>ADD TO CAMPAIGN</Button>
+          <Button
+            variant="outline" size="sm"
+            disabled={!hasSelection || isEnriching}
+            className={`gap-2 ${!hasSelection ? "opacity-40" : "border-primary text-primary hover:bg-primary/5"}`}
+            onClick={async () => {
+              const accountIds: string[] = []
+              contacts.filter(c => selectedIds.includes(c._id)).forEach(c => {
+                const aId = typeof c.accountId === "object" && c.accountId !== null ? (c.accountId as any)._id : c.accountId as string
+                if (aId && !accountIds.includes(aId)) accountIds.push(aId)
+              })
+              if (!accountIds.length) { setEnrichMsg("❌ No linked accounts found for selected contacts"); return }
+              setIsEnriching(true)
+              setEnrichMsg(`⏳ Enriching ${accountIds.length} linked account${accountIds.length > 1 ? "s" : ""}... (this may take a minute)`)
+              try {
+                const res = await api.post<any>("/enrichment/bulk", { prospectIds: accountIds })
+                const { success = 0, failed = 0 } = res?.data || res || {}
+                if (failed > 0 && success === 0) {
+                  setEnrichMsg(`❌ Enrichment failed for all accounts. Check Gemini API key.`)
+                } else if (failed > 0) {
+                  setEnrichMsg(`⚠️ ${success} enriched, ${failed} failed`)
+                } else {
+                  setEnrichMsg(`✅ ${accountIds.length} linked account${accountIds.length > 1 ? "s" : ""} enriched successfully!`)
+                }
+                setTimeout(() => setEnrichMsg(""), 3000)
+              } catch (err: any) {
+                const msg = err?.data?.message || err?.message || "Unknown error"
+                setEnrichMsg(`❌ Enrichment failed — ${msg}`)
+              } finally {
+                setIsEnriching(false)
+              }
+            }}
+          >
+            {isEnriching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            {isEnriching ? "Enriching..." : "AI ENRICH"}
+          </Button>
+          {enrichMsg && <span className="text-xs text-muted-foreground max-w-xs">{enrichMsg}</span>}
         </div>
+        <Button
+          variant={isAllSelected ? "default" : "outline"}
+          size="sm"
+          className={isAllSelected ? "bg-primary text-white" : ""}
+          onClick={() => {
+            if (isAllSelected) { setIsAllSelected(false); setSelectedIds([]) }
+            else { setIsAllSelected(true); setSelectedIds(contacts.map(c => c._id)) }
+          }}
+        >
+          {isAllSelected ? `✓ All ${total} Selected` : `Select All `}
+        </Button>
       </div>
 
       <FilterPanel
