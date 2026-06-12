@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { api, ApiError } from "@/lib/api"
+import { IcpImportPreviewModal } from "@/components/import/IcpImportPreviewModal"
 
 // ── Connector config — static UI ──
 const CONNECTORS = [
@@ -80,6 +81,13 @@ export default function DataSourcesPage() {
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadMsg, setUploadMsg] = useState("")
+  const [showImportPreview, setShowImportPreview] = useState(false)
+  const [importPreview, setImportPreview] = useState<{
+    missingIcpColumns: string[]
+    previewRows: Array<Record<string, string>>
+    totalRows: number
+  } | null>(null)
+  const [isPreviewing, setIsPreviewing] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // GET /api/dashboard/import-history
@@ -97,10 +105,37 @@ export default function DataSourcesPage() {
     fetchHistory()
   }, [])
 
+  const handleFileSelect = async (file: File) => {
+    setUploadFile(file)
+    setUploadMsg("")
+    setIsPreviewing(true)
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+      const res = await api.upload<any>("/import/excel/preview", formData)
+      const preview = res?.data ?? res
+      setImportPreview({
+        missingIcpColumns: preview?.missingIcpColumns ?? [],
+        previewRows:       preview?.previewRows ?? [],
+        totalRows:         preview?.totalRows ?? 0,
+      })
+      if ((preview?.missingIcpColumns ?? []).length > 0) {
+        setShowImportPreview(true)
+      }
+    } catch (err) {
+      if (err instanceof ApiError) setUploadMsg(`❌ ${err.message}`)
+      else setUploadMsg("❌ Could not preview file. Try again.")
+      setUploadFile(null)
+    } finally {
+      setIsPreviewing(false)
+    }
+  }
+
   // POST /api/import/excel — CSV/Excel upload
   const handleUpload = async () => {
     if (!uploadFile) return
     setIsUploading(true)
+    setShowImportPreview(false)
     setUploadMsg("")
     try {
       const formData = new FormData()
@@ -154,14 +189,15 @@ export default function DataSourcesPage() {
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0]
-              if (f) { setUploadFile(f); setUploadMsg("") }
+              if (f) handleFileSelect(f)
+              e.target.value = ""
             }}
           />
           <Button variant="outline" className="gap-2" onClick={() => fileInputRef.current?.click()}>
             <Upload className="h-4 w-4" />Upload CSV
           </Button>
-          {uploadFile && (
-            <Button className="gap-2" onClick={handleUpload} disabled={isUploading}>
+          {uploadFile && !showImportPreview && (
+            <Button className="gap-2" onClick={handleUpload} disabled={isUploading || isPreviewing}>
               {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
               {isUploading ? "Uploading..." : `Upload: ${uploadFile.name.slice(0, 12)}...`}
             </Button>
@@ -343,6 +379,21 @@ export default function DataSourcesPage() {
           )}
         </CardContent>
       </Card>
+
+      <IcpImportPreviewModal
+        open={showImportPreview}
+        fileName={uploadFile?.name ?? ""}
+        missingColumns={importPreview?.missingIcpColumns ?? []}
+        previewRows={importPreview?.previewRows ?? []}
+        totalRows={importPreview?.totalRows ?? 0}
+        isProceeding={isUploading}
+        onProceed={handleUpload}
+        onCancel={() => {
+          setShowImportPreview(false)
+          setUploadFile(null)
+          setImportPreview(null)
+        }}
+      />
     </div>
   )
 }

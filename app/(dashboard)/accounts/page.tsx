@@ -18,6 +18,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { api, ApiError } from "@/lib/api"
 import type { Prospect } from "@/types"
 import { FilterPanel, FilterState, EMPTY_FILTERS, buildFilterQuery, countActiveFilters } from "@/components/filters/FilterPanel"
+import { IcpImportPreviewModal } from "@/components/import/IcpImportPreviewModal"
 
 function AccountsPageContent() {
   const router = useRouter()
@@ -37,6 +38,13 @@ function AccountsPageContent() {
   const [uploadFile, setUploadFile]         = useState<File | null>(null)
   const [isUploading, setIsUploading]       = useState(false)
   const [uploadMsg, setUploadMsg]           = useState("")
+  const [showImportPreview, setShowImportPreview] = useState(false)
+  const [importPreview, setImportPreview]   = useState<{
+    missingIcpColumns: string[]
+    previewRows: Array<Record<string, string>>
+    totalRows: number
+  } | null>(null)
+  const [isPreviewing, setIsPreviewing]     = useState(false)
   const [isReTiering, setIsReTiering]       = useState(false)
   const [reTierMsg, setReTierMsg]           = useState("")
   const [showAddModal, setShowAddModal]     = useState(false)
@@ -160,9 +168,36 @@ function AccountsPageContent() {
     } catch { alert("Delete failed.") }
   }
 
+  const handleFileSelect = async (file: File) => {
+    setUploadFile(file)
+    setUploadMsg("")
+    setIsPreviewing(true)
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+      const res = await api.upload<any>("/import/excel/preview", formData)
+      const preview = res?.data ?? res
+      setImportPreview({
+        missingIcpColumns: preview?.missingIcpColumns ?? [],
+        previewRows:       preview?.previewRows ?? [],
+        totalRows:         preview?.totalRows ?? 0,
+      })
+      if ((preview?.missingIcpColumns ?? []).length > 0) {
+        setShowImportPreview(true)
+      }
+    } catch (err) {
+      if (err instanceof ApiError) setUploadMsg(`❌ ${err.message}`)
+      else setUploadMsg("❌ Could not preview file. Try again.")
+      setUploadFile(null)
+    } finally {
+      setIsPreviewing(false)
+    }
+  }
+
   const handleUpload = async () => {
     if (!uploadFile) return
     setIsUploading(true)
+    setShowImportPreview(false)
     try {
       const formData = new FormData(); formData.append("file", uploadFile)
       const res = await api.upload<any>("/import/excel", formData)
@@ -289,13 +324,22 @@ function AccountsPageContent() {
             )}
             <label className="cursor-pointer">
               <input type="file" accept=".xlsx,.csv" className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) { setUploadFile(f); setUploadMsg("") } }} />
-              <Button variant="outline" className="gap-2" asChild>
-                <span><Upload className="h-4 w-4" />Import</span>
+                onChange={(e) => {
+                  const f = e.target.files?.[0]
+                  if (f) handleFileSelect(f)
+                  e.target.value = ""
+                }} />
+              <Button variant="outline" className="gap-2" asChild disabled={isPreviewing}>
+                <span>
+                  {isPreviewing
+                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                    : <Upload className="h-4 w-4" />}
+                  {isPreviewing ? "Checking file..." : "Import"}
+                </span>
               </Button>
             </label>
-            {uploadFile && (
-              <Button variant="outline" className="gap-2 text-primary border-primary" onClick={handleUpload} disabled={isUploading}>
+            {uploadFile && !showImportPreview && (
+              <Button variant="outline" className="gap-2 text-primary border-primary" onClick={handleUpload} disabled={isUploading || isPreviewing}>
                 {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                 Upload: {uploadFile.name.slice(0, 15)}...
               </Button>
@@ -801,7 +845,20 @@ function AccountsPageContent() {
         </DialogContent>
       </Dialog>
 
-      {/* Duplicate Review Modal — shown after upload */}
+      <IcpImportPreviewModal
+        open={showImportPreview}
+        fileName={uploadFile?.name ?? ""}
+        missingColumns={importPreview?.missingIcpColumns ?? []}
+        previewRows={importPreview?.previewRows ?? []}
+        totalRows={importPreview?.totalRows ?? 0}
+        isProceeding={isUploading}
+        onProceed={handleUpload}
+        onCancel={() => {
+          setShowImportPreview(false)
+          setUploadFile(null)
+          setImportPreview(null)
+        }}
+      />
     </div>
   )
 }

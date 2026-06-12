@@ -7,7 +7,7 @@
 //   PUT  /api/icp/:id          → update
 //   GET  /api/icp/:id/match-prospects → matching accounts
 
-import { useEffect, useState, Suspense } from "react"
+import { useEffect, useRef, useState, Suspense } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import {
@@ -23,17 +23,105 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Checkbox }          from "@/components/ui/checkbox"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { api }               from "@/lib/api"
-import { INDUSTRIES }        from "@/lib/taxonomy"
+import { cn }                from "@/lib/utils"
 import type { Prospect }     from "@/types"
 
-// Step 1.2 — Commercial Sector (synced with backend taxonomy.js)
-const COMMERCIAL_SECTOR_OPTIONS = [...INDUSTRIES]
+// Step 1.2 — 3-level Commercial Sector taxonomy
+const SECTOR_TAXONOMY: Record<string, Record<string, string[]>> = {
+  "BFSI": {
+    "Finance & Banking": ["Banking", "Investment Services", "Central Banks", "Fintech"],
+    "Insurance & Wealth": ["Social Security", "Wealth Management", "Insurance Carriers"],
+  },
+  "IT & ITES": {
+    "Technology & IT": [
+      "Software Development", "AI/ML", "Blockchain", "Cybersecurity",
+      "Managed IT", "Cloud Infrastructure", "Data Centers",
+    ],
+    "ITES & BPO": ["BPO", "KPO", "Call Centers", "Back Office", "Technical Support"],
+  },
+  "Media & Telecom": {
+    "Media & Entertainment": [
+      "Streaming Media", "Online Gaming", "Film/Video", "Radio/TV",
+      "Publishing/Print", "Cinemas", "Sports (Broadcast)", "Theme Parks",
+    ],
+    "Telecommunications": ["Telecommunications", "Internet Services"],
+  },
+  "Retail, CPG & Hospitality": {
+    "Consumer Goods (CPG)": [
+      "FMCG", "Appliances (White Goods)", "Toys & Games",
+      "Sports Equipment", "Personal Care Products",
+    ],
+    "Retail & Commerce": ["Retail", "Wholesale", "E-commerce"],
+    "Hospitality & Food": ["Hotels", "Restaurants", "Catering", "Tourism", "Food Services"],
+    "Personal Services": ["Laundry", "Repair of Goods", "Domestic Help", "Personal Grooming"],
+  },
+  "Healthcare & Life Sciences": {
+    "Life Sciences": ["Pharmaceuticals", "Biotechnology", "Medical Device Manufacturing"],
+    "Healthcare Providers": ["Hospitals", "Clinics", "Elderly & Social Care", "Diagnostics & Labs"],
+    "Wellness": ["Fitness", "Veterinary Services"],
+  },
+  "Manufacturing & Automotive": {
+    "Heavy Industry": [
+      "Steel & Iron", "Shipbuilding", "Aerospace/Aircraft", "Locomotive",
+      "Armaments", "Industrial Machinery",
+    ],
+    "Automotive": ["Automotive (OEM)", "Electric Vehicles", "Farm Equipment"],
+    "Materials Processing": [
+      "Textiles", "Electronics & Semiconductors", "Food Processing", "Petrochemicals",
+      "Plastics", "Metal Casting", "Furniture", "Paper & Pulp", "Packaging",
+    ],
+  },
+  "Travel, Transport & Logistics": {
+    "Logistics": ["Warehousing", "Supply Chain", "Postals & Couriers"],
+    "Transportation": [
+      "Trucking", "Cab Services", "Aviation (Airlines)", "Shipping (Maritime)", "Railways (Operations)",
+    ],
+  },
+  "Energy, Resources & Utilities": {
+    "Energy & Utilities": [
+      "Electricity/Thermal", "Renewable Energy", "Hydro/Natural Gas", "Grid Storage/Batteries",
+    ],
+    "Natural Resources": [
+      "Agriculture", "Coal & Mining", "Oil & Gas (Upstream)", "Forestry", "Fishing",
+    ],
+    "Environment": [
+      "Water Supply", "Sewage Management", "Waste Management", "Environmental Remediation",
+    ],
+  },
+  "Real Estate & Construction": {
+    "Construction": ["Residential Construction", "Commercial Construction", "Infrastructure"],
+    "Real Estate": ["Real Estate Sales/Leasing", "Property Management"],
+    "Design": ["Architecture Services"],
+  },
+  "Public Sector, Gov & Education": {
+    "Government": [
+      "Government (Federal/State)", "Defence (Non-Industrial)", "PSUs",
+      "Policy Makers", "International Bodies",
+    ],
+    "Education": ["Schools", "Universities", "Edtech"],
+    "Social": ["Non-Profits", "Think Tanks"],
+  },
+  "Professional Services": {
+    "Advisory": [
+      "Legal", "Accounting", "Consulting (Strat/HR/Fin/IT)",
+      "Marketing & Advertising", "Research Analysis",
+    ],
+    "Workforce & Ops": [
+      "HR & Talent", "Payroll", "Translation", "Vocational Training",
+      "Customer Success", "Facility Management", "Equipment Rental",
+    ],
+    "Research": ["R&D Services", "Media & Design Agency"],
+  },
+}
 // Step 1.1 — Commercial Category (new field under Business Model)
 const COMMERCIAL_CATEGORY_OPTIONS = [
   "Product Led", "SaaS / Subscriptions", "Professional Services",
-  "Retail / E-Com", "Network / Platform", "Regulated (Health/Fin)", "Public / Gov",
+  "Retail / E-Com", "Network / Platform", "Manufacturing / Industrial", "Media / Content",
+  "Regulated (Health/Fin)", "Public / Gov",
 ]
-const BUSINESS_MODEL_OPTIONS = ["B2B", "B2C", "B2B2C", "D2C", "E-Commerce", "Marketplace"]
+const BUSINESS_MODEL_OPTIONS = [
+  "B2B", "B2C", "B2B2C", "D2C", "SaaS", "E-Commerce", "Marketplace", "Franchise", "Non-Profit",
+]
 
 // Step 2 — Tech Fit: 9 categories with tools (accordion + include/exclude like regions)
 const TECH_STACK_CATEGORIES = [
@@ -74,7 +162,10 @@ const TECH_STACK_CATEGORIES = [
     tools: ["CrowdStrike", "Okta", "Palo Alto Networks", "Zscaler", "Splunk", "Cloudflare"],
   },
 ]
-const EMPLOYEE_RANGES = ["1-50", "51-200", "201-500", "501-1,000", "1,001-5,000", "5,000+"]
+const EMPLOYEE_RANGES = [
+  "1-10", "11-50", "51-200", "201-500", "501-1,000",
+  "1,001-5,000", "5,001-10,000", "10,000+",
+]
 const REVENUE_RANGES  = [
   "Seed <$1M", "Early $1M-$10M", "Scale-Up $10M-$50M",
   "Mid-Market $50M-$250M", "Corporate $250M-$1B", "Enterprise $1B+",
@@ -306,6 +397,393 @@ function CountryPicker({
   )
 }
 
+// ── Sector taxonomy helpers ───────────────────────────────────────────────────
+type CheckState = "checked" | "indeterminate" | "unchecked"
+
+const uniqueStrings = (values: string[]) => [...new Set(values)]
+
+const getSubsInSector = (sector: string) => Object.keys(SECTOR_TAXONOMY[sector] ?? {})
+
+const getIndsInSector = (sector: string) =>
+  getSubsInSector(sector).flatMap((sub) => SECTOR_TAXONOMY[sector][sub] ?? [])
+
+const getIndsInSub = (sector: string, sub: string) =>
+  SECTOR_TAXONOMY[sector]?.[sub] ?? []
+
+const findParentsForIndustry = (industry: string) => {
+  for (const [sector, subs] of Object.entries(SECTOR_TAXONOMY)) {
+    for (const [sub, inds] of Object.entries(subs)) {
+      if (inds.includes(industry)) return { sector, sub }
+    }
+  }
+  return null
+}
+
+const findParentSectorForSub = (sub: string) => {
+  for (const [sector, subs] of Object.entries(SECTOR_TAXONOMY)) {
+    if (sub in subs) return sector
+  }
+  return null
+}
+
+type SubSectorEntry = { sector: string; sub: string }
+
+const getSubSectorEntriesForSectors = (sectors: string[]): SubSectorEntry[] =>
+  sectors.flatMap((sector) =>
+    getSubsInSector(sector).map((sub) => ({ sector, sub }))
+  )
+
+const getIndustriesForSubSectorEntries = (entries: SubSectorEntry[]) =>
+  uniqueStrings(
+    entries.flatMap(({ sector, sub }) => getIndsInSub(sector, sub))
+  )
+
+const getIndustriesForSubSectors = (subs: string[]) =>
+  getIndustriesForSubSectorEntries(
+    subs
+      .map((sub) => {
+        const sector = findParentSectorForSub(sub)
+        return sector ? { sector, sub } : null
+      })
+      .filter((e): e is SubSectorEntry => e !== null)
+  )
+
+const getSectorCheckState = (
+  sector: string,
+  subSectors: string[],
+  mappedIndustries: string[]
+): CheckState => {
+  const allSubs = getSubsInSector(sector)
+  const allInds = getIndsInSector(sector)
+  if (allSubs.length === 0) return "unchecked"
+
+  const subsSelected = allSubs.filter((s) => subSectors.includes(s)).length
+  const indsSelected = allInds.filter((i) => mappedIndustries.includes(i)).length
+
+  if (subsSelected === allSubs.length && indsSelected === allInds.length) return "checked"
+  if (subsSelected > 0 || indsSelected > 0) return "indeterminate"
+  return "unchecked"
+}
+
+const getSubCheckState = (
+  sector: string,
+  sub: string,
+  mappedIndustries: string[]
+): CheckState => {
+  const allInds = getIndsInSub(sector, sub)
+  if (allInds.length === 0) return "unchecked"
+
+  const indsSelected = allInds.filter((i) => mappedIndustries.includes(i)).length
+  if (indsSelected === allInds.length) return "checked"
+  if (indsSelected > 0) return "indeterminate"
+  return "unchecked"
+}
+
+const toCheckboxChecked = (state: CheckState) =>
+  state === "checked" ? true : state === "indeterminate" ? "indeterminate" : false
+
+// ── 3-level Commercial Sector cascading selector ───────────────────────────────
+function SectorTaxonomySelector({
+  commercialSectors,
+  subSectors,
+  mappedIndustries,
+  onCommercialSectorsChange,
+  onSubSectorsChange,
+  onMappedIndustriesChange,
+}: {
+  commercialSectors: string[]
+  subSectors: string[]
+  mappedIndustries: string[]
+  onCommercialSectorsChange: (v: string[]) => void
+  onSubSectorsChange: (v: string[]) => void
+  onMappedIndustriesChange: (v: string[]) => void
+}) {
+  const [focusedSector, setFocusedSector]       = useState<string | null>(null)
+  const [focusedSubSector, setFocusedSubSector] = useState<string | null>(null)
+
+  const sectorKeys = Object.keys(SECTOR_TAXONOMY)
+
+  const subSectorEntries: SubSectorEntry[] =
+    commercialSectors.length > 0
+      ? getSubSectorEntriesForSectors(commercialSectors)
+      : focusedSector
+        ? getSubSectorEntriesForSectors([focusedSector])
+        : []
+
+  const industryOptions: string[] =
+    subSectors.length > 0
+      ? getIndustriesForSubSectors(subSectors)
+      : focusedSector && focusedSubSector
+        ? getIndsInSub(focusedSector, focusedSubSector)
+        : []
+
+  const toggleSector = (sector: string) => {
+    const state = getSectorCheckState(sector, subSectors, mappedIndustries)
+
+    if (state === "checked") {
+      const subsInSector = getSubsInSector(sector)
+      const indsInSector = getIndsInSector(sector)
+      onCommercialSectorsChange(commercialSectors.filter((s) => s !== sector))
+      onSubSectorsChange(subSectors.filter((s) => !subsInSector.includes(s)))
+      onMappedIndustriesChange(mappedIndustries.filter((i) => !indsInSector.includes(i)))
+      if (focusedSector === sector) {
+        setFocusedSector(null)
+        setFocusedSubSector(null)
+      }
+      return
+    }
+
+    const subsInSector = getSubsInSector(sector)
+    const indsInSector = getIndsInSector(sector)
+    onCommercialSectorsChange(uniqueStrings([...commercialSectors, sector]))
+    onSubSectorsChange(uniqueStrings([...subSectors, ...subsInSector]))
+    onMappedIndustriesChange(uniqueStrings([...mappedIndustries, ...indsInSector]))
+    setFocusedSector(sector)
+    setFocusedSubSector(subsInSector[subsInSector.length - 1] ?? null)
+  }
+
+  const toggleSubSector = (sector: string, sub: string) => {
+    const state = getSubCheckState(sector, sub, mappedIndustries)
+
+    if (state === "checked") {
+      const indsInSub = getIndsInSub(sector, sub)
+      const nextInds  = mappedIndustries.filter((i) => !indsInSub.includes(i))
+      const nextSubs  = subSectors.filter((s) => s !== sub)
+      onSubSectorsChange(nextSubs)
+      onMappedIndustriesChange(nextInds)
+
+      const subsInSector = getSubsInSector(sector)
+      const hasSubsLeft  = nextSubs.some((s) => subsInSector.includes(s))
+      const hasIndsLeft  = getIndsInSector(sector).some((i) => nextInds.includes(i))
+      if (!hasSubsLeft && !hasIndsLeft) {
+        onCommercialSectorsChange(commercialSectors.filter((s) => s !== sector))
+      }
+      if (focusedSubSector === sub) setFocusedSubSector(null)
+      return
+    }
+
+    const indsInSub = getIndsInSub(sector, sub)
+    onCommercialSectorsChange(uniqueStrings([...commercialSectors, sector]))
+    onSubSectorsChange(uniqueStrings([...subSectors, sub]))
+    onMappedIndustriesChange(uniqueStrings([...mappedIndustries, ...indsInSub]))
+    setFocusedSector(sector)
+    setFocusedSubSector(sub)
+  }
+
+  const toggleIndustry = (industry: string) => {
+    const parents = findParentsForIndustry(industry)
+    if (!parents) return
+
+    const { sector, sub } = parents
+
+    if (mappedIndustries.includes(industry)) {
+      const nextInds = mappedIndustries.filter((i) => i !== industry)
+      const remainingInSub = getIndsInSub(sector, sub).filter((i) => nextInds.includes(i))
+
+      let nextSubs = subSectors
+      if (remainingInSub.length === 0) {
+        nextSubs = subSectors.filter((s) => s !== sub)
+      }
+
+      const subsInSector = getSubsInSector(sector)
+      const hasSubsLeft = nextSubs.some((s) => subsInSector.includes(s))
+      const hasIndsLeft = getIndsInSector(sector).some((i) => nextInds.includes(i))
+
+      onMappedIndustriesChange(nextInds)
+      onSubSectorsChange(nextSubs)
+      if (!hasSubsLeft && !hasIndsLeft) {
+        onCommercialSectorsChange(commercialSectors.filter((s) => s !== sector))
+      }
+      return
+    }
+
+    onMappedIndustriesChange(uniqueStrings([...mappedIndustries, industry]))
+    onSubSectorsChange(uniqueStrings([...subSectors, sub]))
+    onCommercialSectorsChange(uniqueStrings([...commercialSectors, sector]))
+  }
+
+  const LevelHeader = ({ label, count }: { label: string; count: number }) => (
+    <div className="flex items-center justify-between border-b pb-2 mb-2">
+      <span className="text-sm font-semibold">{label}</span>
+      {count > 0 && (
+        <Badge variant="secondary" className="text-xs font-normal">
+          {count} selected
+        </Badge>
+      )}
+    </div>
+  )
+
+  const Placeholder = ({ text }: { text: string }) => (
+    <p className="text-sm text-muted-foreground italic py-8 text-center px-2">{text}</p>
+  )
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {/* Level 1 — Commercial Sector */}
+        <div className="rounded-lg border bg-muted/10 p-3 flex flex-col">
+          <LevelHeader label="Commercial Sector" count={commercialSectors.length} />
+          <div className="h-[380px] overflow-y-auto space-y-1 pr-1">
+            {sectorKeys.map((sector) => {
+              const checkState = getSectorCheckState(sector, subSectors, mappedIndustries)
+              const active     = checkState !== "unchecked"
+              const focused    = focusedSector === sector
+              return (
+                <div
+                  key={sector}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => {
+                    setFocusedSector(sector)
+                    setFocusedSubSector(null)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      setFocusedSector(sector)
+                      setFocusedSubSector(null)
+                    }
+                  }}
+                  className={cn(
+                    "flex items-start gap-2 rounded-lg px-2 py-2 cursor-pointer border transition-colors text-sm",
+                    focused && "ring-1 ring-primary/40",
+                    active
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-white border-border hover:border-primary/50 hover:bg-muted/30"
+                  )}
+                >
+                  <Checkbox
+                    checked={toCheckboxChecked(checkState)}
+                    onCheckedChange={() => toggleSector(sector)}
+                    onClick={(e) => e.stopPropagation()}
+                    className={cn(active && "border-primary-foreground data-[state=checked]:bg-white data-[state=checked]:text-primary data-[state=indeterminate]:bg-white data-[state=indeterminate]:text-primary")}
+                  />
+                  <span className="leading-snug">{sector}</span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Level 2 — Sub-Sector */}
+        <div className="rounded-lg border bg-muted/10 p-3 flex flex-col">
+          <LevelHeader label="Sub-Sector" count={subSectors.length} />
+          <div className="h-[380px] overflow-y-auto space-y-1 pr-1">
+            {subSectorEntries.length === 0 ? (
+              <Placeholder text="Select a sector first" />
+            ) : (
+              subSectorEntries.map(({ sector, sub }) => {
+                const checkState = getSubCheckState(sector, sub, mappedIndustries)
+                const active     = checkState !== "unchecked"
+                const focused    = focusedSector === sector && focusedSubSector === sub
+                return (
+                  <div
+                    key={`${sector}::${sub}`}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => {
+                      setFocusedSector(sector)
+                      setFocusedSubSector(sub)
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        setFocusedSector(sector)
+                        setFocusedSubSector(sub)
+                      }
+                    }}
+                    className={cn(
+                      "flex items-start gap-2 rounded-lg px-2 py-2 cursor-pointer border transition-colors text-sm",
+                      focused && "ring-1 ring-primary/40",
+                      active
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-white border-border hover:border-primary/50 hover:bg-muted/30"
+                    )}
+                  >
+                    <Checkbox
+                      checked={toCheckboxChecked(checkState)}
+                      onCheckedChange={() => toggleSubSector(sector, sub)}
+                      onClick={(e) => e.stopPropagation()}
+                      className={cn(active && "border-primary-foreground data-[state=checked]:bg-white data-[state=checked]:text-primary data-[state=indeterminate]:bg-white data-[state=indeterminate]:text-primary")}
+                    />
+                    <span className="leading-snug">{sub}</span>
+                  </div>
+                )
+              })
+            )}
+          </div>
+        </div>
+
+        {/* Level 3 — Mapped Industries */}
+        <div className="rounded-lg border bg-muted/10 p-3 flex flex-col">
+          <LevelHeader label="Mapped Industries" count={mappedIndustries.length} />
+          <div className="h-[380px] overflow-y-auto space-y-1 pr-1">
+            {industryOptions.length === 0 ? (
+              <Placeholder text="Select a sub-sector first" />
+            ) : (
+              industryOptions.map((industry) => {
+                const selected = mappedIndustries.includes(industry)
+                return (
+                  <label
+                    key={industry}
+                    className={cn(
+                      "flex items-start gap-2 rounded-lg px-2 py-2 cursor-pointer border transition-colors text-sm",
+                      selected
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-white border-border hover:border-primary/50 hover:bg-muted/30"
+                    )}
+                  >
+                    <Checkbox
+                      checked={selected}
+                      onCheckedChange={() => toggleIndustry(industry)}
+                    />
+                    <span className="leading-snug">{industry}</span>
+                  </label>
+                )
+              })
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Selected mapped industries summary */}
+      {mappedIndustries.length > 0 && (
+        <div className="space-y-2 pt-2 border-t">
+          <Label className="text-xs text-muted-foreground uppercase tracking-wide">
+            Selected Mapped Industries
+          </Label>
+          <div className="flex flex-wrap gap-1.5">
+            {mappedIndustries.map((ind) => (
+              <Badge
+                key={ind}
+                className="text-xs gap-1 bg-primary/10 text-primary border-primary/20 hover:bg-primary/10"
+              >
+                {ind}
+                <button
+                  type="button"
+                  onClick={() => toggleIndustry(ind)}
+                  className="hover:opacity-70"
+                  aria-label={`Remove ${ind}`}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Section heading with optional required asterisk ───────────────────────────
+function SectionHeading({ required, children }: { required?: boolean; children: React.ReactNode }) {
+  return (
+    <h3 className="font-semibold text-sm">
+      {children}
+      {required && <span className="text-red-500"> *</span>}
+    </h3>
+  )
+}
+
 // ── Simple chip toggle ─────────────────────────────────────────────────────────
 function ChipGroup({ label, options, selected, onToggle }: {
   label: string
@@ -349,7 +827,9 @@ function IcpBuilderPageContent() {
   const [description, setDescription] = useState("")
 
   // ── Company filters ─────────────────────────────────────────────────────────
-  const [industries,           setIndustries]           = useState<string[]>([])
+  const [commercialSectors,    setCommercialSectors]    = useState<string[]>([])
+  const [subSectors,           setSubSectors]           = useState<string[]>([])
+  const [mappedIndustries,     setMappedIndustries]     = useState<string[]>([])
   const [commercialCategories, setCommercialCategories] = useState<string[]>([]) // Step 1.1
   const [businessModels,       setBusinessModels]       = useState<string[]>([])
   const [employeeRanges,       setEmployeeRanges]       = useState<string[]>([])
@@ -361,8 +841,19 @@ function IcpBuilderPageContent() {
   const [techStackExclude,      setTechStackExclude]      = useState<string[]>([]) // individual tool exclusions within included categories (like regionCountriesExclude)
   const [techStackInclude,      setTechStackInclude]      = useState<string[]>([]) // kept for payload compat
 
+  // ── Company Profile validation (save-time only) ─────────────────────────────
+  const [companyErrors, setCompanyErrors] = useState({
+    mappedIndustries: "",
+    employeeRanges:   "",
+    annualRevenues:   "",
+  })
+  const commercialSectorRef = useRef<HTMLDivElement>(null)
+  const employeeRangeRef    = useRef<HTMLDivElement>(null)
+  const annualRevenueRef    = useRef<HTMLDivElement>(null)
+
   // ── Validation error for Buyer Persona (Step 3) ──────────────────────────────
   const [personaError, setPersonaError] = useState("")
+  const [activeTab, setActiveTab]       = useState("company")
 
   // ── Target Market ───────────────────────────────────────────────────────────
   const [regionsInclude,         setRegionsInclude]         = useState<string[]>([])
@@ -386,6 +877,11 @@ function IcpBuilderPageContent() {
   const [matchedProspects, setMatchedProspects] = useState<Prospect[]>([])
   const [isMatching,       setIsMatching]       = useState(false)
   const [matchTotal,       setMatchTotal]       = useState(0)
+  const [matchDiagnosis,   setMatchDiagnosis]   = useState<Record<string, {
+    nullCount: number
+    totalProspects: number
+    percentage: number
+  }>>({})
 
   // Load ICP for edit — GET /api/icp/:id returns { success, data: icpObject }
   useEffect(() => {
@@ -397,7 +893,9 @@ function IcpBuilderPageContent() {
         if (!icp) return
         setName(icp.name ?? "")
         setDescription(icp.description ?? "")
-        setIndustries(icp.industries ?? [])
+        setCommercialSectors(icp.commercialSectors ?? icp.industries ?? [])
+        setSubSectors(icp.subSectors ?? [])
+        setMappedIndustries(icp.mappedIndustries ?? [])
         setBusinessModels(icp.businessModels ?? [])
         setEmployeeRanges(icp.employeeRanges ?? [])
         setRevenues(icp.annualRevenues ?? [])
@@ -431,6 +929,7 @@ function IcpBuilderPageContent() {
         : (res.data?.prospects ?? [])
       setMatchedProspects(prospects)
       setMatchTotal(res.pagination?.total ?? res.data?.pagination?.total ?? 0)
+      setMatchDiagnosis(res.diagnosis ?? {})
     } catch (err) {
       console.error("Match error:", err)
     } finally {
@@ -481,12 +980,72 @@ function IcpBuilderPageContent() {
     setTechCategoriesInclude(prev => prev.filter(c => c !== cat))
   }
 
+  const handleMappedIndustriesChange = (values: string[]) => {
+    setMappedIndustries(values)
+    if (values.length > 0) {
+      setCompanyErrors((prev) => ({ ...prev, mappedIndustries: "" }))
+    }
+  }
+
+  const handleEmployeeRangeToggle = (range: string) => {
+    setEmployeeRanges((prev) => {
+      const next = toggle(prev, range)
+      if (next.length > 0) {
+        setCompanyErrors((e) => ({ ...e, employeeRanges: "" }))
+      }
+      return next
+    })
+  }
+
+  const handleRevenueToggle = (rev: string) => {
+    setRevenues((prev) => {
+      const next = toggle(prev, rev)
+      if (next.length > 0) {
+        setCompanyErrors((e) => ({ ...e, annualRevenues: "" }))
+      }
+      return next
+    })
+  }
+
+  const scrollToFirstCompanyError = (errors: typeof companyErrors) => {
+    setActiveTab("company")
+    const target =
+      errors.mappedIndustries ? commercialSectorRef :
+      errors.employeeRanges   ? employeeRangeRef :
+      errors.annualRevenues   ? annualRevenueRef :
+      null
+    requestAnimationFrame(() => {
+      target?.current?.scrollIntoView({ behavior: "smooth", block: "center" })
+    })
+  }
+
   const handleSave = async () => {
-    if (!name.trim()) { setSaveMsg("❌ ICP naam zaroori hai."); return }
+    if (!name.trim()) { setSaveMsg("❌ ICP name is required."); return }
+
+    const profileErrors = {
+      mappedIndustries: mappedIndustries.length === 0
+        ? "Please select at least one mapped industry"
+        : "",
+      employeeRanges: employeeRanges.length === 0
+        ? "Please select at least one employee range"
+        : "",
+      annualRevenues: revenues.length === 0
+        ? "Please select at least one revenue range"
+        : "",
+    }
+    if (profileErrors.mappedIndustries || profileErrors.employeeRanges || profileErrors.annualRevenues) {
+      setCompanyErrors(profileErrors)
+      setSaveMsg("❌ Please complete all required fields in Company Profile.")
+      scrollToFirstCompanyError(profileErrors)
+      return
+    }
+    setCompanyErrors({ mappedIndustries: "", employeeRanges: "", annualRevenues: "" })
+
     // Step 3 — Buyer Persona mandatory validation
     if (targetSeniorities.length === 0 && targetDepartments.length === 0 && targetDesignations.length === 0) {
       setPersonaError("Please select at least one Seniority, Department, or Designation.")
       setSaveMsg("❌ Buyer Persona is required before saving.")
+      setActiveTab("persona")
       return
     }
     setPersonaError("")
@@ -496,7 +1055,10 @@ function IcpBuilderPageContent() {
       const payload = {
         name: name.trim(),
         description:            description || undefined,
-        industries,
+        commercialSectors,
+        subSectors,
+        mappedIndustries,
+        industries: commercialSectors,
         commercialCategories,
         businessModels,
         employeeRanges,
@@ -581,7 +1143,7 @@ function IcpBuilderPageContent() {
 
         {/* ── Left: Form ── */}
         <div className="lg:col-span-2">
-          <Tabs defaultValue="company">
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="w-full">
               <TabsTrigger value="company" className="flex-1">Company Profile</TabsTrigger>
               <TabsTrigger value="market" className="flex-1 gap-1.5">
@@ -611,7 +1173,9 @@ function IcpBuilderPageContent() {
               <Card>
                 <CardContent className="p-4 space-y-3">
                   <div className="space-y-1.5">
-                    <Label>ICP Name *</Label>
+                    <Label>
+                      ICP Name<span className="text-red-500"> *</span>
+                    </Label>
                     <Input
                       placeholder="e.g. Enterprise BFSI APAC"
                       value={name}
@@ -629,17 +1193,30 @@ function IcpBuilderPageContent() {
                 </CardContent>
               </Card>
 
-              {/* Step 1.2 — Commercial Sector (renamed from Industries) */}
-              <Card>
-                <CardContent className="p-4">
-                  <ChipGroup
-                    label="Commercial Sector"
-                    options={COMMERCIAL_SECTOR_OPTIONS}
-                    selected={industries}
-                    onToggle={v => setIndustries(p => toggle(p, v))}
+              {/* Step 1.2 — Commercial Sector (3-level cascading) */}
+              <div ref={commercialSectorRef}>
+              <Card
+                className={cn(companyErrors.mappedIndustries && "border-red-500 ring-1 ring-red-500")}
+              >
+                <CardContent className="p-4 space-y-2">
+                  <SectionHeading required>Commercial Sector</SectionHeading>
+                  <p className="text-xs text-muted-foreground">
+                    Select sector → sub-sector → mapped industries. Multi-select at each level.
+                  </p>
+                  <SectorTaxonomySelector
+                    commercialSectors={commercialSectors}
+                    subSectors={subSectors}
+                    mappedIndustries={mappedIndustries}
+                    onCommercialSectorsChange={setCommercialSectors}
+                    onSubSectorsChange={setSubSectors}
+                    onMappedIndustriesChange={handleMappedIndustriesChange}
                   />
+                  {companyErrors.mappedIndustries && (
+                    <p className="text-sm text-red-500">{companyErrors.mappedIndustries}</p>
+                  )}
                 </CardContent>
               </Card>
+              </div>
 
               {/* Business Models */}
               <Card>
@@ -665,42 +1242,62 @@ function IcpBuilderPageContent() {
                 </CardContent>
               </Card>
 
-              {/* Employee Range + Revenue */}
-              <div className="grid grid-cols-2 gap-4">
-                <Card>
-                  <CardContent className="p-4 space-y-3">
-                    <h3 className="font-semibold text-sm">Employee Range</h3>
+              {/* Employee Range + Revenue — equal height via grid stretch */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
+                <div ref={employeeRangeRef} className="h-full">
+                <Card
+                  className={cn(
+                    "h-full",
+                    companyErrors.employeeRanges && "border-red-500 ring-1 ring-red-500"
+                  )}
+                >
+                  <CardContent className="p-4 space-y-3 h-full">
+                    <SectionHeading required>Employee Range</SectionHeading>
                     <div className="space-y-2">
                       {EMPLOYEE_RANGES.map(range => (
                         <div key={range} className="flex items-center gap-2">
                           <Checkbox
                             id={`emp-${range}`}
                             checked={employeeRanges.includes(range)}
-                            onCheckedChange={() => setEmployeeRanges(p => toggle(p, range))}
+                            onCheckedChange={() => handleEmployeeRangeToggle(range)}
                           />
                           <label htmlFor={`emp-${range}`} className="text-sm cursor-pointer">{range}</label>
                         </div>
                       ))}
                     </div>
+                    {companyErrors.employeeRanges && (
+                      <p className="text-sm text-red-500">{companyErrors.employeeRanges}</p>
+                    )}
                   </CardContent>
                 </Card>
-                <Card>
-                  <CardContent className="p-4 space-y-3">
-                    <h3 className="font-semibold text-sm">Annual Revenue</h3>
+                </div>
+                <div ref={annualRevenueRef} className="h-full">
+                <Card
+                  className={cn(
+                    "h-full",
+                    companyErrors.annualRevenues && "border-red-500 ring-1 ring-red-500"
+                  )}
+                >
+                  <CardContent className="p-4 space-y-3 h-full">
+                    <SectionHeading required>Annual Revenue</SectionHeading>
                     <div className="space-y-2">
                       {REVENUE_RANGES.map(rev => (
                         <div key={rev} className="flex items-center gap-2">
                           <Checkbox
                             id={`rev-${rev}`}
                             checked={revenues.includes(rev)}
-                            onCheckedChange={() => setRevenues(p => toggle(p, rev))}
+                            onCheckedChange={() => handleRevenueToggle(rev)}
                           />
                           <label htmlFor={`rev-${rev}`} className="text-xs cursor-pointer">{rev}</label>
                         </div>
                       ))}
                     </div>
+                    {companyErrors.annualRevenues && (
+                      <p className="text-sm text-red-500">{companyErrors.annualRevenues}</p>
+                    )}
                   </CardContent>
                 </Card>
+                </div>
               </div>
             </TabsContent>
 
@@ -1046,8 +1643,50 @@ function IcpBuilderPageContent() {
               )}
 
               {!isMatching && savedIcpId && matchedProspects.length === 0 && (
-                <div className="p-6 text-center text-sm text-muted-foreground">
-                  No prospects match this ICP. Try loosening the criteria.
+                <div className="p-4 space-y-3">
+                  <p className="text-center text-sm text-muted-foreground">
+                    {Object.keys(matchDiagnosis).length > 0
+                      ? "No prospects matched your ICP criteria."
+                      : "No prospects match this ICP. Try loosening the criteria."}
+                  </p>
+
+                  {Object.keys(matchDiagnosis).length > 0 && (
+                    <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-900 space-y-3">
+                      <p className="font-medium">Why are there 0 matches?</p>
+                      <p className="text-yellow-800">
+                        Your ICP filters are set but prospect data is missing for these fields:
+                      </p>
+                      <ul className="space-y-2 text-yellow-900">
+                        {matchDiagnosis.primaryIndustry && (
+                          <li>
+                            • Primary Industry — {matchDiagnosis.primaryIndustry.nullCount}/
+                            {matchDiagnosis.primaryIndustry.totalProspects} prospects (
+                            {matchDiagnosis.primaryIndustry.percentage}%) have no industry data
+                          </li>
+                        )}
+                        {matchDiagnosis.employeeRange && (
+                          <li>
+                            • Employee Range — {matchDiagnosis.employeeRange.nullCount}/
+                            {matchDiagnosis.employeeRange.totalProspects} prospects (
+                            {matchDiagnosis.employeeRange.percentage}%) have no employee range data
+                          </li>
+                        )}
+                        {matchDiagnosis.annualRevenue && (
+                          <li>
+                            • Annual Revenue — {matchDiagnosis.annualRevenue.nullCount}/
+                            {matchDiagnosis.annualRevenue.totalProspects} prospects (
+                            {matchDiagnosis.annualRevenue.percentage}%) have no revenue data
+                          </li>
+                        )}
+                      </ul>
+                      <div className="text-yellow-800 space-y-1 pt-1 border-t border-yellow-200">
+                        <p className="font-medium">Suggested fixes:</p>
+                        <p>→ Re-import your Excel with these columns added</p>
+                        <p>→ Or run Enrichment to auto-fill missing data</p>
+                        <p>→ Or remove these filters from your ICP</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
