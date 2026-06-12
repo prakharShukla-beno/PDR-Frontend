@@ -1,14 +1,15 @@
-/** Normalize API base URL — handles trailing slashes and missing /api suffix */
-function getBaseUrl(): string {
-  const raw = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"
+/** Server-side / SSR: absolute backend URL. Browser: same-origin proxy via next.config rewrites */
+export function getApiBaseUrl(): string {
+  if (typeof window !== "undefined") return "/api"
+
+  const raw =
+    process.env.BACKEND_URL ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    "http://localhost:5000"
   let base = raw.trim().replace(/\/+$/, "")
-  if (!base.endsWith("/api")) {
-    base = `${base}/api`
-  }
+  if (!base.endsWith("/api")) base = `${base}/api`
   return base
 }
-
-const BASE_URL = getBaseUrl()
 // ─── Token helpers ────────────────────────────────────────────────────────────
 export const getToken = (): string | null => {
   if (typeof window === "undefined") return null
@@ -72,7 +73,16 @@ async function request<T>(endpoint: string, options: {
     config.body = isFormData ? (body as FormData) : JSON.stringify(body)
   }
 
-  const res = await fetch(`${BASE_URL}${endpoint}`, config)
+  let res: Response
+  try {
+    res = await fetch(`${getApiBaseUrl()}${endpoint}`, config)
+  } catch {
+    const hint =
+      typeof window !== "undefined"
+        ? "Check BACKEND_URL in .env (e.g. https://pdr-backend-5c2y.onrender.com) and restart npm run dev."
+        : "Set BACKEND_URL in .env to your backend origin."
+    throw new ApiError(`Cannot connect to API. ${hint}`, 0)
+  }
 
   let data: unknown
   try { data = await res.json() } catch { data = null }
@@ -87,7 +97,13 @@ async function request<T>(endpoint: string, options: {
   }
 
   if (!res.ok) {
-    const message = (data as { message?: string })?.message || `Request failed (${res.status})`
+    const proxyHint =
+      res.status === 500 && typeof window !== "undefined"
+        ? " Backend may be unreachable — check BACKEND_URL in .env and restart npm run dev."
+        : ""
+    const message =
+      (data as { message?: string })?.message ||
+      `Request failed (${res.status}).${proxyHint}`
     throw new ApiError(message, res.status, data)
   }
 

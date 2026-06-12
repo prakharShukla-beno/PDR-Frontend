@@ -6,8 +6,7 @@ import { ArrowLeft, Loader2, Mail, CheckCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"
+import { getApiBaseUrl } from "@/lib/api"
 
 export default function ForgotPasswordPage() {
   const [email, setEmail]       = useState("")
@@ -26,7 +25,7 @@ export default function ForgotPasswordPage() {
 
     setIsLoading(true)
     try {
-      const res = await fetch(`${BASE_URL}/auth/forgot-password`, {
+      const res = await fetch(`${getApiBaseUrl()}/auth/forgot-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),

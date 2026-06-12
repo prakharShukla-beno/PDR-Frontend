@@ -7,9 +7,7 @@ import { Eye, EyeOff, Loader2, CheckCircle, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { setToken, setStoredUser } from "@/lib/api"
-
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"
+import { getApiBaseUrl, setToken, setStoredUser } from "@/lib/api"
 
 function ResetPasswordPageContent() {
   const searchParams  = useSearchParams()
@@ -50,7 +48,7 @@ function ResetPasswordPageContent() {
 
     setIsLoading(true)
     try {
-      const res = await fetch(`${BASE_URL}/auth/reset-password`, {
+      const res = await fetch(`${getApiBaseUrl()}/auth/reset-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token, newPassword }),
