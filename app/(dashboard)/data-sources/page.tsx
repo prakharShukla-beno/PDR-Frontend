@@ -18,7 +18,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
-import { api, ApiError } from "@/lib/api"
+import { api, fileApi, ApiError } from "@/lib/api"
 import { IcpImportPreviewModal } from "@/components/import/IcpImportPreviewModal"
 
 // ── Connector config — static UI ──
@@ -112,7 +112,7 @@ export default function DataSourcesPage() {
     try {
       const formData = new FormData()
       formData.append("file", file)
-      const res = await api.upload<any>("/import/excel/preview", formData)
+      const res = await fileApi.upload<any>("/import/excel/preview", formData)
       const preview = res?.data ?? res
       setImportPreview({
         missingIcpColumns: preview?.missingIcpColumns ?? [],
@@ -140,7 +140,7 @@ export default function DataSourcesPage() {
     try {
       const formData = new FormData()
       formData.append("file", uploadFile)
-      const res = await api.upload<any>("/import/excel", formData)
+      const res = await fileApi.upload<any>("/import/excel", formData)
       const result = res?.data || res
       const saved  = result?.successCount ?? 0
       const total  = result?.totalRows ?? saved

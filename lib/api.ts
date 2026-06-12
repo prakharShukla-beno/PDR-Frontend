@@ -1,14 +1,36 @@
-/** Server-side / SSR: absolute backend URL. Browser: same-origin proxy via next.config rewrites */
+const DEFAULT_BACKEND = "http://localhost:5000"
+
+/** Backend origin without /api suffix */
+export function getDirectBackendUrl(): string {
+  const raw =
+    process.env.NEXT_PUBLIC_BACKEND_URL ||
+    process.env.BACKEND_URL ||
+    process.env.NEXT_PUBLIC_API_URL?.replace(/\/api\/?$/, "") ||
+    DEFAULT_BACKEND
+  return raw.trim().replace(/\/+$/, "")
+}
+
+function toApiBase(origin: string): string {
+  const base = origin.trim().replace(/\/+$/, "")
+  return base.endsWith("/api") ? base : `${base}/api`
+}
+
+/** Regular JSON API — browser uses Next.js proxy; SSR uses BACKEND_URL */
 export function getApiBaseUrl(): string {
   if (typeof window !== "undefined") return "/api"
-
-  const raw =
+  return toApiBase(
     process.env.BACKEND_URL ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    "http://localhost:5000"
-  let base = raw.trim().replace(/\/+$/, "")
-  if (!base.endsWith("/api")) base = `${base}/api`
-  return base
+      process.env.NEXT_PUBLIC_BACKEND_URL ||
+      DEFAULT_BACKEND
+  )
+}
+
+/**
+ * File uploads — always hit backend directly (bypasses Vercel 4.5MB proxy limit).
+ * Browser CORS must allow the frontend origin on the backend.
+ */
+export function getFileUploadBaseUrl(): string {
+  return toApiBase(getDirectBackendUrl())
 }
 // ─── Token helpers ────────────────────────────────────────────────────────────
 export const getToken = (): string | null => {
@@ -49,13 +71,24 @@ export class ApiError extends Error {
 }
 
 // ─── Core fetch ───────────────────────────────────────────────────────────────
-async function request<T>(endpoint: string, options: {
-  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
-  body?: object | FormData
-  headers?: Record<string, string>
-  isFormData?: boolean
-} = {}): Promise<T> {
-  const { method = "GET", body, headers = {}, isFormData = false } = options
+async function request<T>(
+  baseUrl: string,
+  endpoint: string,
+  options: {
+    method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
+    body?: object | FormData
+    headers?: Record<string, string>
+    isFormData?: boolean
+    connectionHint?: string
+  } = {}
+): Promise<T> {
+  const {
+    method = "GET",
+    body,
+    headers = {},
+    isFormData = false,
+    connectionHint,
+  } = options
   const token = getToken()
 
   const requestHeaders: Record<string, string> = {
@@ -75,12 +108,13 @@ async function request<T>(endpoint: string, options: {
 
   let res: Response
   try {
-    res = await fetch(`${getApiBaseUrl()}${endpoint}`, config)
+    res = await fetch(`${baseUrl}${endpoint}`, config)
   } catch {
     const hint =
-      typeof window !== "undefined"
-        ? "Check BACKEND_URL in .env (e.g. https://pdr-backend-5c2y.onrender.com) and restart npm run dev."
-        : "Set BACKEND_URL in .env to your backend origin."
+      connectionHint ??
+      (typeof window !== "undefined"
+        ? "Check BACKEND_URL in .env and restart npm run dev."
+        : "Set BACKEND_URL in .env to your backend origin.")
     throw new ApiError(`Cannot connect to API. ${hint}`, 0)
   }
 
@@ -110,26 +144,42 @@ async function request<T>(endpoint: string, options: {
   return data as T
 }
 
-// ─── HTTP methods ─────────────────────────────────────────────────────────────
-export const api = {
-  get:    <T>(endpoint: string) =>
-    request<T>(endpoint, { method: "GET" }),
+function createClient(baseUrl: string, connectionHint?: string) {
+  return {
+    get: <T>(endpoint: string) =>
+      request<T>(baseUrl, endpoint, { method: "GET", connectionHint }),
 
-  post:   <T>(endpoint: string, body?: object) =>
-    request<T>(endpoint, { method: "POST", body }),
+    post: <T>(endpoint: string, body?: object) =>
+      request<T>(baseUrl, endpoint, { method: "POST", body, connectionHint }),
 
-  put:    <T>(endpoint: string, body?: object) =>
-    request<T>(endpoint, { method: "PUT", body }),
+    put: <T>(endpoint: string, body?: object) =>
+      request<T>(baseUrl, endpoint, { method: "PUT", body, connectionHint }),
 
-  patch:  <T>(endpoint: string, body?: object) =>
-    request<T>(endpoint, { method: "PATCH", body }),
+    patch: <T>(endpoint: string, body?: object) =>
+      request<T>(baseUrl, endpoint, { method: "PATCH", body, connectionHint }),
 
-  delete: <T>(endpoint: string) =>
-    request<T>(endpoint, { method: "DELETE" }),
+    delete: <T>(endpoint: string) =>
+      request<T>(baseUrl, endpoint, { method: "DELETE", connectionHint }),
 
-  upload: <T>(endpoint: string, formData: FormData) =>
-    request<T>(endpoint, { method: "POST", body: formData, isFormData: true }),
+    upload: <T>(endpoint: string, formData: FormData) =>
+      request<T>(baseUrl, endpoint, {
+        method: "POST",
+        body: formData,
+        isFormData: true,
+        connectionHint,
+      }),
+  }
 }
+
+// ─── HTTP methods ─────────────────────────────────────────────────────────────
+/** JSON API — proxied through Next.js in the browser */
+export const api = createClient(getApiBaseUrl())
+
+/** File uploads — direct to backend (avoids Vercel payload limit) */
+export const fileApi = createClient(
+  getFileUploadBaseUrl(),
+  "Check NEXT_PUBLIC_BACKEND_URL points to your Render backend."
+)
 
 // ─── Prospects: Scoring & Tiering ─────────────────────────────────────────────
 

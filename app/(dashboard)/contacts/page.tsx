@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
-import { api, ApiError } from "@/lib/api"
+import { api, fileApi, ApiError } from "@/lib/api"
 import type { Contact, Prospect } from "@/types"
 import { FilterPanel, FilterState, EMPTY_FILTERS, buildFilterQuery, countActiveFilters } from "@/components/filters/FilterPanel"
 //import DuplicateReviewModal from "@/components/import/DuplicateReviewModal"
@@ -164,7 +164,7 @@ const handleUpload = async () => {
     try {
       const formData = new FormData()
       formData.append("file", uploadFile)
-      const res = await api.upload<any>("/import/contacts", formData)
+      const res = await fileApi.upload<any>("/import/contacts", formData)
 
       const result     = res?.data || res
       const duplicates = result?.duplicates || []
