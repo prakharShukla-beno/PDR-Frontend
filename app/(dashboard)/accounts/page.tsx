@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
-import { api, ApiError } from "@/lib/api"
+import { api, fileApi, ApiError } from "@/lib/api"
 import type { Prospect } from "@/types"
 import { FilterPanel, FilterState, EMPTY_FILTERS, buildFilterQuery, countActiveFilters } from "@/components/filters/FilterPanel"
 import { IcpImportPreviewModal } from "@/components/import/IcpImportPreviewModal"
@@ -175,7 +175,7 @@ function AccountsPageContent() {
     try {
       const formData = new FormData()
       formData.append("file", file)
-      const res = await api.upload<any>("/import/excel/preview", formData)
+      const res = await fileApi.upload<any>("/import/excel/preview", formData)
       const preview = res?.data ?? res
       setImportPreview({
         missingIcpColumns: preview?.missingIcpColumns ?? [],
@@ -200,7 +200,7 @@ function AccountsPageContent() {
     setShowImportPreview(false)
     try {
       const formData = new FormData(); formData.append("file", uploadFile)
-      const res = await api.upload<any>("/import/excel", formData)
+      const res = await fileApi.upload<any>("/import/excel", formData)
 
       // Response check — are there duplicates?
       const result = res?.data || res
