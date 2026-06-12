@@ -377,8 +377,8 @@ export default function SegmentsPage() {
                       )}
 
                       {/* Buyer persona indicator */}
-                      {(icp.buyerPersona?.targetSeniorities?.length > 0 ||
-                        icp.buyerPersona?.targetDepartments?.length > 0) && (
+                      {(icp.buyerPersona?.designations?.length > 0 ||
+                        icp.buyerPersona?.functionalDomains?.length > 0) && (
                         <div className="flex items-center gap-1">
                           <Badge variant="outline" className="text-xs text-purple-700 border-purple-200 bg-purple-50">
                             Persona defined
