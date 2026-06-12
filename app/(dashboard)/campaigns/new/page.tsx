@@ -407,7 +407,7 @@ export default function CampaignWizardPage() {
                 >
                   <Rocket className="h-6 w-6 text-primary mb-2" />
                   <p className="font-medium">Launch Now</p>
-                  <p className="text-xs text-muted-foreground mt-1">Campaign turant active ho jaayegi</p>
+                  <p className="text-xs text-muted-foreground mt-1">The campaign will be activated immediately.</p>
                 </div>
                 <div
                   className={`p-4 border rounded-lg cursor-pointer transition-all ${
