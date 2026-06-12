@@ -240,6 +240,10 @@ export interface Campaign {
 
 // ─── ICP ──────────────────────────────────────────────────────────────────────
 export interface BuyerPersona {
+  functionalDomains?: string[]
+  seniorityLevels?: string[]
+  designations?: string[]
+  /** @deprecated legacy fields */
   targetSeniorities?: string[]
   targetDepartments?: string[]
   targetDesignations?: string[]

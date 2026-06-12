@@ -7,7 +7,12 @@ export const ICP_COLUMN_LABELS: Record<string, string> = {
   primaryIndustry: "Primary Industry",
   employeeRange:   "Employee Range",
   annualRevenue:   "Annual Revenue",
+  country:         "Country / Region",
+  techStack:       "Primary Tech Stack",
+  designation:     "Buyer Persona / Designation",
 }
+
+const TOTAL_ICP_FIELDS = 6
 
 type PreviewRow = {
   accountName?: string
@@ -40,12 +45,26 @@ export function IcpImportPreviewModal({
 }: Props) {
   if (!open) return null
 
-  const allMissing = missingColumns.length === 3
-  const someMissing = missingColumns.length > 0
+  const missingCount = missingColumns.length
+  const someMissing = missingCount > 0
+  const allMissing = missingCount === TOTAL_ICP_FIELDS
+  const mostMissing = missingCount >= 4 && missingCount < TOTAL_ICP_FIELDS
 
   const missingLabels = missingColumns.map(
     (key) => ICP_COLUMN_LABELS[key] || key
   )
+
+  const bannerClass = allMissing
+    ? "bg-red-50 border-red-200 text-red-900"
+    : mostMissing
+      ? "bg-orange-50 border-orange-200 text-orange-900"
+      : "bg-yellow-50 border-yellow-200 text-yellow-900"
+
+  const bannerTitle = allMissing
+    ? "No ICP Matching Data Detected"
+    : mostMissing
+      ? "Most ICP Matching Columns Missing"
+      : "Missing ICP Matching Columns"
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -57,28 +76,16 @@ export function IcpImportPreviewModal({
           </div>
 
           {someMissing && (
-            <div
-              className={`rounded-lg border p-4 space-y-2 ${
-                allMissing
-                  ? "bg-orange-50 border-orange-200 text-orange-900"
-                  : "bg-yellow-50 border-yellow-200 text-yellow-900"
-              }`}
-            >
+            <div className={`rounded-lg border p-4 space-y-2 ${bannerClass}`}>
               <div className="flex items-start gap-2 font-medium">
                 <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
-                <span>
-                  {allMissing
-                    ? "No ICP Matching Data Detected"
-                    : "Missing ICP Matching Columns"}
-                </span>
+                <span>⚠️ {bannerTitle}</span>
               </div>
 
               {allMissing ? (
                 <p className="text-sm pl-7">
-                  Primary Industry, Employee Range, and Annual Revenue columns are all
-                  missing from your file. Prospects will be imported, but they will not
-                  match any ICP filters based on these fields. ICP matching will return
-                  0 results for these criteria unless you re-import with complete data.
+                  None of the ICP matching columns were found in your file.
+                  Imported prospects will not match any ICP filters.
                 </p>
               ) : (
                 <>
@@ -89,9 +96,9 @@ export function IcpImportPreviewModal({
                     ))}
                   </ul>
                   <p className="text-sm pl-7">
-                    Prospects will be imported successfully, but ICP matching accuracy will
-                    be limited for these fields. Consider adding these columns to your Excel
-                    file before re-importing.
+                    {mostMissing
+                      ? "ICP matching will be significantly limited. Consider adding these columns before importing."
+                      : "Prospects will be imported successfully, but ICP matching accuracy will be limited for these fields."}
                   </p>
                 </>
               )}

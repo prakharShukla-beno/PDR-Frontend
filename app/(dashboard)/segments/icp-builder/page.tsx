@@ -7,13 +7,13 @@
 //   PUT  /api/icp/:id          → update
 //   GET  /api/icp/:id/match-prospects → matching accounts
 
-import { useEffect, useRef, useState, Suspense } from "react"
+import { Fragment, useEffect, useRef, useState, Suspense } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import {
   ArrowLeft, Loader2, Save, Users,
   Building2, Target, ChevronRight,
-  Globe, MapPin, X, Plus, Cpu,
+  Globe, MapPin, X, Plus, Cpu, Search,
 } from "lucide-react"
 import { Button }            from "@/components/ui/button"
 import { Input }             from "@/components/ui/input"
@@ -171,53 +171,255 @@ const REVENUE_RANGES  = [
   "Mid-Market $50M-$250M", "Corporate $250M-$1B", "Enterprise $1B+",
 ]
 
-// Regions — image 1 reference
-const REGIONS = [
-  { label: "Asia-Pacific (APAC)",   countries: ["China","Japan","India","Pakistan","Australia","South Korea","Indonesia","Singapore"] },
-  { label: "Middle East",           countries: ["Saudi Arabia","UAE","Israel","Qatar","Kuwait","Jordan","Oman"] },
-  { label: "Africa",                countries: ["Nigeria","South Africa","Kenya","Egypt","Ghana","Ethiopia"] },
-  { label: "Europe",                countries: ["Germany","UK","France","Italy","Spain","Netherlands","Switzerland"] },
-  { label: "North America (NA)",    countries: ["United States","Canada"] },
-  { label: "Latin America (LATAM)", countries: ["Brazil","Mexico","Argentina","Chile","Colombia","Peru"] },
+// Preferential Market — region → country mapping (complete)
+const REGION_COUNTRIES: Record<string, string[]> = {
+  "North America (NA)": ["United States", "Canada", "Mexico"],
+  "Europe": [
+    "United Kingdom", "Germany", "France", "Netherlands", "Sweden",
+    "Norway", "Denmark", "Finland", "Switzerland", "Austria", "Belgium",
+    "Spain", "Italy", "Portugal", "Ireland", "Poland", "Czech Republic",
+    "Hungary", "Romania", "Bulgaria", "Greece", "Croatia", "Slovakia",
+    "Slovenia", "Estonia", "Latvia", "Lithuania", "Luxembourg", "Malta",
+    "Cyprus", "Iceland", "Serbia", "Ukraine", "Belarus", "Bosnia and Herzegovina",
+  ],
+  "Asia-Pacific (APAC)": [
+    "China", "Japan", "South Korea", "Australia", "New Zealand",
+    "Hong Kong", "Taiwan", "Macau", "Mongolia", "Papua New Guinea",
+    "Fiji", "Samoa", "Tonga", "Vanuatu", "Solomon Islands",
+  ],
+  "South Asia": [
+    "India", "Pakistan", "Bangladesh", "Sri Lanka", "Nepal",
+    "Bhutan", "Maldives", "Afghanistan",
+  ],
+  "Southeast Asia": [
+    "Singapore", "Indonesia", "Malaysia", "Thailand", "Vietnam",
+    "Philippines", "Myanmar", "Cambodia", "Laos", "Brunei",
+    "Timor-Leste",
+  ],
+  "Middle East": [
+    "Turkey", "Israel", "Jordan", "Lebanon", "Syria", "Iraq",
+    "Iran", "Yemen", "Oman", "Kuwait", "Bahrain", "Qatar",
+  ],
+  "GCC": [
+    "Saudi Arabia", "United Arab Emirates", "Qatar", "Kuwait",
+    "Bahrain", "Oman",
+  ],
+  "Latin America (LATAM)": [
+    "Brazil", "Mexico", "Argentina", "Colombia", "Chile", "Peru",
+    "Venezuela", "Ecuador", "Bolivia", "Paraguay", "Uruguay",
+    "Costa Rica", "Panama", "Guatemala", "Honduras", "El Salvador",
+    "Nicaragua", "Dominican Republic", "Cuba", "Puerto Rico",
+    "Trinidad and Tobago", "Jamaica",
+  ],
+  "Africa": [
+    "South Africa", "Nigeria", "Kenya", "Egypt", "Ghana", "Ethiopia",
+    "Tanzania", "Uganda", "Rwanda", "Senegal", "Ivory Coast",
+    "Cameroon", "Angola", "Mozambique", "Zambia", "Zimbabwe",
+    "Morocco", "Tunisia", "Algeria", "Libya", "Sudan",
+  ],
+}
+
+const REGION_ORDER = [
+  "North America (NA)", "Europe", "Asia-Pacific (APAC)", "South Asia",
+  "Southeast Asia", "Middle East", "GCC", "Latin America (LATAM)", "Africa",
+] as const
+
+const REGIONS = REGION_ORDER.map((label) => ({
+  label,
+  countries: REGION_COUNTRIES[label] ?? [],
+}))
+
+const POPULAR_COUNTRIES = [
+  "United States", "India", "United Kingdom", "Germany", "Canada", "Australia",
+  "Singapore", "United Arab Emirates", "Saudi Arabia", "France", "Netherlands", "Brazil",
 ]
 
-// All countries — image 2 & 3 reference (alphabetical)
+// All countries — region union + supplemental world list (alphabetical)
+const EXTRA_COUNTRIES = [
+  "Albania", "Algeria", "Andorra", "Angola", "Antigua and Barbuda", "Armenia",
+  "Austria", "Azerbaijan", "Bahamas", "Barbados", "Belize", "Benin", "Botswana",
+  "Burkina Faso", "Burundi", "Cabo Verde", "Central African Republic", "Chad",
+  "Comoros", "Congo (Congo-Brazzaville)", "Democratic Republic of the Congo",
+  "Djibouti", "Dominica", "Equatorial Guinea", "Eritrea", "Eswatini", "Gabon",
+  "Gambia", "Georgia", "Grenada", "Guinea", "Guinea-Bissau", "Guyana", "Haiti",
+  "Kazakhstan", "Kiribati", "Kyrgyzstan", "Lesotho", "Liberia", "Liechtenstein",
+  "Madagascar", "Malawi", "Mali", "Marshall Islands", "Mauritania", "Mauritius",
+  "Micronesia", "Moldova", "Monaco", "Montenegro", "Namibia", "Nauru", "Niger",
+  "North Korea", "North Macedonia", "Palau", "Palestine", "Russia", "Saint Kitts and Nevis",
+  "Saint Lucia", "Saint Vincent", "San Marino", "Seychelles", "Sierra Leone",
+  "Somalia", "South Sudan", "Suriname", "Tajikistan", "Togo", "Turkmenistan",
+  "Tuvalu", "Uzbekistan",
+]
+
 const ALL_COUNTRIES = [
-  "Afghanistan","Albania","Algeria","Andorra","Angola","Antigua and Barbuda",
-  "Argentina","Armenia","Australia","Austria","Azerbaijan","Bahamas","Bahrain",
-  "Bangladesh","Barbados","Belarus","Belgium","Belize","Benin","Bhutan",
-  "Bolivia","Bosnia and Herzegovina","Botswana","Brazil","Brunei","Bulgaria",
-  "Burkina Faso","Burundi","Cabo Verde","Cambodia","Cameroon","Canada",
-  "Central African Republic","Chad","Chile","China","Colombia","Comoros",
-  "Congo (Congo-Brazzaville)","Costa Rica","Croatia","Cuba","Cyprus",
-  "Czechia (Czech Republic)","Democratic Republic of the Congo","Denmark",
-  "Djibouti","Dominica","Dominican Republic","Ecuador","Egypt","El Salvador",
-  "Equatorial Guinea","Eritrea","Estonia","Eswatini","Ethiopia","Fiji","Finland",
-  "France","Gabon","Gambia","Georgia","Germany","Ghana","Greece","Grenada",
-  "Guatemala","Guinea","Guinea-Bissau","Guyana","Haiti","Honduras","Hungary",
-  "Iceland","India","Indonesia","Iran","Iraq","Ireland","Israel","Italy",
-  "Jamaica","Japan","Jordan","Kazakhstan","Kenya","Kiribati","Kuwait",
-  "Kyrgyzstan","Laos","Latvia","Lebanon","Lesotho","Liberia","Libya",
-  "Liechtenstein","Lithuania","Luxembourg","Madagascar","Malawi","Malaysia",
-  "Maldives","Mali","Malta","Marshall Islands","Mauritania","Mauritius","Mexico",
-  "Micronesia","Moldova","Monaco","Mongolia","Montenegro","Morocco","Mozambique",
-  "Myanmar","Namibia","Nauru","Nepal","Netherlands","New Zealand","Nicaragua",
-  "Niger","Nigeria","North Korea","North Macedonia","Norway","Oman","Pakistan",
-  "Palau","Palestine","Panama","Papua New Guinea","Paraguay","Peru","Philippines",
-  "Poland","Portugal","Qatar","Romania","Russia","Rwanda","Saint Kitts and Nevis",
-  "Saint Lucia","Saint Vincent","Samoa","San Marino","Saudi Arabia","Senegal",
-  "Serbia","Seychelles","Sierra Leone","Singapore","Slovakia","Slovenia",
-  "Solomon Islands","Somalia","South Africa","South Korea","South Sudan","Spain",
-  "Sri Lanka","Sudan","Suriname","Sweden","Switzerland","Syria","Taiwan",
-  "Tajikistan","Tanzania","Thailand","Timor-Leste","Togo","Tonga",
-  "Trinidad and Tobago","Tunisia","Turkey","Turkmenistan","Tuvalu","UAE",
-  "Uganda","UK","Ukraine","United States","Uruguay","Uzbekistan","Vanuatu",
-  "Venezuela","Vietnam","Yemen","Zambia","Zimbabwe",
-]
+  ...new Set([
+    ...Object.values(REGION_COUNTRIES).flat(),
+    ...EXTRA_COUNTRIES,
+  ]),
+].sort((a, b) => a.localeCompare(b))
 
-const SENIORITY_OPTIONS   = ["C-Suite", "VP", "Director", "Manager", "Senior IC"]
-const DEPARTMENT_OPTIONS  = ["Technology", "Operations", "Sales", "Finance", "Marketing", "HR"]
-const DESIGNATION_OPTIONS = ["CTO", "VP Engineering", "IT Director", "CIO", "VP Sales", "Head of Operations", "CFO"]
+const getCountryViaRegion = (
+  country: string,
+  regionsInclude: string[] = [],
+  regionsExclude: string[] = [],
+  regionCountriesExclude: string[] = [],
+): { type: "include" | "exclude"; region: string } | null => {
+  for (const region of regionsExclude ?? []) {
+    if ((REGION_COUNTRIES[region] ?? []).includes(country)) {
+      return { type: "exclude", region }
+    }
+  }
+  for (const region of regionsInclude ?? []) {
+    if (
+      (REGION_COUNTRIES[region] ?? []).includes(country) &&
+      !(regionCountriesExclude ?? []).includes(country)
+    ) {
+      return { type: "include", region }
+    }
+  }
+  return null
+}
+
+// Buyer Persona — functional domain × seniority → designations
+const BUYER_PERSONA_MAP: Record<string, Record<string, string[]>> = {
+  "Corporate Strategy": {
+    "Executive (C-Suite / VP)": ["CEO", "President", "Chief Strategy Officer", "VP Corporate Development"],
+    "Management (Director / Manager)": ["Strategy Director", "Change Management Manager", "Chief of Staff"],
+    "Senior Professional (IC)": ["Senior Strategy Analyst", "M&A Lead", "Transformation Specialist"],
+    "Associate / Entry Level": ["Strategy Associate", "Junior Analyst", "PMO Coordinator"],
+  },
+  "Technology & Digital": {
+    "Executive (C-Suite / VP)": ["CTO", "CIO", "VP of Engineering", "Chief Information Security Officer (CISO)"],
+    "Management (Director / Manager)": ["IT Director", "DevOps Manager", "Engineering Manager", "Helpdesk Manager"],
+    "Senior Professional (IC)": ["Enterprise Architect", "Senior Full Stack Dev", "Lead SecOps Engineer"],
+    "Associate / Entry Level": ["Software Engineer I", "Cloud Support Associate", "IT Technician"],
+  },
+  "Data & AI": {
+    "Executive (C-Suite / VP)": ["Chief Data Officer (CDO)", "Chief AI Officer", "VP of Analytics"],
+    "Management (Director / Manager)": ["Business Intelligence Director", "Data Science Manager", "AI Governance Lead"],
+    "Senior Professional (IC)": ["Principal Data Scientist", "Senior ML Engineer", "Senior Data Engineer"],
+    "Associate / Entry Level": ["Data Analyst", "Junior ML Developer", "Analytics Associate"],
+  },
+  "Finance & Accounting": {
+    "Executive (C-Suite / VP)": ["CFO", "VP of Finance", "Chief Accounting Officer", "Head of Treasury"],
+    "Management (Director / Manager)": ["Finance Director", "Accounting Manager", "Tax Director", "Audit Manager"],
+    "Senior Professional (IC)": ["Senior FP&A Analyst", "Senior Controller", "Lead Actuary", "Senior Auditor"],
+    "Associate / Entry Level": ["Accountant", "Financial Analyst", "Payroll Clerk", "Accounts Payable"],
+  },
+  "Revenue & Growth": {
+    "Executive (C-Suite / VP)": ["CRO", "CMO", "VP of Global Sales", "VP of Brand"],
+    "Management (Director / Manager)": ["Sales Director", "Marketing Manager", "PR Director", "Head of SEO"],
+    "Senior Professional (IC)": ["Account Executive", "Senior Growth Marketer", "Copywriter", "SEO Specialist"],
+    "Associate / Entry Level": ["Sales Development Rep (SDR)", "Marketing Assistant", "PR Associate"],
+  },
+  "Product & Creative": {
+    "Executive (C-Suite / VP)": ["Chief Product Officer (CPO)", "VP of Product", "VP of Design"],
+    "Management (Director / Manager)": ["Product Director", "UX/UI Design Manager", "Content Strategy Manager"],
+    "Senior Professional (IC)": ["Principal Product Manager", "Senior UX Researcher", "Senior Designer"],
+    "Associate / Entry Level": ["Associate Product Manager", "UX/UI Designer", "Content Writer"],
+  },
+  "Operations & Logistics": {
+    "Executive (C-Suite / VP)": ["COO", "VP of Operations", "Chief Supply Chain Officer"],
+    "Management (Director / Manager)": ["Supply Chain Director", "Plant Manager", "Procurement Manager", "PMO Director"],
+    "Senior Professional (IC)": ["Senior Scrum Master", "Lean Six Sigma Black Belt", "Logistics Planner"],
+    "Associate / Entry Level": ["Operations Coordinator", "Operations Assistant", "Inventory Clerk"],
+  },
+  "People & HR": {
+    "Executive (C-Suite / VP)": ["CHRO", "Chief People Officer", "VP of Talent Acquisition"],
+    "Management (Director / Manager)": ["HR Director", "L&D Manager", "Compensation & Benefits Manager"],
+    "Senior Professional (IC)": ["Senior HRBP", "Technical Recruiter", "DEI Specialist", "HR Specialist"],
+    "Associate / Entry Level": ["HR Coordinator", "Recruiting Assistant", "Payroll Coordinator"],
+  },
+  "Legal & Governance": {
+    "Executive (C-Suite / VP)": ["Chief Legal Officer", "General Counsel", "Board Chair", "Chief Risk Officer"],
+    "Management (Director / Manager)": ["Legal Director", "Compliance Manager", "Risk Management Director"],
+    "Senior Professional (IC)": ["Senior Corporate Counsel", "IP Specialist", "Corporate Secretary"],
+    "Associate / Entry Level": ["Legal Assistant", "Compliance Analyst", "Paralegal"],
+  },
+  "Healthcare & Life Sciences": {
+    "Executive (C-Suite / VP)": ["Chief Medical Officer", "VP of Clinical Research", "Chief Nursing Officer"],
+    "Management (Director / Manager)": ["Clinical Director", "Pharmacy Manager", "Lab Director", "Nursing Supervisor"],
+    "Senior Professional (IC)": ["Clinical Researcher", "Lead Pharmacist", "Physician", "BioTech Scientist"],
+    "Associate / Entry Level": ["Nurse Practitioner", "Lab Technician", "Clinical Research Associate"],
+  },
+  "Industrial & Engineering": {
+    "Executive (C-Suite / VP)": ["VP of R&D", "VP of Manufacturing", "Chief Engineer"],
+    "Management (Director / Manager)": ["Engineering Director", "R&D Manager", "Quality Assurance Manager"],
+    "Senior Professional (IC)": ["Principal Mechanical Engineer", "Senior Civil Engineer", "Lead Inspector"],
+    "Associate / Entry Level": ["Mechanical Engineer I", "CAD Designer", "Quality Inspector"],
+  },
+  "Resources & Utilities": {
+    "Executive (C-Suite / VP)": ["Chief Sustainability Officer", "VP of Energy", "Head of ESG"],
+    "Management (Director / Manager)": ["Environmental Director", "Grid Operations Manager", "Exploration Manager"],
+    "Senior Professional (IC)": ["Senior Geologist", "Lead Agri-Scientist", "Senior ESG Analyst"],
+    "Associate / Entry Level": ["Food Scientist", "Environmental Technician", "Field Geologist"],
+  },
+  "Public Sector & NGO": {
+    "Executive (C-Suite / VP)": ["Executive Director", "Diplomatic Officer", "Chief Policy Officer"],
+    "Management (Director / Manager)": ["Program Director", "Policy Manager", "Fundraising Director", "Town Planning Head"],
+    "Senior Professional (IC)": ["Senior Policy Analyst", "Lead Grant Writer", "Senior Urban Planner"],
+    "Associate / Entry Level": ["Program Associate", "Policy Assistant", "Grant Writing Assistant"],
+  },
+}
+
+const FUNCTIONAL_DOMAIN_OPTIONS = Object.keys(BUYER_PERSONA_MAP)
+
+const SENIORITY_LEVEL_OPTIONS = [
+  "Executive (C-Suite / VP)",
+  "Management (Director / Manager)",
+  "Senior Professional (IC)",
+  "Associate / Entry Level",
+] as const
+
+const getAvailableDesignations = (domains: string[], seniorities: string[]) => {
+  if (domains.length === 0 || seniorities.length === 0) return []
+  const results: string[] = []
+  for (const domain of domains) {
+    const seniorityMap = BUYER_PERSONA_MAP[domain]
+    if (!seniorityMap) continue
+    for (const seniority of seniorities) {
+      results.push(...(seniorityMap[seniority] ?? []))
+    }
+  }
+  return [...new Set(results)]
+}
+
+const ALL_MAPPED_DESIGNATIONS = new Set(
+  Object.values(BUYER_PERSONA_MAP).flatMap((m) => Object.values(m).flat())
+)
+
+const pruneDesignations = (domains: string[], seniorities: string[], current: string[]) => {
+  const allowed = new Set(getAvailableDesignations(domains, seniorities))
+  return current.filter((d) => allowed.has(d) || !ALL_MAPPED_DESIGNATIONS.has(d))
+}
+
+type DesignationSearchEntry = {
+  designation: string
+  domain: string
+  seniority: string
+}
+
+const ALL_DESIGNATION_ENTRIES: DesignationSearchEntry[] = Object.entries(BUYER_PERSONA_MAP).flatMap(
+  ([domain, seniorityMap]) =>
+    Object.entries(seniorityMap).flatMap(([seniority, titles]) =>
+      titles.map((designation) => ({ designation, domain, seniority }))
+    )
+)
+
+const highlightMatch = (text: string, query: string) => {
+  if (!query.trim()) return text
+  const lowerText = text.toLowerCase()
+  const lowerQuery = query.toLowerCase()
+  const idx = lowerText.indexOf(lowerQuery)
+  if (idx === -1) return text
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark className="bg-yellow-200 text-inherit rounded px-0.5">{text.slice(idx, idx + query.length)}</mark>
+      {text.slice(idx + query.length)}
+    </>
+  )
+}
 
 const toggle = (list: string[], val: string) =>
   list.includes(val) ? list.filter(v => v !== val) : [...list, val]
@@ -248,7 +450,7 @@ function IncludeExcludeChips({
             + Include
           </button>
           <button
-            className={`px-3 py-1 transition-colors ${mode === "exclude" ? "bg-red-500 text-white" : "bg-white text-muted-foreground hover:bg-muted"}`}
+            className={`px-3 py-1 transition-colors ${mode === "exclude" ? "bg-red-600 text-white" : "bg-white text-muted-foreground hover:bg-muted"}`}
             onClick={() => setMode("exclude")}
           >
             − Exclude
@@ -267,7 +469,7 @@ function IncludeExcludeChips({
               onClick={() => mode === "include" ? onInclude(opt) : onExclude(opt)}
               className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
                 isIncluded ? "bg-green-600 text-white border-green-600" :
-                isExcluded ? "bg-red-500 text-white border-red-500" :
+                isExcluded ? "bg-red-600 text-white border-red-600" :
                 "bg-white text-muted-foreground border-border hover:border-primary hover:text-primary"
               }`}
             >
@@ -287,7 +489,7 @@ function IncludeExcludeChips({
             </Badge>
           ))}
           {excluded.map(v => (
-            <Badge key={v} className="text-xs gap-1 bg-red-50 text-red-700 border-red-200 hover:bg-red-50">
+            <Badge key={v} className="text-xs gap-1 bg-red-600 text-white border-red-600 hover:bg-red-600">
               −{v}
               <button onClick={() => onExclude(v)}><X className="h-2.5 w-2.5" /></button>
             </Badge>
@@ -299,23 +501,106 @@ function IncludeExcludeChips({
 }
 
 // ── Country picker with search ────────────────────────────────────────────────
-function CountryPicker({
-  includedCountries, excludedCountries,
-  onInclude, onExclude,
+function CountryChip({
+  country,
+  className,
+  title,
+  onClick,
+  label,
 }: {
-  includedCountries: string[]
-  excludedCountries: string[]
+  country: string
+  className: string
+  title?: string
+  onClick: () => void
+  label?: string
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${className}`}
+    >
+      {label ?? country}
+    </button>
+  )
+}
+
+function CountryPicker({
+  includedCountries = [],
+  excludedCountries = [],
+  regionsInclude = [],
+  regionsExclude = [],
+  regionCountriesExclude = [],
+  onInclude,
+  onExclude,
+}: {
+  includedCountries?: string[]
+  excludedCountries?: string[]
+  regionsInclude?: string[]
+  regionsExclude?: string[]
+  regionCountriesExclude?: string[]
   onInclude: (v: string) => void
   onExclude: (v: string) => void
 }) {
-  const [search,  setSearch]  = useState("")
-  const [mode,    setMode]    = useState<"include" | "exclude">("include")
-  const [showAll, setShowAll] = useState(false)
+  const [search, setSearch] = useState("")
+  const [mode, setMode] = useState<"include" | "exclude">("include")
 
-  const filtered = ALL_COUNTRIES.filter(c =>
+  const filtered = ALL_COUNTRIES.filter((c) =>
     c.toLowerCase().includes(search.toLowerCase())
   )
-  const visible = showAll ? filtered : filtered.slice(0, 30)
+  const popularInView = POPULAR_COUNTRIES.filter((c) => filtered.includes(c))
+  const restCountries = filtered
+    .filter((c) => !POPULAR_COUNTRIES.includes(c))
+    .sort((a, b) => a.localeCompare(b))
+
+  const countryClass = (country: string) => {
+    const isIncluded = includedCountries.includes(country)
+    const isExcluded = excludedCountries.includes(country)
+    const viaRegion = getCountryViaRegion(
+      country,
+      regionsInclude,
+      regionsExclude,
+      regionCountriesExclude,
+    )
+
+    if (isIncluded) return "bg-green-600 text-white border-green-600"
+    if (isExcluded) return "bg-red-600 text-white border-red-600"
+    if (viaRegion?.type === "include") return "bg-green-100 text-green-800 border-green-300"
+    if (viaRegion?.type === "exclude") return "bg-red-100 text-red-800 border-red-300"
+    return "bg-white text-muted-foreground border-border hover:border-primary hover:text-primary"
+  }
+
+  const countryTitle = (country: string) => {
+    const isIncluded = includedCountries.includes(country)
+    const isExcluded = excludedCountries.includes(country)
+    const viaRegion = getCountryViaRegion(
+      country,
+      regionsInclude,
+      regionsExclude,
+      regionCountriesExclude,
+    )
+    if (isIncluded || isExcluded || !viaRegion) return undefined
+    const verb = viaRegion.type === "include" ? "Included" : "Excluded"
+    return `${verb} via ${viaRegion.region}`
+  }
+
+  const countryLabel = (country: string) => {
+    const isIncluded = includedCountries.includes(country)
+    const isExcluded = excludedCountries.includes(country)
+    const prefix = isIncluded ? "✓ " : isExcluded ? "✗ " : ""
+    return `${prefix}${country}`
+  }
+
+  const renderCountry = (country: string) => (
+    <CountryChip
+      country={country}
+      className={countryClass(country)}
+      title={countryTitle(country)}
+      label={countryLabel(country)}
+      onClick={() => (mode === "include" ? onInclude(country) : onExclude(country))}
+    />
+  )
 
   return (
     <div className="space-y-3">
@@ -329,7 +614,7 @@ function CountryPicker({
             + Include
           </button>
           <button
-            className={`px-3 py-1 transition-colors ${mode === "exclude" ? "bg-red-500 text-white" : "bg-white text-muted-foreground hover:bg-muted"}`}
+            className={`px-3 py-1 transition-colors ${mode === "exclude" ? "bg-red-600 text-white" : "bg-white text-muted-foreground hover:bg-muted"}`}
             onClick={() => setMode("exclude")}
           >
             − Exclude
@@ -337,56 +622,44 @@ function CountryPicker({
         </div>
       </div>
 
-      {/* Search */}
       <Input
         placeholder="Search country..."
         value={search}
-        onChange={e => setSearch(e.target.value)}
+        onChange={(e) => setSearch(e.target.value)}
         className="h-8 text-sm"
       />
 
-      {/* Country chips */}
-      <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
-        {visible.map(country => {
-          const isIncluded = includedCountries.includes(country)
-          const isExcluded = excludedCountries.includes(country)
-          return (
-            <button
-              key={country}
-              type="button"
-              onClick={() => mode === "include" ? onInclude(country) : onExclude(country)}
-              className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
-                isIncluded ? "bg-green-600 text-white border-green-600" :
-                isExcluded ? "bg-red-500 text-white border-red-500" :
-                "bg-white text-muted-foreground border-border hover:border-primary hover:text-primary"
-              }`}
-            >
-              {isIncluded && "✓ "}{isExcluded && "✗ "}{country}
-            </button>
-          )
-        })}
+      <div className="flex flex-wrap gap-1.5 max-h-64 overflow-y-auto">
+        {popularInView.length > 0 && (
+          <>
+            <span className="w-full text-xs font-semibold text-muted-foreground py-1">
+              🔥 Popular
+            </span>
+            {popularInView.map((c) => (
+              <Fragment key={c}>{renderCountry(c)}</Fragment>
+            ))}
+            {restCountries.length > 0 && (
+              <span className="w-full text-xs font-semibold text-muted-foreground border-t pt-2 mt-1">
+                All Countries
+              </span>
+            )}
+          </>
+        )}
+        {restCountries.map((c) => (
+          <Fragment key={c}>{renderCountry(c)}</Fragment>
+        ))}
       </div>
 
-      {filtered.length > 30 && !showAll && (
-        <button
-          className="text-xs text-primary hover:underline"
-          onClick={() => setShowAll(true)}
-        >
-          Show all {filtered.length} countries
-        </button>
-      )}
-
-      {/* Selected countries summary */}
       {(includedCountries.length > 0 || excludedCountries.length > 0) && (
         <div className="flex flex-wrap gap-1 pt-1 border-t">
-          {includedCountries.map(v => (
+          {includedCountries.map((v) => (
             <Badge key={v} className="text-xs gap-1 bg-green-100 text-green-800 border-green-200 hover:bg-green-100">
               +{v}
               <button onClick={() => onInclude(v)}><X className="h-2.5 w-2.5" /></button>
             </Badge>
           ))}
-          {excludedCountries.map(v => (
-            <Badge key={v} className="text-xs gap-1 bg-red-50 text-red-700 border-red-200 hover:bg-red-50">
+          {excludedCountries.map((v) => (
+            <Badge key={v} className="text-xs gap-1 bg-red-600 text-white border-red-600 hover:bg-red-600">
               −{v}
               <button onClick={() => onExclude(v)}><X className="h-2.5 w-2.5" /></button>
             </Badge>
@@ -784,6 +1057,16 @@ function SectionHeading({ required, children }: { required?: boolean; children: 
   )
 }
 
+function TabErrorDot({ show }: { show: boolean }) {
+  if (!show) return null
+  return (
+    <span
+      className="inline-block h-2 w-2 rounded-full bg-red-500 shrink-0"
+      aria-label="Validation error"
+    />
+  )
+}
+
 // ── Simple chip toggle ─────────────────────────────────────────────────────────
 function ChipGroup({ label, options, selected, onToggle }: {
   label: string
@@ -809,6 +1092,210 @@ function ChipGroup({ label, options, selected, onToggle }: {
           </button>
         ))}
       </div>
+    </div>
+  )
+}
+
+// ── Buyer Persona — 3-step cascading selector ─────────────────────────────────
+function BuyerPersonaSelector({
+  functionalDomains,
+  seniorityLevels,
+  designations,
+  onFunctionalDomainsChange,
+  onSeniorityLevelsChange,
+  onDesignationsChange,
+}: {
+  functionalDomains: string[]
+  seniorityLevels: string[]
+  designations: string[]
+  onFunctionalDomainsChange: (v: string[]) => void
+  onSeniorityLevelsChange: (v: string[]) => void
+  onDesignationsChange: (v: string[]) => void
+}) {
+  const [designationSearch, setDesignationSearch] = useState("")
+  const [searchOpen, setSearchOpen] = useState(false)
+  const searchContainerRef = useRef<HTMLDivElement>(null)
+
+  const availableDesignations = getAvailableDesignations(functionalDomains, seniorityLevels)
+  const showDesignations = functionalDomains.length > 0 && seniorityLevels.length > 0
+
+  const searchResults =
+    designationSearch.trim().length >= 2
+      ? ALL_DESIGNATION_ENTRIES.filter((entry) =>
+          entry.designation.toLowerCase().includes(designationSearch.trim().toLowerCase())
+        ).slice(0, 6)
+      : []
+
+  const applySearchResult = (entry: DesignationSearchEntry) => {
+    if (!designations.includes(entry.designation)) {
+      onDesignationsChange([...designations, entry.designation])
+    }
+    if (!functionalDomains.includes(entry.domain)) {
+      onFunctionalDomainsChange([...functionalDomains, entry.domain])
+    }
+    if (!seniorityLevels.includes(entry.seniority)) {
+      onSeniorityLevelsChange([...seniorityLevels, entry.seniority])
+    }
+    setDesignationSearch("")
+    setSearchOpen(false)
+  }
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        setSearchOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
+  const handleDomainToggle = (domain: string) => {
+    const next = toggle(functionalDomains, domain)
+    onFunctionalDomainsChange(next)
+    onDesignationsChange(pruneDesignations(next, seniorityLevels, designations))
+  }
+
+  const handleSeniorityToggle = (seniority: string) => {
+    const next = toggle(seniorityLevels, seniority)
+    onSeniorityLevelsChange(next)
+    onDesignationsChange(pruneDesignations(functionalDomains, next, designations))
+  }
+
+  const contextChips = functionalDomains.flatMap((domain) =>
+    seniorityLevels.map((seniority) => `${domain} × ${seniority}`)
+  )
+
+  return (
+    <div className="space-y-5">
+      <div ref={searchContainerRef} className="relative space-y-1">
+        <Label className="text-sm font-medium">Search Designation</Label>
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder='Search designation e.g. "CTO", "CMO"...'
+            value={designationSearch}
+            onChange={(e) => {
+              setDesignationSearch(e.target.value)
+              setSearchOpen(true)
+            }}
+            onFocus={() => setSearchOpen(true)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                setSearchOpen(false)
+                return
+              }
+              if (e.key === "Enter" && searchResults.length > 0) {
+                e.preventDefault()
+                applySearchResult(searchResults[0])
+              }
+            }}
+            className="h-9 pl-9 text-sm"
+          />
+        </div>
+        {searchOpen && designationSearch.trim().length >= 2 && (
+          <div className="absolute z-20 mt-1 w-full rounded-lg border bg-white shadow-lg overflow-hidden">
+            {searchResults.length === 0 ? (
+              <p className="px-3 py-2.5 text-sm text-muted-foreground">No results found</p>
+            ) : (
+              <ul>
+                {searchResults.map((entry) => (
+                  <li key={`${entry.domain}-${entry.seniority}-${entry.designation}`}>
+                    <button
+                      type="button"
+                      className="w-full px-3 py-2.5 text-left text-sm hover:bg-muted/60 transition-colors"
+                      onClick={() => applySearchResult(entry)}
+                    >
+                      <span className="font-medium">
+                        {highlightMatch(entry.designation, designationSearch.trim())}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {" — "}{entry.domain} › {entry.seniority}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
+
+      <ChipGroup
+        label="Functional Domain"
+        options={FUNCTIONAL_DOMAIN_OPTIONS}
+        selected={functionalDomains}
+        onToggle={handleDomainToggle}
+      />
+
+      <ChipGroup
+        label="Seniority Level"
+        options={[...SENIORITY_LEVEL_OPTIONS]}
+        selected={seniorityLevels}
+        onToggle={handleSeniorityToggle}
+      />
+
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Designations</Label>
+        {!showDesignations ? (
+          <p className="text-sm text-muted-foreground italic py-4 text-center rounded-lg border border-dashed bg-muted/20">
+            Select a functional domain and seniority level to see relevant designations
+          </p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {availableDesignations.map((designation) => (
+              <button
+                key={designation}
+                type="button"
+                onClick={() => onDesignationsChange(toggle(designations, designation))}
+                className={cn(
+                  "px-3 py-1.5 rounded-full text-sm border transition-colors",
+                  designations.includes(designation)
+                    ? "bg-primary text-white border-primary"
+                    : "bg-white text-muted-foreground border-border hover:border-primary hover:text-primary"
+                )}
+              >
+                {designation}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {(contextChips.length > 0 || designations.length > 0) && (
+        <div className="space-y-2 pt-3 border-t">
+          <Label className="text-xs text-muted-foreground uppercase tracking-wide">
+            Selected Personas
+          </Label>
+          <div className="flex flex-wrap gap-1.5">
+            {contextChips.map((chip) => (
+              <Badge
+                key={chip}
+                variant="secondary"
+                className="text-xs bg-primary/10 text-primary border-primary/20"
+              >
+                {chip}
+              </Badge>
+            ))}
+            {designations.map((d) => (
+              <Badge
+                key={d}
+                className="text-xs gap-1 bg-primary/10 text-primary border-primary/20 hover:bg-primary/10"
+              >
+                {d}
+                <button
+                  type="button"
+                  onClick={() => onDesignationsChange(designations.filter((x) => x !== d))}
+                  className="hover:opacity-70"
+                  aria-label={`Remove ${d}`}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -850,8 +1337,12 @@ function IcpBuilderPageContent() {
   const commercialSectorRef = useRef<HTMLDivElement>(null)
   const employeeRangeRef    = useRef<HTMLDivElement>(null)
   const annualRevenueRef    = useRef<HTMLDivElement>(null)
+  const marketRef           = useRef<HTMLDivElement>(null)
+  const techRef             = useRef<HTMLDivElement>(null)
+  const personaRef          = useRef<HTMLDivElement>(null)
 
-  // ── Validation error for Buyer Persona (Step 3) ──────────────────────────────
+  const [marketError, setMarketError] = useState("")
+  const [techError, setTechError]     = useState("")
   const [personaError, setPersonaError] = useState("")
   const [activeTab, setActiveTab]       = useState("company")
 
@@ -863,9 +1354,9 @@ function IcpBuilderPageContent() {
   const [countriesExclude,       setCountriesExclude]       = useState<string[]>([])
 
   // ── Buyer Persona ───────────────────────────────────────────────────────────
-  const [targetSeniorities,  setTargetSeniorities]  = useState<string[]>([])
-  const [targetDepartments,  setTargetDepartments]  = useState<string[]>([])
-  const [targetDesignations, setTargetDesignations] = useState<string[]>([])
+  const [functionalDomains, setFunctionalDomains] = useState<string[]>([])
+  const [seniorityLevels,   setSeniorityLevels]   = useState<string[]>([])
+  const [designations,      setDesignations]      = useState<string[]>([])
 
   // ── UI state ────────────────────────────────────────────────────────────────
   const [isLoadingIcp, setIsLoadingIcp] = useState(false)
@@ -909,9 +1400,13 @@ function IcpBuilderPageContent() {
         setRegionCountriesExclude(icp.targetRegionCountriesExclude ?? [])
         setCountriesInclude(icp.targetCountriesInclude ?? [])
         setCountriesExclude(icp.targetCountriesExclude ?? [])
-        setTargetSeniorities(icp.buyerPersona?.targetSeniorities ?? [])
-        setTargetDepartments(icp.buyerPersona?.targetDepartments ?? [])
-        setTargetDesignations(icp.buyerPersona?.targetDesignations ?? [])
+        setFunctionalDomains(icp.buyerPersona?.functionalDomains ?? [])
+        setSeniorityLevels(icp.buyerPersona?.seniorityLevels ?? [])
+        setDesignations(
+          icp.buyerPersona?.designations ??
+          icp.buyerPersona?.targetDesignations ??
+          []
+        )
       })
       .catch(console.error)
       .finally(() => setIsLoadingIcp(false))
@@ -940,7 +1435,11 @@ function IcpBuilderPageContent() {
   // Toggle region — mutually exclusive from exclude list
   const toggleRegionInclude = (region: string) => {
     const isRemoving = regionsInclude.includes(region)
-    setRegionsInclude(prev => toggle(prev, region))
+    setRegionsInclude(prev => {
+      const next = toggle(prev, region)
+      if (next.length > 0 || countriesInclude.length > 0) setMarketError("")
+      return next
+    })
     setRegionsExclude(prev => prev.filter(r => r !== region))
     // If removing a region, also clean up any per-country exclusions for that region's countries
     if (isRemoving) {
@@ -955,7 +1454,11 @@ function IcpBuilderPageContent() {
 
   // Toggle country — mutually exclusive
   const toggleCountryInclude = (c: string) => {
-    setCountriesInclude(prev => toggle(prev, c))
+    setCountriesInclude(prev => {
+      const next = toggle(prev, c)
+      if (next.length > 0 || regionsInclude.length > 0) setMarketError("")
+      return next
+    })
     setCountriesExclude(prev => prev.filter(v => v !== c))
   }
   const toggleCountryExclude = (c: string) => {
@@ -967,7 +1470,11 @@ function IcpBuilderPageContent() {
   // Tech Fit toggle helpers — exactly like region toggles
   const toggleTechCategoryInclude = (cat: string) => {
     const isRemoving = techCategoriesInclude.includes(cat)
-    setTechCategoriesInclude(prev => toggle(prev, cat))
+    setTechCategoriesInclude(prev => {
+      const next = toggle(prev, cat)
+      if (next.length > 0) setTechError("")
+      return next
+    })
     setTechCategoriesExclude(prev => prev.filter(c => c !== cat))
     // If removing a category, clean up its individual tool exclusions
     if (isRemoving) {
@@ -1007,17 +1514,51 @@ function IcpBuilderPageContent() {
     })
   }
 
-  const scrollToFirstCompanyError = (errors: typeof companyErrors) => {
-    setActiveTab("company")
-    const target =
-      errors.mappedIndustries ? commercialSectorRef :
-      errors.employeeRanges   ? employeeRangeRef :
-      errors.annualRevenues   ? annualRevenueRef :
-      null
-    requestAnimationFrame(() => {
-      target?.current?.scrollIntoView({ behavior: "smooth", block: "center" })
-    })
+  const scrollToFirstError = (errors: {
+    company: typeof companyErrors
+    market: string
+    tech: string
+    persona: string
+  }) => {
+    if (errors.company.mappedIndustries || errors.company.employeeRanges || errors.company.annualRevenues) {
+      setActiveTab("company")
+      const target =
+        errors.company.mappedIndustries ? commercialSectorRef :
+        errors.company.employeeRanges   ? employeeRangeRef :
+        errors.company.annualRevenues   ? annualRevenueRef :
+        null
+      requestAnimationFrame(() => {
+        target?.current?.scrollIntoView({ behavior: "smooth", block: "center" })
+      })
+      return
+    }
+    if (errors.market) {
+      setActiveTab("market")
+      requestAnimationFrame(() => {
+        marketRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
+      })
+      return
+    }
+    if (errors.tech) {
+      setActiveTab("techfit")
+      requestAnimationFrame(() => {
+        techRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
+      })
+      return
+    }
+    if (errors.persona) {
+      setActiveTab("persona")
+      requestAnimationFrame(() => {
+        personaRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
+      })
+    }
   }
+
+  const companyTabHasError = !!(
+    companyErrors.mappedIndustries ||
+    companyErrors.employeeRanges ||
+    companyErrors.annualRevenues
+  )
 
   const handleSave = async () => {
     if (!name.trim()) { setSaveMsg("❌ ICP name is required."); return }
@@ -1033,21 +1574,48 @@ function IcpBuilderPageContent() {
         ? "Please select at least one revenue range"
         : "",
     }
-    if (profileErrors.mappedIndustries || profileErrors.employeeRanges || profileErrors.annualRevenues) {
-      setCompanyErrors(profileErrors)
-      setSaveMsg("❌ Please complete all required fields in Company Profile.")
-      scrollToFirstCompanyError(profileErrors)
-      return
-    }
-    setCompanyErrors({ mappedIndustries: "", employeeRanges: "", annualRevenues: "" })
+    const nextMarketError =
+      regionsInclude.length === 0 && countriesInclude.length === 0
+        ? "Please select at least one target region or country"
+        : ""
+    const includedTools = techCategoriesInclude.flatMap((cat) =>
+      TECH_STACK_CATEGORIES.find((c) => c.label === cat)?.tools ?? []
+    ).filter((t) => !techStackExclude.includes(t))
+    const nextTechError =
+      techCategoriesInclude.length === 0 && includedTools.length === 0
+        ? "Please select at least one tech category or tool"
+        : ""
+    const nextPersonaError =
+      designations.length === 0
+        ? "Please select at least one designation"
+        : ""
 
-    // Step 3 — Buyer Persona mandatory validation
-    if (targetSeniorities.length === 0 && targetDepartments.length === 0 && targetDesignations.length === 0) {
-      setPersonaError("Please select at least one Seniority, Department, or Designation.")
-      setSaveMsg("❌ Buyer Persona is required before saving.")
-      setActiveTab("persona")
+    const hasAnyError =
+      profileErrors.mappedIndustries ||
+      profileErrors.employeeRanges ||
+      profileErrors.annualRevenues ||
+      nextMarketError ||
+      nextTechError ||
+      nextPersonaError
+
+    if (hasAnyError) {
+      setCompanyErrors(profileErrors)
+      setMarketError(nextMarketError)
+      setTechError(nextTechError)
+      setPersonaError(nextPersonaError)
+      setSaveMsg("❌ Please complete all required fields.")
+      scrollToFirstError({
+        company: profileErrors,
+        market: nextMarketError,
+        tech: nextTechError,
+        persona: nextPersonaError,
+      })
       return
     }
+
+    setCompanyErrors({ mappedIndustries: "", employeeRanges: "", annualRevenues: "" })
+    setMarketError("")
+    setTechError("")
     setPersonaError("")
     setIsSaving(true)
     setSaveMsg("")
@@ -1075,9 +1643,9 @@ function IcpBuilderPageContent() {
         targetCountriesInclude:        countriesInclude,
         targetCountriesExclude:        countriesExclude,
         buyerPersona: {
-          targetSeniorities,
-          targetDepartments,
-          targetDesignations,
+          functionalDomains,
+          seniorityLevels,
+          designations,
         },
       }
 
@@ -1094,8 +1662,16 @@ function IcpBuilderPageContent() {
         router.replace(`/segments/icp-builder?id=${icpId}`)
       }
       if (icpId) fetchMatches(icpId)
-    } catch {
-      setSaveMsg("❌ Save failed. Please try again.")
+    } catch (err: unknown) {
+      const apiErr = err as { data?: { message?: string; errors?: { field: string; message: string }[] } }
+      const details = apiErr.data?.errors?.map((e) => e.message).join("; ")
+      setSaveMsg(
+        details
+          ? `❌ Save failed: ${details}`
+          : apiErr.data?.message
+            ? `❌ Save failed: ${apiErr.data.message}`
+            : "❌ Save failed. Please try again."
+      )
     } finally {
       setIsSaving(false)
     }
@@ -1109,10 +1685,12 @@ function IcpBuilderPageContent() {
     )
   }
 
-  // Total market selections for badge
-  const marketCount = regionsInclude.length + regionsExclude.length +
-                      regionCountriesExclude.length +
-                      countriesInclude.length + countriesExclude.length
+  const marketCount =
+    regionsInclude.length +
+    regionsExclude.length +
+    regionCountriesExclude.length +
+    countriesInclude.length +
+    countriesExclude.length
 
   return (
     <div className="p-6 space-y-6">
@@ -1145,24 +1723,29 @@ function IcpBuilderPageContent() {
         <div className="lg:col-span-2">
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="w-full">
-              <TabsTrigger value="company" className="flex-1">Company Profile</TabsTrigger>
+              <TabsTrigger value="company" className="flex-1 gap-1.5">
+                Company Profile
+                <TabErrorDot show={companyTabHasError} />
+              </TabsTrigger>
               <TabsTrigger value="market" className="flex-1 gap-1.5">
-                Target Market
+                Preferential Market
                 {marketCount > 0 && (
                   <Badge variant="secondary" className="text-xs h-4 px-1">{marketCount}</Badge>
                 )}
+                <TabErrorDot show={!!marketError} />
               </TabsTrigger>
               <TabsTrigger value="techfit" className="flex-1 gap-1.5">
-                Tech Fit
+                Primary Tech Stack
                 {(techCategoriesInclude.length + techCategoriesExclude.length) > 0 && (
                   <Badge variant="secondary" className="text-xs h-4 px-1">
                     {techCategoriesInclude.length + techCategoriesExclude.length}
                   </Badge>
                 )}
+                <TabErrorDot show={!!techError} />
               </TabsTrigger>
               <TabsTrigger value="persona" className="flex-1 gap-1.5">
                 Buyer Persona
-                {personaError && <span className="text-red-500 text-xs">*</span>}
+                <TabErrorDot show={!!personaError} />
               </TabsTrigger>
             </TabsList>
 
@@ -1305,11 +1888,14 @@ function IcpBuilderPageContent() {
             <TabsContent value="market" className="mt-4 space-y-4">
 
               {/* Region selector with Include/Exclude */}
-              <Card>
+              <div ref={marketRef}>
+              <Card
+                className={cn(marketError && "border-red-500 ring-1 ring-red-500")}
+              >
                 <CardContent className="p-4 space-y-4">
                   <div className="flex items-center gap-2">
                     <Globe className="h-4 w-4 text-primary" />
-                    <h3 className="font-semibold">Region</h3>
+                    <SectionHeading required>Target Region</SectionHeading>
                     <p className="text-xs text-muted-foreground ml-auto">
                       Select a region to target all its countries
                     </p>
@@ -1326,8 +1912,10 @@ function IcpBuilderPageContent() {
 
                   {/* Show countries covered by selected regions — with per-country exclude */}
                   {regionsInclude.length > 0 && (() => {
-                    const allCountriesInIncludedRegions = regionsInclude.flatMap(r =>
-                      REGIONS.find(rx => rx.label === r)?.countries ?? []
+                    const allCountriesInIncludedRegions = uniqueStrings(
+                      regionsInclude.flatMap((r) =>
+                        REGIONS.find((rx) => rx.label === r)?.countries ?? []
+                      )
                     )
                     return (
                       <div className="rounded-lg bg-green-50 border border-green-200 p-3 space-y-2">
@@ -1374,9 +1962,11 @@ function IcpBuilderPageContent() {
                         Countries excluded via regions:
                       </p>
                       <div className="flex flex-wrap gap-1">
-                        {regionsExclude.flatMap(r =>
-                          REGIONS.find(rx => rx.label === r)?.countries ?? []
-                        ).map(c => (
+                        {uniqueStrings(
+                          regionsExclude.flatMap((r) =>
+                            REGIONS.find((rx) => rx.label === r)?.countries ?? []
+                          )
+                        ).map((c) => (
                           <span key={c} className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">
                             {c}
                           </span>
@@ -1384,8 +1974,12 @@ function IcpBuilderPageContent() {
                       </div>
                     </div>
                   )}
+                  {marketError && (
+                    <p className="text-sm text-red-500">{marketError}</p>
+                  )}
                 </CardContent>
               </Card>
+              </div>
 
               {/* Country picker */}
               <Card>
@@ -1401,49 +1995,85 @@ function IcpBuilderPageContent() {
                   <CountryPicker
                     includedCountries={countriesInclude}
                     excludedCountries={countriesExclude}
+                    regionsInclude={regionsInclude}
+                    regionsExclude={regionsExclude}
+                    regionCountriesExclude={regionCountriesExclude}
                     onInclude={toggleCountryInclude}
                     onExclude={toggleCountryExclude}
                   />
                 </CardContent>
               </Card>
 
-              {/* Summary of all market criteria */}
-              {marketCount > 0 && (
-                <Card>
-                  <CardContent className="p-4 space-y-2">
-                    <h3 className="font-semibold text-sm">Market Selection Summary</h3>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div>
-                        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Included</p>
-                        <p className="font-medium text-green-700">
-                          {regionsInclude.length > 0 && `${regionsInclude.join(", ")} `}
-                          {countriesInclude.length > 0 && `+ ${countriesInclude.length} countries`}
-                          {regionsInclude.length === 0 && countriesInclude.length === 0 && "All markets"}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Excluded</p>
-                        <p className="font-medium text-red-600">
-                          {regionsExclude.length > 0 && `${regionsExclude.join(", ")} `}
-                          {countriesExclude.length > 0 && `+ ${countriesExclude.length} countries`}
-                          {regionsExclude.length === 0 && countriesExclude.length === 0 && "None"}
-                        </p>
+              {/* Preferential Market Summary */}
+              <Card>
+                <CardContent className="p-4 space-y-4">
+                  <h3 className="font-semibold text-sm">Preferential Market Summary</h3>
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Included</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {regionsInclude.map((r) => (
+                          <Badge
+                            key={`inc-r-${r}`}
+                            className="text-xs bg-green-100 text-green-800 border-green-200 hover:bg-green-100"
+                          >
+                            +{r}
+                          </Badge>
+                        ))}
+                        {countriesInclude.map((c) => (
+                          <Badge
+                            key={`inc-c-${c}`}
+                            className="text-xs bg-green-100 text-green-800 border-green-200 hover:bg-green-100"
+                          >
+                            +{c}
+                          </Badge>
+                        ))}
+                        {regionsInclude.length === 0 && countriesInclude.length === 0 && (
+                          <span className="text-sm text-muted-foreground">None</span>
+                        )}
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
-              )}
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Excluded</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {regionsExclude.map((r) => (
+                          <Badge
+                            key={`exc-r-${r}`}
+                            className="text-xs bg-red-600 text-white border-red-600 hover:bg-red-600"
+                          >
+                            −{r}
+                          </Badge>
+                        ))}
+                        {countriesExclude.map((c) => (
+                          <Badge
+                            key={`exc-c-${c}`}
+                            className="text-xs bg-red-600 text-white border-red-600 hover:bg-red-600"
+                          >
+                            −{c}
+                          </Badge>
+                        ))}
+                        {regionsExclude.length === 0 && countriesExclude.length === 0 && (
+                          <span className="text-sm text-muted-foreground">None</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </TabsContent>
 
             {/* ────────── TECH FIT TAB ────────── */}
             <TabsContent value="techfit" className="mt-4 space-y-4">
 
               {/* Category selector — exactly like Region */}
-              <Card>
+              <div ref={techRef}>
+              <Card
+                className={cn(techError && "border-red-500 ring-1 ring-red-500")}
+              >
                 <CardContent className="p-4 space-y-4">
                   <div className="flex items-center gap-2">
                     <Cpu className="h-4 w-4 text-primary" />
-                    <h3 className="font-semibold">Tech Category</h3>
+                    <SectionHeading required>Tech Category</SectionHeading>
                     <p className="text-xs text-muted-foreground ml-auto">
                       Select a category to target all its tools
                     </p>
@@ -1520,8 +2150,12 @@ function IcpBuilderPageContent() {
                       </div>
                     </div>
                   )}
+                  {techError && (
+                    <p className="text-sm text-red-500">{techError}</p>
+                  )}
                 </CardContent>
               </Card>
+              </div>
 
               {/* Summary */}
               {(techCategoriesInclude.length + techCategoriesExclude.length) > 0 && (
@@ -1550,44 +2184,37 @@ function IcpBuilderPageContent() {
 
             {/* ────────── BUYER PERSONA TAB ────────── */}
             <TabsContent value="persona" className="mt-4 space-y-4">
-              <Card>
+              <div ref={personaRef}>
+              <Card
+                className={cn(personaError && "border-red-500 ring-1 ring-red-500")}
+              >
                 <CardContent className="p-4 space-y-5">
                   <div className="flex items-center gap-2">
                     <Users className="h-4 w-4 text-primary" />
-                    <h3 className="font-semibold">Target Buyer Persona</h3>
-                    <span className="text-xs text-red-500 ml-1">* Required</span>
+                    <SectionHeading required>Target Buyer Persona</SectionHeading>
                   </div>
                   <p className="text-sm text-muted-foreground -mt-2">
-                    Who to contact in a matching company — seniority, department, designation.
+                    Select the functional domain and seniority level to see relevant designations to target.
                   </p>
 
-                  {/* Step 3 — validation error */}
-                  {personaError && (
-                    <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
-                      ⚠ {personaError}
-                    </div>
-                  )}
+                  <BuyerPersonaSelector
+                    functionalDomains={functionalDomains}
+                    seniorityLevels={seniorityLevels}
+                    designations={designations}
+                    onFunctionalDomainsChange={setFunctionalDomains}
+                    onSeniorityLevelsChange={setSeniorityLevels}
+                    onDesignationsChange={(v) => {
+                      setDesignations(v)
+                      if (v.length > 0) setPersonaError("")
+                    }}
+                  />
 
-                  <ChipGroup
-                    label="Seniority Level"
-                    options={SENIORITY_OPTIONS}
-                    selected={targetSeniorities}
-                    onToggle={v => { setTargetSeniorities(p => toggle(p, v)); setPersonaError("") }}
-                  />
-                  <ChipGroup
-                    label="Department"
-                    options={DEPARTMENT_OPTIONS}
-                    selected={targetDepartments}
-                    onToggle={v => { setTargetDepartments(p => toggle(p, v)); setPersonaError("") }}
-                  />
-                  <ChipGroup
-                    label="Designation"
-                    options={DESIGNATION_OPTIONS}
-                    selected={targetDesignations}
-                    onToggle={v => { setTargetDesignations(p => toggle(p, v)); setPersonaError("") }}
-                  />
+                  {personaError && (
+                    <p className="text-sm text-red-500">{personaError}</p>
+                  )}
                 </CardContent>
               </Card>
+              </div>
             </TabsContent>
 
           </Tabs>
@@ -1678,11 +2305,32 @@ function IcpBuilderPageContent() {
                             {matchDiagnosis.annualRevenue.percentage}%) have no revenue data
                           </li>
                         )}
+                        {matchDiagnosis.country && (
+                          <li>
+                            • Country / Region — {matchDiagnosis.country.nullCount}/
+                            {matchDiagnosis.country.totalProspects} prospects (
+                            {matchDiagnosis.country.percentage}%) have no country data
+                          </li>
+                        )}
+                        {matchDiagnosis.techStack && (
+                          <li>
+                            • Tech Stack — {matchDiagnosis.techStack.nullCount}/
+                            {matchDiagnosis.techStack.totalProspects} prospects (
+                            {matchDiagnosis.techStack.percentage}%) have no tech stack data
+                          </li>
+                        )}
+                        {matchDiagnosis.designation && (
+                          <li>
+                            • Designation — {matchDiagnosis.designation.nullCount}/
+                            {matchDiagnosis.designation.totalProspects} prospects (
+                            {matchDiagnosis.designation.percentage}%) have no contact/designation data
+                          </li>
+                        )}
                       </ul>
                       <div className="text-yellow-800 space-y-1 pt-1 border-t border-yellow-200">
                         <p className="font-medium">Suggested fixes:</p>
                         <p>→ Re-import your Excel with these columns added</p>
-                        <p>→ Or run Enrichment to auto-fill missing data</p>
+                        <p>→ Or run Enrichment to auto-fill missing tech stack data</p>
                         <p>→ Or remove these filters from your ICP</p>
                       </div>
                     </div>
