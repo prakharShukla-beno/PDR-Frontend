@@ -1,16 +1,10 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 
-const PUBLIC_ROUTES = ["/", "/forgot-password", "/reset-password"]
+const PUBLIC_ROUTES = ["/"]
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
-
-  // API routes are proxied to the backend — never auth-gate them here
-  if (pathname.startsWith("/api") || pathname === "/health") {
-    return NextResponse.next()
-  }
-
   const token = request.cookies.get("beno_token")?.value
 
   if (PUBLIC_ROUTES.includes(pathname)) {
