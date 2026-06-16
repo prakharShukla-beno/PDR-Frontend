@@ -29,6 +29,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { api }               from "@/lib/api"
+import { useAutoDismissMessage } from "@/hooks/useAutoDismissMessage"
+import { AutoDismissBanner } from "@/components/ui/auto-dismiss-banner"
 import { cn }                from "@/lib/utils"
 import type { Prospect }     from "@/types"
 
@@ -1403,8 +1405,11 @@ function IcpBuilderPageContent() {
   // ── UI state ────────────────────────────────────────────────────────────────
   const [isLoadingIcp, setIsLoadingIcp] = useState(false)
   const [isSaving,     setIsSaving]     = useState(false)
-  const [saveMsg,      setSaveMsg]      = useState("")
   const [savedIcpId,   setSavedIcpId]   = useState<string | null>(editId)
+
+  const saveMsg = useAutoDismissMessage()
+  const segmentMsg = useAutoDismissMessage()
+  const matchMsg = useAutoDismissMessage()
 
   // ── Matched prospects panel ─────────────────────────────────────────────────
   const [matchedProspects, setMatchedProspects] = useState<MatchedProspect[]>([])
@@ -1416,7 +1421,6 @@ function IcpBuilderPageContent() {
     percentage: number
   }>>({})
   const [isCreatingSegment, setIsCreatingSegment] = useState(false)
-  const [segmentMsg,        setSegmentMsg]        = useState("")
 
   // Load ICP for edit — GET /api/icp/:id returns { success, data: icpObject }
   useEffect(() => {
@@ -1468,8 +1472,14 @@ function IcpBuilderPageContent() {
         ? res.data
         : (res.data?.prospects ?? [])
       setMatchedProspects(prospects)
-      setMatchTotal(res.pagination?.total ?? res.data?.pagination?.total ?? 0)
+      const total = res.pagination?.total ?? res.data?.pagination?.total ?? 0
+      setMatchTotal(total)
       setMatchDiagnosis(res.diagnosis ?? {})
+      matchMsg.setMessage(
+        total > 0
+          ? `✅ ${total} prospect${total === 1 ? "" : "s"} matched`
+          : "No prospects matched your ICP criteria.",
+      )
     } catch (err) {
       console.error("Match error:", err)
     } finally {
@@ -1481,7 +1491,7 @@ function IcpBuilderPageContent() {
   const handleCreateSegment = async () => {
     if (!savedIcpId || matchTotal === 0) return
     setIsCreatingSegment(true)
-    setSegmentMsg("")
+    segmentMsg.clearMessage()
     try {
       const res = await api.post<any>(`/icp/${savedIcpId}/create-segment`)
       const segment = res.data
@@ -1489,7 +1499,7 @@ function IcpBuilderPageContent() {
       if (!segmentId) throw new Error("Segment created but ID missing in response")
       router.push(`/segments/${segmentId}`)
     } catch (err: any) {
-      setSegmentMsg(`❌ ${err?.message || "Failed to create segment."}`)
+      segmentMsg.setMessage(`❌ ${err?.message || "Failed to create segment."}`)
     } finally {
       setIsCreatingSegment(false)
     }
@@ -1624,7 +1634,7 @@ function IcpBuilderPageContent() {
   )
 
   const handleSave = async () => {
-    if (!name.trim()) { setSaveMsg("❌ ICP name is required."); return }
+    if (!name.trim()) { saveMsg.setMessage("❌ ICP name is required."); return }
 
     const profileErrors = {
       mappedIndustries: mappedIndustries.length === 0
@@ -1666,7 +1676,7 @@ function IcpBuilderPageContent() {
       setMarketError(nextMarketError)
       setTechError(nextTechError)
       setPersonaError(nextPersonaError)
-      setSaveMsg("❌ Please complete all required fields.")
+      saveMsg.setMessage("❌ Please complete all required fields.")
       scrollToFirstError({
         company: profileErrors,
         market: nextMarketError,
@@ -1681,7 +1691,7 @@ function IcpBuilderPageContent() {
     setTechError("")
     setPersonaError("")
     setIsSaving(true)
-    setSaveMsg("")
+    saveMsg.clearMessage()
     try {
       const payload = {
         name: name.trim(),
@@ -1717,25 +1727,25 @@ function IcpBuilderPageContent() {
       if (editId || savedIcpId) {
         await api.put<any>(`/icp/${editId || savedIcpId}`, payload)
         icpId = editId || savedIcpId
-        setSaveMsg("✅ ICP profile updated successfully!")
+        saveMsg.setMessage("✅ ICP profile updated successfully!")
       } else {
         const res = await api.post<any>("/icp", payload)
         icpId = res.data?.data?._id || res.data?._id
         setSavedIcpId(icpId)
-        setSaveMsg("✅ ICP profile saved successfully!")
+        saveMsg.setMessage("✅ ICP profile saved successfully!")
         router.replace(`/segments/icp-builder?id=${icpId}`)
       }
 
       if (icpId && isBenchmark) {
         await api.put<any>(`/icp/${icpId}/set-benchmark`, {})
-        setSaveMsg("✅ ICP saved and set as company benchmark!")
+        saveMsg.setMessage("✅ ICP saved and set as company benchmark!")
       }
 
       if (icpId) fetchMatches(icpId)
     } catch (err: unknown) {
       const apiErr = err as { data?: { message?: string; errors?: { field: string; message: string }[] } }
       const details = apiErr.data?.errors?.map((e) => e.message).join("; ")
-      setSaveMsg(
+      saveMsg.setMessage(
         details
           ? `❌ Save failed: ${details}`
           : apiErr.data?.message
@@ -1783,8 +1793,11 @@ function IcpBuilderPageContent() {
         </Button>
       </div>
 
-      {saveMsg && (
-        <div className="text-sm px-4 py-2.5 rounded-lg border bg-muted/20">{saveMsg}</div>
+      {saveMsg.visible && (
+        <AutoDismissBanner {...saveMsg} className="bg-muted/20" onDismiss={saveMsg.clearMessage} />
+      )}
+      {matchMsg.visible && (
+        <AutoDismissBanner {...matchMsg} onDismiss={matchMsg.clearMessage} />
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -2460,8 +2473,8 @@ function IcpBuilderPageContent() {
           {/* Create Segment from this ICP */}
           {savedIcpId && (
             <div className="mt-3 space-y-2">
-              {segmentMsg && (
-                <p className="text-xs text-center px-2">{segmentMsg}</p>
+              {segmentMsg.visible && (
+                <AutoDismissBanner {...segmentMsg} inline className="text-center" onDismiss={segmentMsg.clearMessage} />
               )}
               <Button
                 variant="outline"

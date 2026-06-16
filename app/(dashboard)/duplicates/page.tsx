@@ -13,6 +13,8 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { api }      from "@/lib/api"
 import type { Duplicate, Prospect } from "@/types"
+import { useAutoDismissMessage } from "@/hooks/useAutoDismissMessage"
+import { AutoDismissBanner } from "@/components/ui/auto-dismiss-banner"
 
 const LIMIT = 100
 
@@ -218,7 +220,7 @@ export default function DuplicatesPage() {
   const [currentPage,   setCurrentPage]   = useState(1)
   const [statusFilter,  setStatusFilter]  = useState("pending")
   const [actionId,      setActionId]      = useState<string | null>(null)
-  const [toast,         setToast]         = useState<{ msg: string; ok: boolean } | null>(null)
+  const toastMsg = useAutoDismissMessage()
   const [selectedIds,   setSelectedIds]   = useState<string[]>([])
   const [allPagesSelected, setAllPagesSelected] = useState(false) // ← selection across all pages
   const [fetchingAllIds,   setFetchingAllIds]   = useState(false) // ← loading state
@@ -229,10 +231,7 @@ export default function DuplicatesPage() {
   pageRef.current   = currentPage
   statusRef.current = statusFilter
 
-  const showToast = (msg: string, ok = true) => {
-    setToast({ msg, ok })
-    setTimeout(() => setToast(null), 3000)
-  }
+  const showToast = (msg: string) => toastMsg.setMessage(msg)
 
   const fetchDuplicates = useCallback(async (page: number, status: string) => {
     setIsLoading(true)
@@ -302,7 +301,7 @@ export default function DuplicatesPage() {
       setAllPagesSelected(true)
       showToast(`✅ All ${allIds.length} records selected`)
     } catch (err) {
-      showToast("❌ Could not select all records", false)
+      showToast("❌ Could not select all records")
     } finally {
       setFetchingAllIds(false)
     }
@@ -328,7 +327,7 @@ export default function DuplicatesPage() {
       showToast(`✅ ${labels[action]} successfully`)
       fetchDuplicates(pageRef.current, statusRef.current)
     } catch (err: any) {
-      showToast(`❌ Action failed — ${err?.message || "try again"}`, false)
+      showToast(`❌ Action failed — ${err?.message || "try again"}`)
     } finally {
       setActionId(null)
     }
@@ -345,7 +344,7 @@ export default function DuplicatesPage() {
       showToast(`✅ Bulk ${action}: ${success} done${failed > 0 ? `, ${failed} failed` : ""}`)
       fetchDuplicates(pageRef.current, statusRef.current)
     } catch (err: any) {
-      showToast(`❌ Bulk action failed — ${err?.message || "try again"}`, false)
+      showToast(`❌ Bulk action failed — ${err?.message || "try again"}`)
     } finally {
       setBulkLoading(false)
       setSelectedIds([])
@@ -370,10 +369,12 @@ export default function DuplicatesPage() {
   return (
     <div className="p-6 space-y-5 max-w-7xl mx-auto">
 
-      {toast && (
-        <div className={`fixed top-4 right-4 z-50 border shadow-lg rounded-lg px-4 py-3 text-sm font-medium ${toast.ok ? "bg-white border-green-200" : "bg-white border-red-200"}`}>
-          {toast.msg}
-        </div>
+      {toastMsg.visible && (
+        <AutoDismissBanner
+          {...toastMsg}
+          className="fixed top-4 right-4 z-50 shadow-lg font-medium bg-white"
+          onDismiss={toastMsg.clearMessage}
+        />
       )}
 
       {/* Header */}

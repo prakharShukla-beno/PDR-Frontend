@@ -12,7 +12,7 @@
 // API: POST /api/campaigns → create the campaign at the end
 // ─────────────────────────────────────────────
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import {
@@ -32,6 +32,8 @@ import {
 } from "@/components/ui/select"
 import { api, ApiError } from "@/lib/api"
 import type { ICP } from "@/types"
+import { useAutoDismissMessage } from "@/hooks/useAutoDismissMessage"
+import { AutoDismissBanner } from "@/components/ui/auto-dismiss-banner"
 
 // ── Steps config ──────────────────────────────
 const STEPS = [
@@ -57,7 +59,15 @@ export default function CampaignWizardPage() {
   // ── Wizard state ────────────────────────────
   const [currentStep, setCurrentStep] = useState(1)
   const [isCreating, setIsCreating] = useState(false)
-  const [createMsg, setCreateMsg] = useState("")
+  const createdCampaignIdRef = useRef("")
+
+  const createMsg = useAutoDismissMessage({
+    onAutoDismiss: () => {
+      if (createdCampaignIdRef.current) {
+        router.push(`/campaigns/${createdCampaignIdRef.current}`)
+      }
+    },
+  })
 
   // Step 1 — Segment
   const [icps, setIcps] = useState<ICP[]>([])
@@ -122,11 +132,11 @@ export default function CampaignWizardPage() {
   // ── Final Submit — POST /api/campaigns ──────
   const handleLaunch = async () => {
     if (!campaignName.trim()) {
-      setCreateMsg("❌ Campaign name is required.")
+      createMsg.setMessage("❌ Campaign name is required.")
       return
     }
     setIsCreating(true)
-    setCreateMsg("")
+    createMsg.clearMessage()
     try {
       const res = await api.post<any>("/campaigns", {
         name: campaignName,
@@ -136,13 +146,11 @@ export default function CampaignWizardPage() {
         status: status,
         promptUsed: prompt || undefined,
       })
-      setCreateMsg("✅ Campaign created!")
-      setTimeout(() => {
-        router.push(`/campaigns/${res.data?._id || ""}`)
-      }, 1000)
+      createdCampaignIdRef.current = res.data?._id || ""
+      createMsg.setMessage("✅ Campaign created!")
     } catch (err) {
-      if (err instanceof ApiError) setCreateMsg(`❌ ${err.message}`)
-      else setCreateMsg("❌ Creation failed.")
+      if (err instanceof ApiError) createMsg.setMessage(`❌ ${err.message}`)
+      else createMsg.setMessage("❌ Creation failed.")
     } finally {
       setIsCreating(false)
     }
@@ -449,7 +457,9 @@ export default function CampaignWizardPage() {
                 </div>
               </div>
 
-              {createMsg && <div className="text-sm px-3 py-2 rounded-lg border">{createMsg}</div>}
+              {createMsg.visible && (
+                <AutoDismissBanner {...createMsg} onDismiss={createMsg.clearMessage} />
+              )}
             </div>
           )}
         </CardContent>

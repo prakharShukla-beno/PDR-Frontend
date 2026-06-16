@@ -100,6 +100,7 @@ async function request<T>(
   const config: RequestInit = {
     method,
     headers: requestHeaders,
+    cache: "no-store",
   }
 
   if (body) {

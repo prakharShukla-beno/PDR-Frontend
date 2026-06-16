@@ -19,6 +19,8 @@ import { api, fileApi, ApiError } from "@/lib/api"
 import type { Prospect } from "@/types"
 import { FilterPanel, FilterState, EMPTY_FILTERS, buildFilterQuery, countActiveFilters } from "@/components/filters/FilterPanel"
 import { IcpImportPreviewModal } from "@/components/import/IcpImportPreviewModal"
+import { useAutoDismissMessage } from "@/hooks/useAutoDismissMessage"
+import { AutoDismissBanner } from "@/components/ui/auto-dismiss-banner"
 
 function AccountsPageContent() {
   const router = useRouter()
@@ -37,10 +39,8 @@ function AccountsPageContent() {
   const [selectedIds, setSelectedIds]       = useState<string[]>([])
   const [isAllSelected, setIsAllSelected]   = useState(false)
   const [isEnriching, setIsEnriching]       = useState(false)
-  const [enrichMsg, setEnrichMsg]           = useState("")
   const [uploadFile, setUploadFile]         = useState<File | null>(null)
   const [isUploading, setIsUploading]       = useState(false)
-  const [uploadMsg, setUploadMsg]           = useState("")
   const [showImportPreview, setShowImportPreview] = useState(false)
   const [importPreview, setImportPreview]   = useState<{
     missingIcpColumns: string[]
@@ -52,7 +52,6 @@ function AccountsPageContent() {
   const [reTierMsg, setReTierMsg]           = useState("")
   const [showAddModal, setShowAddModal]     = useState(false)
   const [isAdding, setIsAdding]             = useState(false)
-  const [addMsg, setAddMsg]                 = useState("")
   const [segmentName, setSegmentName]       = useState("")  // ← Segment name header mein
   const [newAccount, setNewAccount] = useState({
     accountName: "", website: "", primaryIndustry: "",
@@ -139,7 +138,46 @@ function AccountsPageContent() {
     }
   }, [currentPage, recordsPerPage, search, appliedFilters])
 
+  const uploadMsg = useAutoDismissMessage()
+  const enrichMsg = useAutoDismissMessage({ onAutoDismiss: () => fetchProspects() })
+  const addMsg = useAutoDismissMessage({
+    onAutoDismiss: () => {
+      setShowAddModal(false)
+      setNewAccount({
+        accountName: "", website: "", primaryIndustry: "",
+        businessModel: "", country: "", hqLocationCity: "", source: "",
+        technologyAlignment: "", financialCapacity: "",
+        strategicValue: "", marginPotential: "",
+        annualRevenue: "", noOfEmployees: "",
+        intentSignal: "", historyTrigger: "", servicePitch: "",
+        techAdoptionProfile: "", infrastructureRisk: "", commercialCategory: "",
+      })
+      setNewTechStack([])
+      fetchProspects()
+    },
+  })
+
   useEffect(() => { fetchProspects() }, [fetchProspects])
+
+  // Re-fetch live scores when returning from Account detail or switching tabs
+  useEffect(() => {
+    const refresh = () => fetchProspects()
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") refresh()
+    }
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) refresh()
+    }
+    window.addEventListener("focus", refresh)
+    document.addEventListener("visibilitychange", onVisibility)
+    window.addEventListener("pageshow", onPageShow)
+    return () => {
+      window.removeEventListener("focus", refresh)
+      document.removeEventListener("visibilitychange", onVisibility)
+      window.removeEventListener("pageshow", onPageShow)
+    }
+  }, [fetchProspects])
+
   useEffect(() => { setCurrentPage(1) }, [search, appliedFilters, recordsPerPage])
 
   const getActiveChips = () => {
@@ -173,7 +211,7 @@ function AccountsPageContent() {
 
   const handleFileSelect = async (file: File) => {
     setUploadFile(file)
-    setUploadMsg("")
+    uploadMsg.clearMessage()
     setIsPreviewing(true)
     try {
       const formData = new FormData()
@@ -189,8 +227,8 @@ function AccountsPageContent() {
         setShowImportPreview(true)
       }
     } catch (err) {
-      if (err instanceof ApiError) setUploadMsg(`❌ ${err.message}`)
-      else setUploadMsg("❌ Could not preview file. Try again.")
+      if (err instanceof ApiError) uploadMsg.setMessage(`❌ ${err.message}`)
+      else uploadMsg.setMessage("❌ Could not preview file. Try again.")
       setUploadFile(null)
     } finally {
       setIsPreviewing(false)
@@ -220,22 +258,22 @@ function AccountsPageContent() {
       if (errSample) summary += ` — e.g. ${errSample}`
 
       if (dupCount > 0) {
-        setUploadMsg(`✅ ${summary}.`)
+        uploadMsg.setMessage(`✅ ${summary}.`)
         setTimeout(() => router.push("/duplicates"), 1200)
       } else {
-        setUploadMsg(failed > 0 ? `⚠️ ${summary}.` : `✅ Import complete — ${summary}.`)
+        uploadMsg.setMessage(failed > 0 ? `⚠️ ${summary}.` : `✅ Import complete — ${summary}.`)
         setCurrentPage(1)
         setTimeout(fetchProspects, 1500)
       }
       setUploadFile(null)
     } catch (err) {
-      if (err instanceof ApiError) setUploadMsg(`❌ ${err.message}`)
+      if (err instanceof ApiError) uploadMsg.setMessage(`❌ ${err.message}`)
     } finally { setIsUploading(false) }
   }
 
   const handleAddAccount = async () => {
-    if (!newAccount.accountName.trim()) { setAddMsg("❌ Account name is required."); return }
-    setIsAdding(true); setAddMsg("")
+    if (!newAccount.accountName.trim()) { addMsg.setMessage("❌ Account name is required."); return }
+    setIsAdding(true); addMsg.clearMessage()
     try {
       const payload: any = {
         ...newAccount,
@@ -244,23 +282,9 @@ function AccountsPageContent() {
       }
       Object.keys(payload).forEach(k => { if (!payload[k] && payload[k] !== 0) delete payload[k] })
       await api.post("/prospects", payload)
-      setAddMsg("✅ Account created!")
-      setTimeout(() => {
-        setShowAddModal(false); setAddMsg("")
-        setNewAccount({
-          accountName: "", website: "", primaryIndustry: "",
-          businessModel: "", country: "", hqLocationCity: "", source: "",
-          technologyAlignment: "", financialCapacity: "",
-          strategicValue: "", marginPotential: "",
-          annualRevenue: "", noOfEmployees: "",
-          intentSignal: "", historyTrigger: "", servicePitch: "",
-          techAdoptionProfile: "", infrastructureRisk: "", commercialCategory: "",
-        })
-        setNewTechStack([])
-        fetchProspects()
-      }, 1000)
+      addMsg.setMessage("✅ Account created!")
     } catch (err) {
-      if (err instanceof ApiError) setAddMsg(`❌ ${err.message}`)
+      if (err instanceof ApiError) addMsg.setMessage(`❌ ${err.message}`)
     } finally { setIsAdding(false) }
   }
 
@@ -371,7 +395,7 @@ function AccountsPageContent() {
           </div>
         </div>
 
-        {uploadMsg && <div className="text-sm px-3 py-2 rounded-lg border">{uploadMsg}</div>}
+        <AutoDismissBanner {...uploadMsg} onDismiss={uploadMsg.clearMessage} />
 
         <div className="flex items-center gap-3 flex-wrap">
           <div className="relative flex-1 max-w-md">
@@ -574,21 +598,20 @@ function AccountsPageContent() {
                 } catch { ids = selectedIds }
               }
               setIsEnriching(true)
-              setEnrichMsg(`⏳ Enriching ${ids.length} account${ids.length > 1 ? "s" : ""}... (this may take a minute)`)
+              enrichMsg.setMessage(`⏳ Enriching ${ids.length} account${ids.length > 1 ? "s" : ""}... (this may take a minute)`)
               try {
                 const res = await api.post<any>("/enrichment/bulk", { prospectIds: ids })
                 const { success = 0, failed = 0 } = res?.data || res || {}
                 if (failed > 0 && success === 0) {
-                  setEnrichMsg(`❌ Enrichment failed for all ${ids.length} accounts. Check Gemini API key.`)
+                  enrichMsg.setMessage(`❌ Enrichment failed for all ${ids.length} accounts. Check Gemini API key.`)
                 } else if (failed > 0) {
-                  setEnrichMsg(`⚠️ ${success} enriched, ${failed} failed`)
+                  enrichMsg.setMessage(`⚠️ ${success} enriched, ${failed} failed`)
                 } else {
-                  setEnrichMsg(`✅ ${ids.length} account${ids.length > 1 ? "s" : ""} enriched successfully!`)
+                  enrichMsg.setMessage(`✅ ${ids.length} account${ids.length > 1 ? "s" : ""} enriched successfully!`)
                 }
-                setTimeout(() => { setEnrichMsg(""); fetchProspects() }, 3000)
               } catch (err: any) {
                 const msg = err?.data?.message || err?.message || "Unknown error"
-                setEnrichMsg(`❌ Enrichment failed — ${msg}`)
+                enrichMsg.setMessage(`❌ Enrichment failed — ${msg}`)
               } finally {
                 setIsEnriching(false)
               }
@@ -597,7 +620,9 @@ function AccountsPageContent() {
             {isEnriching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
             {isEnriching ? "Enriching..." : "AI ENRICH"}
           </Button>
-          {enrichMsg && <span className="text-xs text-muted-foreground max-w-xs">{enrichMsg}</span>}
+          {enrichMsg.visible && (
+            <AutoDismissBanner {...enrichMsg} inline onDismiss={enrichMsg.clearMessage} />
+          )}
         </div>
         <Button
           variant={isAllSelected ? "default" : "outline"}
@@ -881,7 +906,9 @@ function AccountsPageContent() {
               )}
             </div>
 
-            {addMsg && <div className="text-sm px-3 py-2 rounded-lg border bg-muted/20">{addMsg}</div>}
+            {addMsg.visible && (
+              <AutoDismissBanner {...addMsg} className="bg-muted/20" onDismiss={addMsg.clearMessage} />
+            )}
           </div>
 
           <DialogFooter>
