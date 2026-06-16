@@ -102,6 +102,20 @@ export default function SegmentsPage() {
     }
   }
 
+  // POST /api/icp/:id/create-segment
+  const createSegmentFromIcp = async (icpId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    try {
+      const res = await api.post<any>(`/icp/${icpId}/create-segment`)
+      const segment = res.data
+      const segmentId = segment?._id ?? segment?.id
+      if (!segmentId) throw new Error("Segment ID missing in response")
+      router.push(`/segments/${segmentId}`)
+    } catch (err: any) {
+      alert(err?.message || "Failed to create segment from ICP.")
+    }
+  }
+
   // Paginate locally
   const segTotalPages = Math.ceil(segments.length / SEG_LIMIT)
   const pageSegments  = segments.slice((segPage - 1) * SEG_LIMIT, segPage * SEG_LIMIT)
@@ -391,11 +405,7 @@ export default function SegmentsPage() {
                         {/* Create Segment from this ICP */}
                         <Button
                           variant="default" size="sm" className="flex-1 text-xs"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            // Pass ICP id as query param — new segment page will prefill filters
-                            router.push(`/segments/new?from_icp=${icp._id}`)
-                          }}
+                          onClick={(e) => createSegmentFromIcp(icp._id, e)}
                         >
                           Create Segment
                         </Button>

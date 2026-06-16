@@ -22,9 +22,50 @@ import { Badge }             from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { Checkbox }          from "@/components/ui/checkbox"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Switch } from "@/components/ui/switch"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { api }               from "@/lib/api"
 import { cn }                from "@/lib/utils"
 import type { Prospect }     from "@/types"
+
+type IcpScoreBreakdown = {
+  firmographic?: {
+    industry?: { score?: number }
+    employee?: { score?: number }
+    revenue?: { score?: number }
+  }
+  market?: { market?: { score?: number } }
+  tech?: { tech?: { score?: number } }
+  persona?: { persona?: { score?: number } }
+  formula?: string
+}
+
+type MatchedProspect = Prospect & {
+  icpMatchScore?: number
+  icpScoreBreakdown?: IcpScoreBreakdown
+}
+
+function getIcpMatchLabel(score: number) {
+  if (score >= 80) return { label: "Strong Match", className: "bg-green-100 text-green-800 border-green-200" }
+  if (score >= 50) return { label: "Partial Match", className: "bg-yellow-100 text-yellow-800 border-yellow-200" }
+  return { label: "Weak Match", className: "bg-red-100 text-red-800 border-red-200" }
+}
+
+function formatIcpBreakdownTooltip(breakdown?: IcpScoreBreakdown) {
+  if (!breakdown) return "No breakdown available"
+  const firm =
+    (breakdown.firmographic?.industry?.score ?? 0) +
+    (breakdown.firmographic?.employee?.score ?? 0) +
+    (breakdown.firmographic?.revenue?.score ?? 0)
+  const market = breakdown.market?.market?.score ?? 0
+  const tech = breakdown.tech?.tech?.score ?? 0
+  const persona = breakdown.persona?.persona?.score ?? 0
+  return `Firmographic: ${firm}/40 | Market: ${market}/25 | Tech: ${tech}/25 | Persona: ${persona}/10`
+}
 
 // Step 1.2 — 3-level Commercial Sector taxonomy
 const SECTOR_TAXONOMY: Record<string, Record<string, string[]>> = {
@@ -1312,6 +1353,7 @@ function IcpBuilderPageContent() {
   // ── Basic info ──────────────────────────────────────────────────────────────
   const [name,        setName]        = useState("")
   const [description, setDescription] = useState("")
+  const [isBenchmark, setIsBenchmark] = useState(false)
 
   // ── Company filters ─────────────────────────────────────────────────────────
   const [commercialSectors,    setCommercialSectors]    = useState<string[]>([])
@@ -1365,7 +1407,7 @@ function IcpBuilderPageContent() {
   const [savedIcpId,   setSavedIcpId]   = useState<string | null>(editId)
 
   // ── Matched prospects panel ─────────────────────────────────────────────────
-  const [matchedProspects, setMatchedProspects] = useState<Prospect[]>([])
+  const [matchedProspects, setMatchedProspects] = useState<MatchedProspect[]>([])
   const [isMatching,       setIsMatching]       = useState(false)
   const [matchTotal,       setMatchTotal]       = useState(0)
   const [matchDiagnosis,   setMatchDiagnosis]   = useState<Record<string, {
@@ -1373,6 +1415,8 @@ function IcpBuilderPageContent() {
     totalProspects: number
     percentage: number
   }>>({})
+  const [isCreatingSegment, setIsCreatingSegment] = useState(false)
+  const [segmentMsg,        setSegmentMsg]        = useState("")
 
   // Load ICP for edit — GET /api/icp/:id returns { success, data: icpObject }
   useEffect(() => {
@@ -1384,6 +1428,7 @@ function IcpBuilderPageContent() {
         if (!icp) return
         setName(icp.name ?? "")
         setDescription(icp.description ?? "")
+        setIsBenchmark(icp.isBenchmark ?? false)
         setCommercialSectors(icp.commercialSectors ?? icp.industries ?? [])
         setSubSectors(icp.subSectors ?? [])
         setMappedIndustries(icp.mappedIndustries ?? [])
@@ -1429,6 +1474,24 @@ function IcpBuilderPageContent() {
       console.error("Match error:", err)
     } finally {
       setIsMatching(false)
+    }
+  }
+
+  // POST /api/icp/:id/create-segment — one-click segment from matching prospects
+  const handleCreateSegment = async () => {
+    if (!savedIcpId || matchTotal === 0) return
+    setIsCreatingSegment(true)
+    setSegmentMsg("")
+    try {
+      const res = await api.post<any>(`/icp/${savedIcpId}/create-segment`)
+      const segment = res.data
+      const segmentId = segment?._id ?? segment?.id
+      if (!segmentId) throw new Error("Segment created but ID missing in response")
+      router.push(`/segments/${segmentId}`)
+    } catch (err: any) {
+      setSegmentMsg(`❌ ${err?.message || "Failed to create segment."}`)
+    } finally {
+      setIsCreatingSegment(false)
     }
   }
 
@@ -1623,6 +1686,7 @@ function IcpBuilderPageContent() {
       const payload = {
         name: name.trim(),
         description:            description || undefined,
+        isBenchmark,
         commercialSectors,
         subSectors,
         mappedIndustries,
@@ -1661,6 +1725,12 @@ function IcpBuilderPageContent() {
         setSaveMsg("✅ ICP profile saved successfully!")
         router.replace(`/segments/icp-builder?id=${icpId}`)
       }
+
+      if (icpId && isBenchmark) {
+        await api.put<any>(`/icp/${icpId}/set-benchmark`, {})
+        setSaveMsg("✅ ICP saved and set as company benchmark!")
+      }
+
       if (icpId) fetchMatches(icpId)
     } catch (err: unknown) {
       const apiErr = err as { data?: { message?: string; errors?: { field: string; message: string }[] } }
@@ -1772,6 +1842,22 @@ function IcpBuilderPageContent() {
                       value={description}
                       onChange={e => setDescription(e.target.value)}
                     />
+                  </div>
+
+                  <div className="flex items-center gap-3 pt-1">
+                    <Switch
+                      checked={isBenchmark}
+                      onCheckedChange={setIsBenchmark}
+                    />
+                    <div>
+                      <label className="font-medium text-sm">
+                        Set as Company Benchmark ICP
+                      </label>
+                      <p className="text-xs text-muted-foreground">
+                        This ICP will be used as the 100/100 reference.
+                        All prospects will be scored against it.
+                      </p>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -2227,6 +2313,11 @@ function IcpBuilderPageContent() {
               <div className="flex items-center gap-2 p-4 border-b">
                 <Target className="h-4 w-4 text-primary" />
                 <h3 className="font-semibold">Matching Prospects</h3>
+                {isBenchmark && (
+                  <Badge variant="outline" className="text-xs border-amber-300 text-amber-700 bg-amber-50">
+                    Benchmark
+                  </Badge>
+                )}
                 {matchTotal > 0 && (
                   <Badge className="ml-auto">{matchTotal}</Badge>
                 )}
@@ -2246,26 +2337,46 @@ function IcpBuilderPageContent() {
 
               {!isMatching && matchedProspects.length > 0 && (
                 <div className="divide-y max-h-[500px] overflow-y-auto">
-                  {matchedProspects.map(prospect => (
-                    <Link
-                      key={prospect._id}
-                      href={`/accounts/${prospect._id}`}
-                      className="flex items-center justify-between p-3 hover:bg-muted/30 transition-colors"
-                    >
-                      <div className="min-w-0">
-                        <p className="font-medium text-sm truncate">{prospect.accountName}</p>
-                        <p className="text-xs text-muted-foreground truncate">
-                          {[prospect.primaryIndustry, prospect.country].filter(Boolean).join(" · ")}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-bold">
-                          {prospect.techFitScore ?? "—"}
+                  <div className="grid grid-cols-[1fr_auto] gap-2 px-3 py-2 text-xs font-medium text-muted-foreground border-b bg-muted/20">
+                    <span>Account</span>
+                    <span>ICP Match Score</span>
+                  </div>
+                  {matchedProspects.map(prospect => {
+                    const score = prospect.icpMatchScore ?? 0
+                    const matchMeta = getIcpMatchLabel(score)
+                    return (
+                      <Link
+                        key={prospect._id}
+                        href={`/accounts/${prospect._id}`}
+                        className="grid grid-cols-[1fr_auto] items-center gap-2 p-3 hover:bg-muted/30 transition-colors"
+                      >
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm truncate">{prospect.accountName}</p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {[prospect.primaryIndustry, prospect.country].filter(Boolean).join(" · ")}
+                          </p>
                         </div>
-                        <ChevronRight className="h-3 w-3 text-muted-foreground" />
-                      </div>
-                    </Link>
-                  ))}
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="flex flex-col items-end gap-1 shrink-0">
+                              <span className="text-sm font-semibold tabular-nums">
+                                {score}/100
+                              </span>
+                              <Badge
+                                variant="outline"
+                                className={cn("text-[10px] px-1.5 py-0", matchMeta.className)}
+                              >
+                                {matchMeta.label}
+                              </Badge>
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent side="left" className="max-w-xs">
+                            {formatIcpBreakdownTooltip(prospect.icpScoreBreakdown)}
+                          </TooltipContent>
+                        </Tooltip>
+                      </Link>
+                    )
+                  })}
                 </div>
               )}
 
@@ -2348,14 +2459,26 @@ function IcpBuilderPageContent() {
 
           {/* Create Segment from this ICP */}
           {savedIcpId && (
-            <Button
-              variant="outline"
-              className="w-full mt-3 gap-2"
-              onClick={() => router.push(`/segments/new?from_icp=${savedIcpId}`)}
-            >
-              <Plus className="h-4 w-4" />
-              Create Segment from this ICP
-            </Button>
+            <div className="mt-3 space-y-2">
+              {segmentMsg && (
+                <p className="text-xs text-center px-2">{segmentMsg}</p>
+              )}
+              <Button
+                variant="outline"
+                className="w-full gap-2"
+                onClick={handleCreateSegment}
+                disabled={isCreatingSegment || matchTotal === 0}
+              >
+                {isCreatingSegment
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <Plus className="h-4 w-4" />
+                }
+                {isCreatingSegment
+                  ? "Creating Segment..."
+                  : `Create Segment from this ICP (${matchTotal})`
+                }
+              </Button>
+            </div>
           )}
         </div>
       </div>
