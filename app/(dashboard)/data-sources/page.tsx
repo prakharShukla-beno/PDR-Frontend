@@ -20,6 +20,8 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { api, fileApi, ApiError } from "@/lib/api"
 import { IcpImportPreviewModal } from "@/components/import/IcpImportPreviewModal"
+import { useAutoDismissMessage } from "@/hooks/useAutoDismissMessage"
+import { AutoDismissBanner } from "@/components/ui/auto-dismiss-banner"
 
 // ── Connector config — static UI ──
 const CONNECTORS = [
@@ -80,7 +82,6 @@ export default function DataSourcesPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [isUploading, setIsUploading] = useState(false)
-  const [uploadMsg, setUploadMsg] = useState("")
   const [showImportPreview, setShowImportPreview] = useState(false)
   const [importPreview, setImportPreview] = useState<{
     missingIcpColumns: string[]
@@ -105,9 +106,11 @@ export default function DataSourcesPage() {
     fetchHistory()
   }, [])
 
+  const uploadMsg = useAutoDismissMessage()
+
   const handleFileSelect = async (file: File) => {
     setUploadFile(file)
-    setUploadMsg("")
+    uploadMsg.clearMessage()
     setIsPreviewing(true)
     try {
       const formData = new FormData()
@@ -123,8 +126,8 @@ export default function DataSourcesPage() {
         setShowImportPreview(true)
       }
     } catch (err) {
-      if (err instanceof ApiError) setUploadMsg(`❌ ${err.message}`)
-      else setUploadMsg("❌ Could not preview file. Try again.")
+      if (err instanceof ApiError) uploadMsg.setMessage(`❌ ${err.message}`)
+      else uploadMsg.setMessage("❌ Could not preview file. Try again.")
       setUploadFile(null)
     } finally {
       setIsPreviewing(false)
@@ -136,7 +139,7 @@ export default function DataSourcesPage() {
     if (!uploadFile) return
     setIsUploading(true)
     setShowImportPreview(false)
-    setUploadMsg("")
+    uploadMsg.clearMessage()
     try {
       const formData = new FormData()
       formData.append("file", uploadFile)
@@ -145,7 +148,7 @@ export default function DataSourcesPage() {
       const saved  = result?.successCount ?? 0
       const total  = result?.totalRows ?? saved
       const failed = result?.failedCount ?? 0
-      setUploadMsg(
+      uploadMsg.setMessage(
         failed > 0
           ? `✅ Import complete — ${saved} of ${total} rows saved (${failed} skipped/errors).`
           : `✅ Import complete — ${saved} of ${total} rows saved.`
@@ -155,8 +158,8 @@ export default function DataSourcesPage() {
       const histRes = await api.get<any>("/dashboard/import-history")
       setImportHistory(histRes.data || [])
     } catch (err) {
-      if (err instanceof ApiError) setUploadMsg(`❌ ${err.message}`)
-      else setUploadMsg("❌ Upload failed. Try again.")
+      if (err instanceof ApiError) uploadMsg.setMessage(`❌ ${err.message}`)
+      else uploadMsg.setMessage("❌ Upload failed. Try again.")
     } finally {
       setIsUploading(false)
     }
@@ -208,9 +211,7 @@ export default function DataSourcesPage() {
         </div>
       </div>
 
-      {uploadMsg && (
-        <div className="text-sm px-4 py-2 rounded-lg border">{uploadMsg}</div>
-      )}
+      <AutoDismissBanner {...uploadMsg} onDismiss={uploadMsg.clearMessage} />
 
       {/* ── Connected Sources ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import {
@@ -11,6 +11,8 @@ import { Button }   from "@/components/ui/button"
 import { Badge }    from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { api }      from "@/lib/api"
+import { useAutoDismissMessage } from "@/hooks/useAutoDismissMessage"
+import { AutoDismissBanner } from "@/components/ui/auto-dismiss-banner"
 
 export default function SegmentDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -27,16 +29,14 @@ export default function SegmentDetailPage() {
   const LIMIT = 10
 
   const [isSyncing, setIsSyncing] = useState(false)
-  const [syncMsg,   setSyncMsg]   = useState("")
 
   const [isEnriching,  setIsEnriching]  = useState(false)
-  const [enrichMsg,    setEnrichMsg]    = useState("")
+  const prevEnrichStatus = useRef<string | null>(null)
 
   // Selection state
   const [selectedIds,    setSelectedIds]    = useState<string[]>([])
   const [isAllSelected,  setIsAllSelected]  = useState(false)
   const [isBulkEnriching, setIsBulkEnriching] = useState(false)
-  const [bulkEnrichMsg,   setBulkEnrichMsg]   = useState("")
   const [isDeleting,      setIsDeleting]      = useState(false)
 
   const fetchSegment = useCallback(async () => {
@@ -66,10 +66,41 @@ export default function SegmentDetailPage() {
     }
   }, [id])
 
+  const syncMsg = useAutoDismissMessage()
+  const enrichMsg = useAutoDismissMessage()
+  const enrichDoneBanner = useAutoDismissMessage({
+    onAutoDismiss: () => fetchAccounts(currentPage),
+  })
+  const bulkEnrichMsg = useAutoDismissMessage({
+    onAutoDismiss: () => fetchAccounts(currentPage),
+  })
+
   useEffect(() => {
     fetchSegment()
     fetchAccounts(1)
   }, [fetchSegment, fetchAccounts])
+
+  // Re-fetch live scores when returning to this page (e.g. after enriching on Account detail)
+  useEffect(() => {
+    const refresh = () => {
+      fetchSegment()
+      fetchAccounts(currentPage)
+    }
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") refresh()
+    }
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) refresh()
+    }
+    window.addEventListener("focus", refresh)
+    document.addEventListener("visibilitychange", onVisibility)
+    window.addEventListener("pageshow", onPageShow)
+    return () => {
+      window.removeEventListener("focus", refresh)
+      document.removeEventListener("visibilitychange", onVisibility)
+      window.removeEventListener("pageshow", onPageShow)
+    }
+  }, [currentPage, fetchSegment, fetchAccounts])
 
   useEffect(() => {
     if (segment?.enrichStatus !== "running") return
@@ -82,7 +113,14 @@ export default function SegmentDetailPage() {
         if (seg.enrichStatus !== "running") {
           clearInterval(timer)
           setIsEnriching(false)
-          setEnrichMsg(`Done — ${seg.enrichedCount ?? 0} enriched, ${seg.scoredCount ?? 0} scored`)
+          const status = seg.enrichStatus
+          if (status === "done" || status === "partial") {
+            enrichDoneBanner.setMessage(
+              status === "partial"
+                ? `Enrichment partial — ${seg.enrichedCount ?? 0} enriched, ${seg.scoredCount ?? 0} scored`
+                : `Enrichment done — ${seg.enrichedCount ?? 0} enriched, ${seg.scoredCount ?? 0} scored`
+            )
+          }
           await fetchAccounts(currentPage)
         }
       } catch (err) {
@@ -91,6 +129,20 @@ export default function SegmentDetailPage() {
     }, 3000)
     return () => clearInterval(timer)
   }, [segment?.enrichStatus, id, currentPage, fetchAccounts])
+
+  useEffect(() => {
+    if (!segment) return
+    const prev = prevEnrichStatus.current
+    const curr = segment.enrichStatus
+    if (prev === "running" && (curr === "done" || curr === "partial")) {
+      enrichDoneBanner.setMessage(
+        curr === "partial"
+          ? `Enrichment partial — ${segment.enrichedCount ?? 0} enriched, ${segment.scoredCount ?? 0} scored`
+          : `Enrichment done — ${segment.enrichedCount ?? 0} enriched, ${segment.scoredCount ?? 0} scored`
+      )
+    }
+    prevEnrichStatus.current = curr ?? null
+  }, [segment?.enrichStatus, segment?.enrichedCount, segment?.scoredCount, segment])
 
   const handlePageChange = (newPage: number) => {
     setCurrentPage(newPage)
@@ -101,36 +153,34 @@ export default function SegmentDetailPage() {
 
   const handleSync = async () => {
     setIsSyncing(true)
-    setSyncMsg("")
+    syncMsg.clearMessage()
     try {
       const res = await api.post<any>(`/segments/${id}/sync`, {})
       const count = res.data?.data?.matchCount ?? res.data?.matchCount
-      setSyncMsg(`Synced — ${count} accounts found`)
+      syncMsg.setMessage(`Synced — ${count} accounts found`)
       await fetchSegment()
       await fetchAccounts(1)
       setCurrentPage(1)
     } catch {
-      setSyncMsg("Sync failed. Please try again.")
+      syncMsg.setMessage("Sync failed. Please try again.")
     } finally {
       setIsSyncing(false)
-      setTimeout(() => setSyncMsg(""), 4000)
     }
   }
 
   const handleEnrich = async () => {
     setIsEnriching(true)
-    setEnrichMsg("")
+    enrichMsg.clearMessage()
     try {
       await api.post<any>(`/segments/${id}/enrich-score`, {})
-      setEnrichMsg("Enrichment started — running in background...")
+      enrichMsg.setMessage("Enrichment started — running in background...")
       const segRes = await api.get<any>(`/segments/${id}`)
       setSegment(segRes.data?.data ?? segRes.data)
       setCurrentPage(1)
     } catch (err: any) {
       const msg = err?.data?.message || err?.message || "Enrichment failed. Please try again."
-      setEnrichMsg(msg)
+      enrichMsg.setMessage(msg)
       setIsEnriching(false)
-      setTimeout(() => setEnrichMsg(""), 6000)
     }
   }
 
@@ -161,21 +211,20 @@ export default function SegmentDetailPage() {
       } catch { ids = selectedIds }
     }
     setIsBulkEnriching(true)
-    setBulkEnrichMsg(`⏳ Enriching ${ids.length} account${ids.length > 1 ? "s" : ""}... (this may take a minute)`)
+    bulkEnrichMsg.setMessage(`⏳ Enriching ${ids.length} account${ids.length > 1 ? "s" : ""}... (this may take a minute)`)
     try {
       const res = await api.post<any>("/enrichment/bulk", { prospectIds: ids })
       const { success = 0, failed = 0 } = res?.data || res || {}
       if (failed > 0 && success === 0) {
-        setBulkEnrichMsg(`❌ Enrichment failed for all accounts. Check Gemini API key.`)
+        bulkEnrichMsg.setMessage(`❌ Enrichment failed for all accounts. Check Gemini API key.`)
       } else if (failed > 0) {
-        setBulkEnrichMsg(`⚠️ ${success} enriched, ${failed} failed`)
+        bulkEnrichMsg.setMessage(`⚠️ ${success} enriched, ${failed} failed`)
       } else {
-        setBulkEnrichMsg(`✅ ${ids.length} account${ids.length > 1 ? "s" : ""} enriched successfully!`)
+        bulkEnrichMsg.setMessage(`✅ ${ids.length} account${ids.length > 1 ? "s" : ""} enriched successfully!`)
       }
-      setTimeout(() => { setBulkEnrichMsg(""); fetchAccounts(currentPage) }, 3000)
     } catch (err: any) {
       const msg = err?.data?.message || err?.message || "Unknown error"
-      setBulkEnrichMsg(`❌ Enrichment failed — ${msg}`)
+      bulkEnrichMsg.setMessage(`❌ Enrichment failed — ${msg}`)
     } finally {
       setIsBulkEnriching(false)
     }
@@ -260,35 +309,28 @@ export default function SegmentDetailPage() {
               </Button>
             </div>
 
-            {syncMsg   && <p className="text-xs text-muted-foreground">{syncMsg}</p>}
-            {enrichMsg && (
-              <p className={`text-xs flex items-center gap-1 ${enrichMsg.startsWith("Done") ? "text-green-600" : "text-red-500"}`}>
-                {enrichMsg.startsWith("Done") && <CheckCircle2 className="h-3 w-3" />}
-                {enrichMsg}
-              </p>
-            )}
+            <AutoDismissBanner
+              {...syncMsg}
+              className="text-xs text-muted-foreground border-0 bg-transparent px-0 py-0"
+            />
+            <AutoDismissBanner
+              {...enrichMsg}
+              className={`text-xs flex items-center gap-1 border-0 bg-transparent px-0 py-0 ${enrichMsg.message.startsWith("Done") ? "text-green-600" : ""}`}
+            />
           </div>
         </div>
 
-        {segment.enrichStatus && segment.enrichStatus !== "idle" && (
-          <div className={`mt-3 flex items-center gap-2 text-xs px-3 py-2 rounded-lg ${
-            segment.enrichStatus === "running"
-              ? "bg-violet-50 text-violet-700 border border-violet-200"
-              : segment.enrichStatus === "done"
-              ? "bg-green-50 text-green-700 border border-green-200"
-              : "bg-yellow-50 text-yellow-700 border border-yellow-200"
-          }`}>
-            {segment.enrichStatus === "running"
-              ? <Loader2 className="h-3 w-3 animate-spin" />
-              : <CheckCircle2 className="h-3 w-3" />}
-            {segment.enrichStatus === "running"
-              ? "AI Enrichment running in background..."
-              : `Enrichment done — ${segment.enrichedCount ?? 0} enriched, ${segment.scoredCount ?? 0} scored`}
-            {segment.lastEnrichedAt && (
-              <span className="ml-auto opacity-70">{formatSyncTime(segment.lastEnrichedAt)}</span>
-            )}
+        {segment.enrichStatus === "running" && (
+          <div className="mt-3 flex items-center gap-2 text-xs px-3 py-2 rounded-lg bg-violet-50 text-violet-700 border border-violet-200">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            AI Enrichment running in background...
           </div>
         )}
+
+        <AutoDismissBanner
+          {...enrichDoneBanner}
+          className="mt-3 flex items-center gap-2 text-xs px-3 py-2 rounded-lg"
+        />
 
         <div className="flex items-center gap-6 mt-4">
           <div>
@@ -485,7 +527,9 @@ export default function SegmentDetailPage() {
             {isBulkEnriching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
             {isBulkEnriching ? "Enriching..." : "AI ENRICH"}
           </Button>
-          {bulkEnrichMsg && <span className="text-xs text-muted-foreground max-w-xs">{bulkEnrichMsg}</span>}
+          {bulkEnrichMsg.visible && (
+            <AutoDismissBanner {...bulkEnrichMsg} inline />
+          )}
         </div>
         <Button
           variant={isAllSelected ? "default" : "outline"}

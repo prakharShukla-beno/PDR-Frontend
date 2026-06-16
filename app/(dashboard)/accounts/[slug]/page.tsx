@@ -39,6 +39,8 @@ import {
 }                                         from "@/components/ui/select"
 import { api }                            from "@/lib/api"
 import type { Prospect, Interaction, InteractionType, InteractionOutcome } from "@/types"
+import { useAutoDismissMessage } from "@/hooks/useAutoDismissMessage"
+import { AutoDismissBanner } from "@/components/ui/auto-dismiss-banner"
 
 // ── Tech Stack categories — matches requirement doc ───────────────────────────
 const TECH_CATEGORIES: Record<string, string[]> = {
@@ -86,7 +88,6 @@ const groupToolsByCategory = (tools: string[]): Record<string, string[]> => {
   return grouped
 }
 
-// ── Score color helper ────────────────────────────────────────────────────────
 const getScoreColor = (score?: number | null) => {
   if (!score) return "text-muted-foreground"
   if (score > 60) return "text-green-700"
@@ -122,7 +123,6 @@ export default function AccountDetailPage() {
   // { prospect: { ... }, calculated: { finalScore, techFitScore, clvRanking, salesPriority, disqualified, breakdown: { techFit, financial, strategic, industry, formula } } }
   const [scoreData,        setScoreData]        = useState<any>(null)
   const [isCalculating,    setIsCalculating]    = useState(false)
-  const [calcMsg,          setCalcMsg]          = useState("")
   const [showOverrideModal, setShowOverrideModal] = useState(false)
   const [overrideTier,     setOverrideTier]     = useState("")
   const [overridePriority, setOverridePriority] = useState("")
@@ -131,12 +131,10 @@ export default function AccountDetailPage() {
 
   // ── Enrich state ────────────────────────────────────────────────────────────
   const [isEnriching, setIsEnriching] = useState(false)
-  const [enrichMsg,   setEnrichMsg]   = useState("")
 
   // ── Suggest POC state ────────────────────────────────────────────────────────
   const [pocResult,       setPocResult]       = useState<any>(null)
   const [isSuggestingPoc, setIsSuggestingPoc] = useState(false)
-  const [pocError,        setPocError]        = useState("")
 
   // ── Log Interaction modal ───────────────────────────────────────────────────
   const [showLogModal, setShowLogModal] = useState(false)
@@ -145,12 +143,10 @@ export default function AccountDetailPage() {
   const [logNotes,     setLogNotes]     = useState("")
   const [logOutcome,   setLogOutcome]   = useState<InteractionOutcome>("Positive")
   const [isLogging,    setIsLogging]    = useState(false)
-  const [logMsg,       setLogMsg]       = useState("")
 
   // ── Edit modal ──────────────────────────────────────────────────────────────
   const [showEditModal, setShowEditModal] = useState(false)
   const [isSaving,      setIsSaving]      = useState(false)
-  const [saveMsg,       setSaveMsg]       = useState("")
   const [editData,      setEditData]      = useState({
     salesPriority: "", intentSignal: "", clvRanking: "",
     strategicValue: "", financialCapacity: "", marginPotential: "",
@@ -186,19 +182,32 @@ export default function AccountDetailPage() {
     fetchAll()
   }, [id])
 
+  const calcMsg = useAutoDismissMessage()
+  const enrichMsg = useAutoDismissMessage()
+  const pocError = useAutoDismissMessage()
+  const logMsg = useAutoDismissMessage({
+    onAutoDismiss: () => {
+      setShowLogModal(false)
+      setLogNotes("")
+    },
+  })
+  const saveMsg = useAutoDismissMessage({
+    onAutoDismiss: () => setShowEditModal(false),
+  })
+
   // ── POST /api/prospects/:id/calculate-score ──────────────────────────────
   // Runs scoring formula, saves to DB, then loads fresh breakdown
   const handleCalculateScore = async () => {
     setIsCalculating(true)
-    setCalcMsg("")
+    calcMsg.clearMessage()
     try {
       const res = await api.post<any>(`/prospects/${id}/calculate-score`, {})
       const result = res.data
 
       if (result?.disqualified) {
-        setCalcMsg("⚠️ Account disqualified — no tech fit match")
+        calcMsg.setMessage("⚠️ Account disqualified — no tech fit match")
       } else {
-        setCalcMsg(`✅ Score: ${result?.finalScore} → ${result?.clvRanking}`)
+        calcMsg.setMessage(`✅ Score: ${result?.finalScore} → ${result?.clvRanking}`)
       }
 
       // Reload breakdown + prospect
@@ -209,10 +218,9 @@ export default function AccountDetailPage() {
       setScoreData(scoreRes.data)
       setProspect(prospectRes.data)
     } catch {
-      setCalcMsg("❌ Calculation failed. Check fields and try again.")
+      calcMsg.setMessage("❌ Calculation failed. Check fields and try again.")
     } finally {
       setIsCalculating(false)
-      setTimeout(() => setCalcMsg(""), 4000)
     }
   }
 
@@ -246,10 +254,10 @@ export default function AccountDetailPage() {
   // ── POST /api/enrichment/:id ──────────────────────────────────────────────
   const handleEnrich = async () => {
     setIsEnriching(true)
-    setEnrichMsg("")
+    enrichMsg.clearMessage()
     try {
       await api.post<any>(`/enrichment/${id}`, {})
-      setEnrichMsg("✅ AI enrichment complete — score recalculated!")
+      enrichMsg.setMessage("✅ AI enrichment complete — score recalculated!")
       const [prospectRes, scoreRes] = await Promise.all([
         api.get<any>(`/prospects/${id}`),
         api.get<any>(`/prospects/${id}/score-breakdown`),
@@ -257,7 +265,7 @@ export default function AccountDetailPage() {
       setProspect(prospectRes.data)
       setScoreData(scoreRes.data)
     } catch {
-      setEnrichMsg("❌ Enrichment failed. Check Gemini API key.")
+      enrichMsg.setMessage("❌ Enrichment failed. Check Gemini API key.")
     } finally {
       setIsEnriching(false)
     }
@@ -268,13 +276,13 @@ export default function AccountDetailPage() {
   const handleSuggestPoc = async () => {
     if (isSuggestingPoc) return   // prevent double fire
     setIsSuggestingPoc(true)
-    setPocError("")
+    pocError.clearMessage()
     setPocResult(null)
     try {
       const res = await api.post<any>(`/prospects/${id}/suggest-poc`, {})
       setPocResult(res.data)
     } catch {
-      setPocError("❌ POC suggestion failed. Try again.")
+      pocError.setMessage("❌ POC suggestion failed. Try again.")
     } finally {
       setIsSuggestingPoc(false)
     }
@@ -299,16 +307,15 @@ export default function AccountDetailPage() {
 
   const handleSaveEdit = async () => {
     setIsSaving(true)
-    setSaveMsg("")
+    saveMsg.clearMessage()
     try {
       const payload: any = {}
       Object.entries(editData).forEach(([k, v]) => { if (v) payload[k] = v })
       const res = await api.put<any>(`/prospects/${id}`, payload)
       setProspect(res.data)
-      setSaveMsg("✅ Saved!")
-      setTimeout(() => { setShowEditModal(false); setSaveMsg("") }, 1000)
+      saveMsg.setMessage("✅ Saved!")
     } catch {
-      setSaveMsg("❌ Save failed.")
+      saveMsg.setMessage("❌ Save failed.")
     } finally {
       setIsSaving(false)
     }
@@ -318,19 +325,18 @@ export default function AccountDetailPage() {
   const handleLogInteraction = async () => {
     if (!logType || !logDate) return
     setIsLogging(true)
-    setLogMsg("")
+    logMsg.clearMessage()
     try {
       await api.post("/interactions", {
         prospectId: id, type: logType,
         interactedAt: new Date(logDate).toISOString(),
         notes: logNotes, outcome: logOutcome,
       })
-      setLogMsg("✅ Logged!")
+      logMsg.setMessage("✅ Logged!")
       const res = await api.get<any>(`/interactions/prospect/${id}`)
       setInteractions(res.data || [])
-      setTimeout(() => { setShowLogModal(false); setLogNotes(""); setLogMsg("") }, 1000)
     } catch {
-      setLogMsg("❌ Failed.")
+      logMsg.setMessage("❌ Failed.")
     } finally {
       setIsLogging(false)
     }
@@ -433,8 +439,12 @@ export default function AccountDetailPage() {
               </Button>
             </div>
           </div>
-          {calcMsg  && <div className="mt-3 text-sm px-3 py-2 rounded-lg border bg-muted/20">{calcMsg}</div>}
-          {enrichMsg && <div className="mt-3 text-sm px-3 py-2 rounded-lg border bg-muted/20">{enrichMsg}</div>}
+          {calcMsg.visible && (
+            <AutoDismissBanner {...calcMsg} className="mt-3 bg-muted/20" onDismiss={calcMsg.clearMessage} />
+          )}
+          {enrichMsg.visible && (
+            <AutoDismissBanner {...enrichMsg} className="mt-3 bg-muted/20" onDismiss={enrichMsg.clearMessage} />
+          )}
         </CardContent>
       </Card>
 
@@ -881,8 +891,8 @@ export default function AccountDetailPage() {
                   </CardContent>
                 </Card>
               )}
-              {pocError && (
-                <div className="text-sm px-3 py-2 rounded-lg border bg-red-50 text-red-700">{pocError}</div>
+              {pocError.visible && (
+                <AutoDismissBanner {...pocError} onDismiss={pocError.clearMessage} />
               )}
 
               <Card>
@@ -1103,7 +1113,9 @@ export default function AccountDetailPage() {
               <Textarea rows={3} placeholder="What happened..." value={logNotes}
                 onChange={(e) => setLogNotes(e.target.value)} />
             </div>
-            {logMsg && <div className="text-sm px-3 py-2 rounded-lg border">{logMsg}</div>}
+            {logMsg.visible && (
+              <AutoDismissBanner {...logMsg} onDismiss={logMsg.clearMessage} />
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowLogModal(false)}>Cancel</Button>
@@ -1218,7 +1230,9 @@ export default function AccountDetailPage() {
               </Select>
             </div>
           </div>
-          {saveMsg && <div className="text-sm px-3 py-2 rounded-lg border">{saveMsg}</div>}
+          {saveMsg.visible && (
+            <AutoDismissBanner {...saveMsg} onDismiss={saveMsg.clearMessage} />
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowEditModal(false)}>Cancel</Button>
             <Button onClick={handleSaveEdit} disabled={isSaving} className="gap-2">

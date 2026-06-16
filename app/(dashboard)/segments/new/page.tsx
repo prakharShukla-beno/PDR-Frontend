@@ -20,6 +20,8 @@ import { Badge }             from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { Switch }            from "@/components/ui/switch"
 import { api }               from "@/lib/api"
+import { useAutoDismissMessage } from "@/hooks/useAutoDismissMessage"
+import { AutoDismissBanner } from "@/components/ui/auto-dismiss-banner"
 
 const INDUSTRIES      = ["BFSI","IT & ITES","SaaS","Fintech","E-commerce","Healthcare","EdTech","Logistics","Manufacturing","Retail & CPG","Media & Telecom","Real Estate"]
 const BUSINESS_MODELS = ["B2B","B2C","B2B2C","D2C","E-Commerce","Marketplace"]
@@ -61,8 +63,11 @@ function NewSegmentPageContent() {
 
   // Save state
   const [isSaving,     setIsSaving]     = useState(false)
-  const [saveMsg,      setSaveMsg]      = useState("")
   const [isLoadingIcp, setIsLoadingIcp] = useState(false)
+
+  const saveMsg = useAutoDismissMessage({
+    onAutoDismiss: () => router.push("/segments"),
+  })
 
   // Load ICP filters if coming from ICP page
   useEffect(() => {
@@ -134,10 +139,10 @@ function NewSegmentPageContent() {
 
   // POST /api/segments — save segment and take snapshot
   const handleSave = async () => {
-    if (!name.trim())  { setSaveMsg("❌ Segment name is required."); return }
-    if (!hasFilters)   { setSaveMsg("❌ Select at least one filter."); return }
+    if (!name.trim())  { saveMsg.setMessage("❌ Segment name is required."); return }
+    if (!hasFilters)   { saveMsg.setMessage("❌ Select at least one filter."); return }
     setIsSaving(true)
-    setSaveMsg("")
+    saveMsg.clearMessage()
     try {
       await api.post("/segments", {
         name:        name.trim(),
@@ -145,10 +150,9 @@ function NewSegmentPageContent() {
         isShared,
         filters:     buildFilters(),
       })
-      setSaveMsg("✅ Segment saved!")
-      setTimeout(() => router.push("/segments"), 1000)
+      saveMsg.setMessage("✅ Segment saved!")
     } catch (err: any) {
-      setSaveMsg(`❌ ${err?.message || "Save failed."}`)
+      saveMsg.setMessage(`❌ ${err?.message || "Save failed."}`)
     } finally {
       setIsSaving(false)
     }
@@ -407,10 +411,8 @@ function NewSegmentPageContent() {
                   </>
                 )}
 
-                {saveMsg && (
-                  <div className="text-sm px-3 py-2 rounded-lg border bg-muted/20">
-                    {saveMsg}
-                  </div>
+                {saveMsg.visible && (
+                  <AutoDismissBanner {...saveMsg} className="bg-muted/20" onDismiss={saveMsg.clearMessage} />
                 )}
 
                 <Button

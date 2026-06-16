@@ -24,6 +24,8 @@ import {
   SelectTrigger, SelectValue
 } from "@/components/ui/select"
 import { useAuth } from "@/context/AuthContext"
+import { useAutoDismissMessage } from "@/hooks/useAutoDismissMessage"
+import { AutoDismissBanner } from "@/components/ui/auto-dismiss-banner"
 
 // Static team members — backend API not available yet
 const TEAM_MEMBERS = [
@@ -59,7 +61,12 @@ export default function UsersRolesPage() {
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [inviteEmail, setInviteEmail] = useState("")
   const [inviteRole, setInviteRole] = useState("Sales")
-  const [inviteMsg, setInviteMsg] = useState("")
+  const inviteMsg = useAutoDismissMessage({
+    onAutoDismiss: () => {
+      setShowInviteModal(false)
+      setInviteEmail("")
+    },
+  })
 
   // Add the current user to the team
   const currentUser = user ? {
@@ -77,15 +84,10 @@ export default function UsersRolesPage() {
 
   const handleInvite = () => {
     if (!inviteEmail.trim()) {
-      setInviteMsg("❌ Email is required.")
+      inviteMsg.setMessage("❌ Email is required.")
       return
     }
-    setInviteMsg(`✅ Invite sent — ${inviteEmail}`)
-    setTimeout(() => {
-      setShowInviteModal(false)
-      setInviteMsg("")
-      setInviteEmail("")
-    }, 1500)
+    inviteMsg.setMessage(`✅ Invite sent — ${inviteEmail}`)
   }
 
   return (
@@ -218,8 +220,8 @@ export default function UsersRolesPage() {
                 </SelectContent>
               </Select>
             </div>
-            {inviteMsg && (
-              <div className="text-sm px-3 py-2 rounded-lg border">{inviteMsg}</div>
+            {inviteMsg.visible && (
+              <AutoDismissBanner {...inviteMsg} onDismiss={inviteMsg.clearMessage} />
             )}
           </div>
           <DialogFooter>

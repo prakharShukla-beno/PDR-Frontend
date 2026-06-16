@@ -17,7 +17,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { api, fileApi, ApiError } from "@/lib/api"
 import type { Contact, Prospect } from "@/types"
 import { FilterPanel, FilterState, EMPTY_FILTERS, buildFilterQuery, countActiveFilters } from "@/components/filters/FilterPanel"
-//import DuplicateReviewModal from "@/components/import/DuplicateReviewModal"
+import { IcpImportPreviewModal } from "@/components/import/IcpImportPreviewModal"
+import { useAutoDismissMessage } from "@/hooks/useAutoDismissMessage"
+import { AutoDismissBanner } from "@/components/ui/auto-dismiss-banner"
 
 const FUNCTIONAL_DOMAINS = [
   "Corporate Strategy","Technology & Digital","Data & AI","Finance & Accounting",
@@ -57,13 +59,10 @@ export default function ContactsPage() {
   const [selectedIds, setSelectedIds]   = useState<string[]>([])
   const [isAllSelected, setIsAllSelected]   = useState(false)
   const [isEnriching, setIsEnriching]       = useState(false)
-  const [enrichMsg, setEnrichMsg]           = useState("")
   const [uploadFile, setUploadFile]     = useState<File | null>(null)
   const [isUploading, setIsUploading]   = useState(false)
-  const [uploadMsg, setUploadMsg]       = useState("")
   const [showAddModal, setShowAddModal] = useState(false)
   const [isAdding, setIsAdding]         = useState(false)
-  const [addMsg, setAddMsg]             = useState("")
   const [accountSearch, setAccountSearch]   = useState("")
   const [accountOptions, setAccountOptions] = useState<Prospect[]>([])
   const [isSearchingAccounts, setIsSearchingAccounts] = useState(false)
@@ -107,6 +106,18 @@ export default function ContactsPage() {
 
   useEffect(() => { fetchContacts() }, [fetchContacts])
   useEffect(() => { setCurrentPage(1) }, [search, appliedFilters, recordsPerPage])
+
+  const uploadMsg = useAutoDismissMessage()
+  const enrichMsg = useAutoDismissMessage()
+  const addMsg = useAutoDismissMessage({
+    onAutoDismiss: () => {
+      setShowAddModal(false)
+      setNewContact(emptyContact)
+      setAccountSearch("")
+      setAccountOptions([])
+      fetchContacts()
+    },
+  })
 
   // ── Account search ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -160,7 +171,7 @@ export default function ContactsPage() {
 
 const handleUpload = async () => {
     if (!uploadFile) return
-    setIsUploading(true); setUploadMsg("")
+    setIsUploading(true); uploadMsg.clearMessage()
     try {
       const formData = new FormData()
       formData.append("file", uploadFile)
@@ -178,17 +189,17 @@ const handleUpload = async () => {
         : `${saved} of ${total} rows saved`
 
       if (duplicates.length > 0) {
-        setUploadMsg(`✅ ${summary}. ${duplicates.length} duplicates need review.`)
+        uploadMsg.setMessage(`✅ ${summary}. ${duplicates.length} duplicates need review.`)
         setTimeout(() => router.push("/duplicates"), 1200)
       } else {
-        setUploadMsg(`✅ Import complete — ${summary}.`)
+        uploadMsg.setMessage(`✅ Import complete — ${summary}.`)
         setCurrentPage(1)
         setTimeout(fetchContacts, 1000)
       }
       setUploadFile(null)
     } catch (err) {
-      if (err instanceof ApiError) setUploadMsg(`❌ ${err.message}`)
-      else setUploadMsg("❌ Upload failed.")
+      if (err instanceof ApiError) uploadMsg.setMessage(`❌ ${err.message}`)
+      else uploadMsg.setMessage("❌ Upload failed.")
     } finally {
       setIsUploading(false)
     }
@@ -199,20 +210,16 @@ const handleUpload = async () => {
 
 
   const handleAddContact = async () => {
-    if (!newContact.accountId) { setAddMsg("❌ Selecting an account is required."); return }
-    setIsAdding(true); setAddMsg("")
+    if (!newContact.accountId) { addMsg.setMessage("❌ Selecting an account is required."); return }
+    setIsAdding(true); addMsg.clearMessage()
     try {
       const payload: any = { ...newContact }
       Object.keys(payload).forEach(k => { if (payload[k] === "") delete payload[k] })
       delete payload.accountName
       await api.post("/contacts", payload)
-      setAddMsg("✅ Contact created successfully!")
-      setTimeout(() => {
-        setShowAddModal(false); setAddMsg(""); setNewContact(emptyContact)
-        setAccountSearch(""); setAccountOptions([]); fetchContacts()
-      }, 1000)
+      addMsg.setMessage("✅ Contact created successfully!")
     } catch (err) {
-      if (err instanceof ApiError) setAddMsg(`❌ ${err.message}`)
+      if (err instanceof ApiError) addMsg.setMessage(`❌ ${err.message}`)
     } finally { setIsAdding(false) }
   }
 
@@ -250,7 +257,7 @@ const handleUpload = async () => {
           <div className="flex gap-3">
             <label className="cursor-pointer">
               <input type="file" accept=".xlsx,.xls,.csv" className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) { setUploadFile(f); setUploadMsg("") } }} />
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) { setUploadFile(f); uploadMsg.clearMessage() } }} />
               <Button variant="outline" className="gap-2" asChild><span><Upload className="h-4 w-4" />Import</span></Button>
             </label>
             {uploadFile && (
@@ -265,7 +272,7 @@ const handleUpload = async () => {
           </div>
         </div>
 
-        {uploadMsg && <div className="text-sm px-3 py-2 rounded-lg border">{uploadMsg}</div>}
+        <AutoDismissBanner {...uploadMsg} onDismiss={uploadMsg.clearMessage} />
 
         <div className="flex items-center gap-3 flex-wrap">
           <div className="relative flex-1 max-w-md">
@@ -434,23 +441,22 @@ const handleUpload = async () => {
                 const aId = typeof c.accountId === "object" && c.accountId !== null ? (c.accountId as any)._id : c.accountId as string
                 if (aId && !accountIds.includes(aId)) accountIds.push(aId)
               })
-              if (!accountIds.length) { setEnrichMsg("❌ No linked accounts found for selected contacts"); return }
+              if (!accountIds.length) { enrichMsg.setMessage("❌ No linked accounts found for selected contacts"); return }
               setIsEnriching(true)
-              setEnrichMsg(`⏳ Enriching ${accountIds.length} linked account${accountIds.length > 1 ? "s" : ""}... (this may take a minute)`)
+              enrichMsg.setMessage(`⏳ Enriching ${accountIds.length} linked account${accountIds.length > 1 ? "s" : ""}... (this may take a minute)`)
               try {
                 const res = await api.post<any>("/enrichment/bulk", { prospectIds: accountIds })
                 const { success = 0, failed = 0 } = res?.data || res || {}
                 if (failed > 0 && success === 0) {
-                  setEnrichMsg(`❌ Enrichment failed for all accounts. Check Gemini API key.`)
+                  enrichMsg.setMessage(`❌ Enrichment failed for all accounts. Check Gemini API key.`)
                 } else if (failed > 0) {
-                  setEnrichMsg(`⚠️ ${success} enriched, ${failed} failed`)
+                  enrichMsg.setMessage(`⚠️ ${success} enriched, ${failed} failed`)
                 } else {
-                  setEnrichMsg(`✅ ${accountIds.length} linked account${accountIds.length > 1 ? "s" : ""} enriched successfully!`)
+                  enrichMsg.setMessage(`✅ ${accountIds.length} linked account${accountIds.length > 1 ? "s" : ""} enriched successfully!`)
                 }
-                setTimeout(() => setEnrichMsg(""), 3000)
               } catch (err: any) {
                 const msg = err?.data?.message || err?.message || "Unknown error"
-                setEnrichMsg(`❌ Enrichment failed — ${msg}`)
+                enrichMsg.setMessage(`❌ Enrichment failed — ${msg}`)
               } finally {
                 setIsEnriching(false)
               }
@@ -459,7 +465,9 @@ const handleUpload = async () => {
             {isEnriching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
             {isEnriching ? "Enriching..." : "AI ENRICH"}
           </Button>
-          {enrichMsg && <span className="text-xs text-muted-foreground max-w-xs">{enrichMsg}</span>}
+          {enrichMsg.visible && (
+            <AutoDismissBanner {...enrichMsg} inline onDismiss={enrichMsg.clearMessage} />
+          )}
         </div>
         <Button
           variant={isAllSelected ? "default" : "outline"}
@@ -556,7 +564,9 @@ const handleUpload = async () => {
                   onChange={e => setNewContact(p => ({ ...p, country: e.target.value }))} /></div>
             </div>
 
-            {addMsg && <div className="text-sm px-3 py-2 rounded-lg border">{addMsg}</div>}
+            {addMsg.visible && (
+              <AutoDismissBanner {...addMsg} onDismiss={addMsg.clearMessage} />
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowAddModal(false)}>Cancel</Button>
