@@ -33,6 +33,16 @@ import { useAutoDismissMessage } from "@/hooks/useAutoDismissMessage"
 import { AutoDismissBanner } from "@/components/ui/auto-dismiss-banner"
 import { cn }                from "@/lib/utils"
 import type { Prospect }     from "@/types"
+import {
+  SECTOR_TAXONOMY,
+  getSubsInSector,
+  getIndsInSector,
+  getIndsInSub,
+  getSubSectorEntriesForSectors,
+  getIndustriesForSubSectors,
+  findParentSectorForSub,
+  findParentsForIndustry,
+} from "@/lib/taxonomy"
 
 type IcpScoreBreakdown = {
   firmographic?: {
@@ -716,53 +726,7 @@ function CountryPicker({
 // ── Sector taxonomy helpers ───────────────────────────────────────────────────
 type CheckState = "checked" | "indeterminate" | "unchecked"
 
-const uniqueStrings = (values: string[]) => [...new Set(values)]
-
-const getSubsInSector = (sector: string) => Object.keys(SECTOR_TAXONOMY[sector] ?? {})
-
-const getIndsInSector = (sector: string) =>
-  getSubsInSector(sector).flatMap((sub) => SECTOR_TAXONOMY[sector][sub] ?? [])
-
-const getIndsInSub = (sector: string, sub: string) =>
-  SECTOR_TAXONOMY[sector]?.[sub] ?? []
-
-const findParentsForIndustry = (industry: string) => {
-  for (const [sector, subs] of Object.entries(SECTOR_TAXONOMY)) {
-    for (const [sub, inds] of Object.entries(subs)) {
-      if (inds.includes(industry)) return { sector, sub }
-    }
-  }
-  return null
-}
-
-const findParentSectorForSub = (sub: string) => {
-  for (const [sector, subs] of Object.entries(SECTOR_TAXONOMY)) {
-    if (sub in subs) return sector
-  }
-  return null
-}
-
 type SubSectorEntry = { sector: string; sub: string }
-
-const getSubSectorEntriesForSectors = (sectors: string[]): SubSectorEntry[] =>
-  sectors.flatMap((sector) =>
-    getSubsInSector(sector).map((sub) => ({ sector, sub }))
-  )
-
-const getIndustriesForSubSectorEntries = (entries: SubSectorEntry[]) =>
-  uniqueStrings(
-    entries.flatMap(({ sector, sub }) => getIndsInSub(sector, sub))
-  )
-
-const getIndustriesForSubSectors = (subs: string[]) =>
-  getIndustriesForSubSectorEntries(
-    subs
-      .map((sub) => {
-        const sector = findParentSectorForSub(sub)
-        return sector ? { sector, sub } : null
-      })
-      .filter((e): e is SubSectorEntry => e !== null)
-  )
 
 const getSectorCheckState = (
   sector: string,

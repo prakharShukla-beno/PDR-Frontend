@@ -235,6 +235,36 @@ function AccountsPageContent() {
     }
   }
 
+  // Export prospects as Excel — uses auth token from localStorage
+  const handleExport = async () => {
+    try {
+      const token = localStorage.getItem("beno_token")
+      const res = await fetch("/api/prospects/export", {
+        method: "GET",
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      })
+      if (!res.ok) {
+        const errText = await res.text()
+        console.error("Export API error:", res.status, errText)
+        alert(`Export failed (${res.status})`)
+        return
+      }
+      const blob = await res.blob()
+      const link = document.createElement("a")
+      link.href = URL.createObjectURL(blob)
+      link.download = `prospects_${new Date().toISOString().split("T")[0]}.xlsx`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(link.href)
+    } catch (err) {
+      console.error("Export error:", err)
+      alert("Export failed — check console for details.")
+    }
+  }
+
   const handleUpload = async () => {
     if (!uploadFile) return
     setIsUploading(true)
@@ -371,7 +401,7 @@ function AccountsPageContent() {
                 Upload: {uploadFile.name.slice(0, 15)}...
               </Button>
             )}
-            <Button variant="outline" className="gap-2"><Download className="h-4 w-4" />Export</Button>
+            <Button variant="outline" className="gap-2" onClick={handleExport}><Download className="h-4 w-4" />Export</Button>
             <Button 
               variant="outline" 
               className="gap-2" 
