@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Slider } from "@/components/ui/slider"
 import { Separator } from "@/components/ui/separator"
 import { api } from "@/lib/api"
-
+import { expandSectorValuesToIndustries, SECTOR_TAXONOMY } from "@/lib/taxonomy"
 // ─── Types ─────────────────────────────────────────────────────────────────────
 export interface FilterState {
   // Account filters
@@ -106,9 +106,12 @@ export const buildFilterQuery = (f: FilterState, mode: "accounts" | "contacts" =
   const params = new URLSearchParams()
   const add = (key: string, arr: string[]) => arr.forEach(v => params.append(key, v))
 
+  const expandIndustryValues = (values: string[]) =>
+    expandSectorValuesToIndustries(values)
+
   if (mode === "accounts") {
-    add("industryInclude",          f.industryInclude)
-    add("industryExclude",          f.industryExclude)
+    add("industryInclude",          expandIndustryValues(f.industryInclude))
+    add("industryExclude",          expandIndustryValues(f.industryExclude))
     add("countryInclude",           f.countryInclude)
     add("countryExclude",           f.countryExclude)
     add("cityInclude",              f.cityInclude)
@@ -138,8 +141,8 @@ export const buildFilterQuery = (f: FilterState, mode: "accounts" | "contacts" =
   } else {
     add("functionalDomainInclude",   f.functionalDomainInclude)
     add("functionalDomainExclude",   f.functionalDomainExclude)
-    add("accountIndustryInclude",    f.industryInclude)
-    add("accountIndustryExclude",    f.industryExclude)
+    add("accountIndustryInclude",    expandIndustryValues(f.industryInclude))
+    add("accountIndustryExclude",    expandIndustryValues(f.industryExclude))
     add("accountCountryInclude",     f.countryInclude)
     add("accountCountryExclude",     f.countryExclude)
     add("accountEmployeesInclude",   f.employeesInclude)
@@ -262,6 +265,75 @@ function IncExcPicker({ label, options, included, excluded, onInclude, onExclude
                 </button>
               )
             })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── CheckboxListFilter Component ─────────────────────────────────────────────
+interface CheckboxListFilterProps {
+  label:    string
+  options:  string[]
+  selected: string[]
+  onChange: (vals: string[]) => void
+}
+
+function CheckboxListFilter({ label, options, selected, onChange }: CheckboxListFilterProps) {
+  const [open, setOpen] = useState(false)
+  const hasActive = selected.length > 0
+
+  const toggle = (opt: string) => {
+    if (selected.includes(opt)) onChange(selected.filter(v => v !== opt))
+    else onChange([...selected, opt])
+  }
+
+  return (
+    <div className="space-y-2">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex w-full items-center justify-between text-sm font-medium text-foreground hover:text-primary transition-colors"
+      >
+        <span className="flex items-center gap-2">
+          {label}
+          {hasActive && (
+            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] text-white font-bold">
+              {selected.length}
+            </span>
+          )}
+        </span>
+        {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+      </button>
+
+      {hasActive && (
+        <div className="flex flex-wrap gap-1.5">
+          {selected.map(v => (
+            <span key={v} className="inline-flex items-center gap-1 rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-xs text-primary">
+              {v}
+              <button onClick={() => toggle(v)}><X className="h-2.5 w-2.5" /></button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {open && (
+        <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
+          <div className="p-1">
+            {options.map(opt => (
+              <button
+                key={opt}
+                onClick={() => toggle(opt)}
+                className={`w-full flex items-center gap-2.5 rounded px-2.5 py-2 text-xs text-left transition-colors
+                  ${selected.includes(opt) ? "bg-primary/5 text-primary" : "hover:bg-muted/50 text-foreground"}`}
+              >
+                <span className={`flex h-3.5 w-3.5 items-center justify-center rounded border flex-shrink-0
+                  ${selected.includes(opt) ? "bg-primary border-primary" : "border-muted-foreground/40"}`}>
+                  {selected.includes(opt) && <span className="text-white text-[8px] font-bold">✓</span>}
+                </span>
+                {opt}
+              </button>
+            ))}
           </div>
         </div>
       )}
@@ -406,7 +478,7 @@ export function FilterPanel({ isOpen, onClose, filters, onChange, onApply, mode 
                 <div className="space-y-4">
                   <IncExcPicker
                     label="Industry"
-                    options={filterOptions.industries || []}
+                    options={Object.keys(SECTOR_TAXONOMY)}
                     included={filters.industryInclude}
                     excluded={filters.industryExclude}
                     onInclude={v => addToList("industryInclude", v)}
@@ -440,24 +512,22 @@ export function FilterPanel({ isOpen, onClose, filters, onChange, onApply, mode 
                     onExclude={v => addToList("businessModelExclude", v)}
                     onRemove={(v, t) => removeFromList(t === "inc" ? "businessModelInclude" : "businessModelExclude", v)}
                   />
-                  <IncExcPicker
-                    label="Employee Band"
-                    options={filterOptions.employeeBands || []}
-                    included={filters.employeesInclude}
-                    excluded={filters.employeesExclude}
-                    onInclude={v => addToList("employeesInclude", v)}
-                    onExclude={v => addToList("employeesExclude", v)}
-                    onRemove={(v, t) => removeFromList(t === "inc" ? "employeesInclude" : "employeesExclude", v)}
+                 <CheckboxListFilter
+                    label="Employee Range"
+                    options={["1-10","11-50","51-200","201-500","501-1,000","1,001-5,000","5,001-10,000","10,000+"]}
+                    selected={filters.employeesInclude}
+                    onChange={vals => update("employeesInclude", vals)}
                   />
-                  <IncExcPicker
+                  <CheckboxListFilter
                     label="Annual Revenue"
-                    options={filterOptions.revenueBands || []}
-                    included={filters.revenueInclude}
-                    excluded={filters.revenueExclude}
-                    onInclude={v => addToList("revenueInclude", v)}
-                    onExclude={v => addToList("revenueExclude", v)}
-                    onRemove={(v, t) => removeFromList(t === "inc" ? "revenueInclude" : "revenueExclude", v)}
+                    options={["Seed <$1M","Early $1M-$10M","Scale-Up $10M-$50M","Mid-Market $50M-$250M","Corporate $250M-$1B","Enterprise $1B+"]}
+                    selected={filters.revenueInclude}
+                    onChange={vals => update("revenueInclude", vals)}
                   />
+
+
+
+
                 </div>
               </div>
 

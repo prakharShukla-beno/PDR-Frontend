@@ -31,7 +31,8 @@ export function TopHeader() {
   const [searchResults, setSearchResults] = useState<Prospect[]>([])
   const [isSearching, setIsSearching] = useState(false)
   const [showResults, setShowResults] = useState(false)
-  const searchRef = useRef<HTMLDivElement>(null)
+  const searchRef  = useRef<HTMLDivElement>(null)
+  const notifRef   = useRef<HTMLDivElement>(null)
   const searchTimeout = useRef<NodeJS.Timeout | null>(null)
 
   // ── GET /api/notifications ──────────────────
@@ -96,6 +97,10 @@ export function TopHeader() {
     const handleClickOutside = (e: MouseEvent) => {
       if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
         setShowResults(false)
+      }
+      // Close notification dropdown when clicking outside
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setShowNotifs(false)
       }
     }
     document.addEventListener("mousedown", handleClickOutside)
@@ -196,7 +201,7 @@ export function TopHeader() {
 
       {/* ── Notifications Dropdown ── */}
       {showNotifs && (
-        <div className="absolute right-4 top-14 w-80 bg-white border rounded-lg shadow-lg z-50">
+        <div ref={notifRef} className="absolute right-4 top-14 w-80 bg-white border rounded-lg shadow-lg z-50">
           <div className="flex items-center justify-between p-3 border-b">
             <h3 className="font-semibold text-sm">Notifications</h3>
             {unreadCount > 0 && (
