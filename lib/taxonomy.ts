@@ -102,6 +102,8 @@ export const INDUSTRIES = [
 
 const uniqueStrings = (values: string[]) => [...new Set(values)]
 
+export { uniqueStrings }
+
 export const getSubsInSector = (sector: string) => Object.keys(SECTOR_TAXONOMY[sector] ?? {})
 
 export const getIndsInSector = (sector: string) =>
