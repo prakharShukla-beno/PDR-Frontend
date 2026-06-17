@@ -33,6 +33,8 @@ import {
 } from "@/components/ui/select"
 import { api, ApiError } from "@/lib/api"
 import type { Campaign } from "@/types"
+import { useAutoDismissMessage } from "@/hooks/useAutoDismissMessage"
+import { AutoDismissBanner } from "@/components/ui/auto-dismiss-banner"
 
 export default function CampaignsPage() {
   const router = useRouter()
@@ -47,7 +49,6 @@ export default function CampaignsPage() {
   // ── Create modal state ──────────────────────
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
-  const [createMsg, setCreateMsg] = useState("")
   const [newCampaign, setNewCampaign] = useState({
     name: "", description: "", status: "draft", promptUsed: "",
   })
@@ -69,14 +70,22 @@ export default function CampaignsPage() {
 
   useEffect(() => { fetchCampaigns() }, [fetchCampaigns])
 
+  const createMsg = useAutoDismissMessage({
+    onAutoDismiss: () => {
+      setShowCreateModal(false)
+      setNewCampaign({ name: "", description: "", status: "draft", promptUsed: "" })
+      fetchCampaigns()
+    },
+  })
+
   // ── POST /api/campaigns ─────────────────────
   const handleCreate = async () => {
     if (!newCampaign.name.trim()) {
-      setCreateMsg("❌ Campaign name is required.")
+      createMsg.setMessage("❌ Campaign name is required.")
       return
     }
     setIsCreating(true)
-    setCreateMsg("")
+    createMsg.clearMessage()
     try {
       await api.post("/campaigns", {
         name: newCampaign.name,
@@ -84,16 +93,10 @@ export default function CampaignsPage() {
         status: newCampaign.status,
         promptUsed: newCampaign.promptUsed || undefined,
       })
-      setCreateMsg("✅ Campaign created successfully!")
-      setTimeout(() => {
-        setShowCreateModal(false)
-        setCreateMsg("")
-        setNewCampaign({ name: "", description: "", status: "draft", promptUsed: "" })
-        fetchCampaigns()
-      }, 1000)
+      createMsg.setMessage("✅ Campaign created successfully!")
     } catch (err) {
-      if (err instanceof ApiError) setCreateMsg(`❌ ${err.message}`)
-      else setCreateMsg("❌ Creation failed.")
+      if (err instanceof ApiError) createMsg.setMessage(`❌ ${err.message}`)
+      else createMsg.setMessage("❌ Creation failed.")
     } finally {
       setIsCreating(false)
     }
@@ -352,7 +355,9 @@ export default function CampaignsPage() {
               <Textarea placeholder="What should the AI do..." value={newCampaign.promptUsed}
                 onChange={(e) => setNewCampaign(p => ({ ...p, promptUsed: e.target.value }))} rows={3} />
             </div>
-            {createMsg && <div className="text-sm px-3 py-2 rounded-lg border">{createMsg}</div>}
+            {createMsg.visible && (
+              <AutoDismissBanner {...createMsg} onDismiss={createMsg.clearMessage} />
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreateModal(false)}>Cancel</Button>

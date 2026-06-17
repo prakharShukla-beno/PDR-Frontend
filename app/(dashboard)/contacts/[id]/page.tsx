@@ -33,6 +33,8 @@ import {
 } from "@/components/ui/select"
 import { api, ApiError } from "@/lib/api"
 import type { Contact, Campaign, Prospect } from "@/types"
+import { useAutoDismissMessage } from "@/hooks/useAutoDismissMessage"
+import { AutoDismissBanner } from "@/components/ui/auto-dismiss-banner"
 
 const FUNCTIONAL_DOMAINS = [
   "Corporate Strategy", "Technology & Digital", "Data & AI",
@@ -70,7 +72,6 @@ export default function ContactDetailPage() {
   // ── Edit modal state ─────────────────────────────────────────────────────────
   const [showEditModal, setShowEditModal] = useState(false)
   const [isSaving, setIsSaving]           = useState(false)
-  const [saveMsg, setSaveMsg]             = useState("")
   const [editData, setEditData] = useState({
     firstName: "", lastName: "", functionalDomain: "",
     keyFocusAreas: "", standardizedRoles: "",
@@ -87,7 +88,16 @@ export default function ContactDetailPage() {
   const [campaigns, setCampaigns]                 = useState<Campaign[]>([])
   const [selectedCampaignId, setSelectedCampaignId] = useState("")
   const [isAddingToCampaign, setIsAddingToCampaign] = useState(false)
-  const [campaignMsg, setCampaignMsg]             = useState("")
+
+  const saveMsg = useAutoDismissMessage({
+    onAutoDismiss: () => setShowEditModal(false),
+  })
+  const campaignMsg = useAutoDismissMessage({
+    onAutoDismiss: () => {
+      setShowCampaignModal(false)
+      if (selectedCampaignId) router.push(`/campaigns/${selectedCampaignId}`)
+    },
+  })
 
   // ── GET /api/contacts/:id ────────────────────────────────────────────────────
   useEffect(() => {
@@ -129,24 +139,23 @@ export default function ContactDetailPage() {
       timeZone:                contact.timeZone ?? "",
       isPrimary:               contact.isPrimary ?? false,
     })
-    setSaveMsg("")
+    saveMsg.clearMessage()
     setShowEditModal(true)
   }
 
   // ── PUT /api/contacts/:id ────────────────────────────────────────────────────
   const handleSaveEdit = async () => {
     setIsSaving(true)
-    setSaveMsg("")
+    saveMsg.clearMessage()
     try {
       const payload: any = { ...editData }
       Object.keys(payload).forEach(k => { if (payload[k] === "") delete payload[k] })
       const res = await api.put<any>(`/contacts/${contactId}`, payload)
       setContact(res.data)
-      setSaveMsg("✅ Saved!")
-      setTimeout(() => { setShowEditModal(false); setSaveMsg("") }, 1000)
+      saveMsg.setMessage("✅ Saved!")
     } catch (err) {
-      if (err instanceof ApiError) setSaveMsg(`❌ ${err.message}`)
-      else setSaveMsg("❌ Save failed.")
+      if (err instanceof ApiError) saveMsg.setMessage(`❌ ${err.message}`)
+      else saveMsg.setMessage("❌ Save failed.")
     } finally {
       setIsSaving(false)
     }
@@ -155,7 +164,7 @@ export default function ContactDetailPage() {
   // ── Open campaign modal — load campaigns ─────────────────────────────────────
   const handleOpenCampaignModal = async () => {
     setSelectedCampaignId("")
-    setCampaignMsg("")
+    campaignMsg.clearMessage()
     try {
       const res = await api.get<any>("/campaigns?limit=100")
       setCampaigns(res.data?.campaigns || res.campaigns || [])
@@ -167,22 +176,17 @@ export default function ContactDetailPage() {
 
   // ── POST /api/contacts/:id/campaigns/:campaignId ─────────────────────────────
   const handleAddToCampaign = async () => {
-    if (!selectedCampaignId) { setCampaignMsg("❌ Please select a campaign."); return }
+    if (!selectedCampaignId) { campaignMsg.setMessage("❌ Please select a campaign."); return }
     setIsAddingToCampaign(true)
-    setCampaignMsg("")
+    campaignMsg.clearMessage()
     try {
       await api.post(`/contacts/${contactId}/campaigns/${selectedCampaignId}`)
-      setCampaignMsg("✅ Contact successfully added to campaign!")
+      campaignMsg.setMessage("✅ Contact successfully added to campaign!")
       const res = await api.get<any>(`/contacts/${contactId}`)
       setContact(res.data)
-      setTimeout(() => {
-        setShowCampaignModal(false)
-        setCampaignMsg("")
-        router.push(`/campaigns/${selectedCampaignId}`)
-      }, 1200)
     } catch (err) {
-      if (err instanceof ApiError) setCampaignMsg(`❌ ${err.message}`)
-      else setCampaignMsg("❌ Could not add to campaign.")
+      if (err instanceof ApiError) campaignMsg.setMessage(`❌ ${err.message}`)
+      else campaignMsg.setMessage("❌ Could not add to campaign.")
     } finally {
       setIsAddingToCampaign(false)
     }
@@ -668,7 +672,9 @@ export default function ContactDetailPage() {
               </div>
             </div>
 
-            {saveMsg && <div className="text-sm px-3 py-2 rounded-lg border">{saveMsg}</div>}
+            {saveMsg.visible && (
+              <AutoDismissBanner {...saveMsg} onDismiss={saveMsg.clearMessage} />
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowEditModal(false)}>Cancel</Button>
@@ -705,11 +711,12 @@ export default function ContactDetailPage() {
                 </SelectContent>
               </Select>
             </div>
-            {campaignMsg && (
-              <div className="flex items-center gap-2 text-sm px-3 py-2 rounded-lg border">
-                {campaignMsg.startsWith("✅") && <CheckCircle className="h-4 w-4 text-green-600" />}
-                {campaignMsg}
-              </div>
+            {campaignMsg.visible && (
+              <AutoDismissBanner
+                {...campaignMsg}
+                className="flex items-center gap-2"
+                onDismiss={campaignMsg.clearMessage}
+              />
             )}
           </div>
           <DialogFooter>

@@ -17,6 +17,8 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { api, ApiError } from "@/lib/api"
 import type { Campaign, Contact } from "@/types"
+import { useAutoDismissMessage } from "@/hooks/useAutoDismissMessage"
+import { AutoDismissBanner } from "@/components/ui/auto-dismiss-banner"
 
 const DOMAIN_COLORS: Record<string, string> = {
   "Technology & Digital":      "bg-blue-50 text-blue-700 border-blue-200",
@@ -43,7 +45,6 @@ export default function CampaignDetailPage() {
   const [isSearching, setIsSearching]     = useState(false)
   const [selectedContacts, setSelectedContacts] = useState<string[]>([])
   const [isAdding, setIsAdding]           = useState(false)
-  const [addMsg, setAddMsg]               = useState("")
   const [industries, setIndustries]       = useState<string[]>([])
   const [functionalDomains, setFunctionalDomains] = useState<string[]>([])
 
@@ -60,6 +61,13 @@ export default function CampaignDetailPage() {
   }, [id])
 
   useEffect(() => { fetchCampaign() }, [fetchCampaign])
+
+  const addMsg = useAutoDismissMessage({
+    onAutoDismiss: () => {
+      setShowAddModal(false)
+      fetchCampaign()
+    },
+  })
 
   // Load filter options when modal opens
   useEffect(() => {
@@ -102,14 +110,13 @@ export default function CampaignDetailPage() {
 
   const handleAddContacts = async () => {
     if (!selectedContacts.length) return
-    setIsAdding(true); setAddMsg("")
+    setIsAdding(true); addMsg.clearMessage()
     try {
       await api.post(`/campaigns/${id}/contacts`, { contactIds: selectedContacts })
-      setAddMsg(`✅ ${selectedContacts.length} contact(s) added!`)
+      addMsg.setMessage(`✅ ${selectedContacts.length} contact(s) added!`)
       setSelectedContacts([])
-      setTimeout(() => { setShowAddModal(false); setAddMsg(""); fetchCampaign() }, 1000)
     } catch (err) {
-      if (err instanceof ApiError) setAddMsg(`❌ ${err.message}`)
+      if (err instanceof ApiError) addMsg.setMessage(`❌ ${err.message}`)
     } finally { setIsAdding(false) }
   }
 
@@ -273,7 +280,7 @@ export default function CampaignDetailPage() {
       {/* Add Contacts Modal */}
       <Dialog open={showAddModal} onOpenChange={(open) => {
         setShowAddModal(open)
-        if (!open) { setContactSearch(""); setIndustryFilter(""); setDomainFilter(""); setSelectedContacts([]); setSearchResults([]); setAddMsg("") }
+        if (!open) { setContactSearch(""); setIndustryFilter(""); setDomainFilter(""); setSelectedContacts([]); setSearchResults([]); addMsg.clearMessage() }
       }}>
         <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col">
           <DialogDescription className="sr-only">Search and add contacts to this campaign.</DialogDescription>
@@ -358,7 +365,9 @@ export default function CampaignDetailPage() {
             })}
           </div>
 
-          {addMsg && <div className="text-sm px-3 py-2 rounded-lg border flex-shrink-0">{addMsg}</div>}
+          {addMsg.visible && (
+            <AutoDismissBanner {...addMsg} className="flex-shrink-0" onDismiss={addMsg.clearMessage} />
+          )}
 
           <div className="flex justify-between items-center pt-2 flex-shrink-0 border-t">
             <span className="text-xs text-muted-foreground">{searchResults.length} contacts found</span>

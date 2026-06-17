@@ -141,6 +141,10 @@ export interface Prospect {
   disqualificationReason?: string
   disqualifiedAt?: string
 
+  // Optional computed-at-query-time ICP fit score (not persisted on prospect)
+  icpMatchScore?: number
+  icpScoreBreakdown?: Record<string, unknown>
+
   // Relations
   assignedTo?: User | string
   campaignIds?: string[]
