@@ -74,7 +74,7 @@ export default function ContactDetailPage() {
   const [isSaving, setIsSaving]           = useState(false)
   const [editData, setEditData] = useState({
     firstName: "", lastName: "", functionalDomain: "",
-    keyFocusAreas: "", standardizedRoles: "",
+    keyFocusAreas: "", standardizedRoles: "", seniority: "",
     email: "", secondaryEmail: "",
     primaryPhone: "", secondaryPhone: "", primaryMobNo: "",
     primaryPhoneExtension: "", secondaryPhoneExtension: "",
@@ -124,6 +124,7 @@ export default function ContactDetailPage() {
       functionalDomain:        contact.functionalDomain ?? "",
       keyFocusAreas:           contact.keyFocusAreas ?? "",
       standardizedRoles:       contact.standardizedRoles ?? "",
+      seniority:               contact.seniority ?? "",
       email:                   contact.email ?? "",
       secondaryEmail:          contact.secondaryEmail ?? "",
       primaryPhone:            contact.primaryPhone ?? "",
@@ -605,9 +606,22 @@ export default function ContactDetailPage() {
               <Input value={editData.keyFocusAreas} onChange={e => setEditData(p => ({ ...p, keyFocusAreas: e.target.value }))} />
             </div>
 
-            <div className="space-y-1">
-              <Label>Standardized Roles</Label>
-              <Input value={editData.standardizedRoles} onChange={e => setEditData(p => ({ ...p, standardizedRoles: e.target.value }))} />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label>Standardized Roles</Label>
+                <Input value={editData.standardizedRoles} onChange={e => setEditData(p => ({ ...p, standardizedRoles: e.target.value }))} />
+              </div>
+              <div className="space-y-1">
+                <Label>Seniority</Label>
+                <Select value={editData.seniority} onValueChange={v => setEditData(p => ({ ...p, seniority: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Select seniority" /></SelectTrigger>
+                  <SelectContent>
+                    {["C-Level","VP","Director","Manager","Senior","Mid-Level","Junior","Entry-Level"].map(s => (
+                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">

@@ -32,6 +32,7 @@ import {
 }                                         from "@/components/ui/dialog"
 import { Label }                          from "@/components/ui/label"
 import { Input }                          from "@/components/ui/input"
+import { Checkbox }                       from "@/components/ui/checkbox"
 import { Textarea }                       from "@/components/ui/textarea"
 import {
   Select, SelectContent, SelectItem,
@@ -54,6 +55,15 @@ const TECH_CATEGORIES: Record<string, string[]> = {
   "E-commerce":          ["Shopify", "Magento", "WooCommerce", "BigCommerce", "Salesforce Commerce Cloud"],
   "Cybersecurity":       ["CrowdStrike", "Okta", "Palo Alto Networks", "Zscaler", "Splunk", "Cloudflare"],
 }
+
+// Functional domains for new contact form
+const FUNCTIONAL_DOMAINS = [
+  "Corporate Strategy", "Technology & Digital", "Data & AI",
+  "Finance & Accounting", "Revenue & Growth", "Product & Creative",
+  "Operations & Logistics", "People & HR", "Legal & Governance",
+  "Healthcare & Life Sciences", "Industrial & Engineering",
+  "Resources & Utilities", "Public Sector & NGO",
+]
 
 // Category color mapping for badges
 const CATEGORY_COLORS: Record<string, string> = {
@@ -148,9 +158,25 @@ export default function AccountDetailPage() {
   const [showEditModal, setShowEditModal] = useState(false)
   const [isSaving,      setIsSaving]      = useState(false)
   const [editData,      setEditData]      = useState({
+    // Basic Info
+    accountName: "", website: "", country: "", hqLocationCity: "",
+    primaryIndustry: "", businessModel: "", noOfEmployees: "", annualRevenue: "",
+    // Scoring Inputs
     salesPriority: "", intentSignal: "", clvRanking: "",
     strategicValue: "", financialCapacity: "", marginPotential: "",
     technologyAlignment: "", servicePitch: "", historyTrigger: "",
+    // Tech Profile
+    techAdoptionProfile: "", infrastructureRisk: "", commercialCategory: "",
+  })
+  const [editTechStack, setEditTechStack] = useState<string[]>([])
+
+  // ── Add Contact modal state ───────────────────────────────────────────────────
+  const [showAddContactModal, setShowAddContactModal] = useState(false)
+  const [isAddingContact, setIsAddingContact]         = useState(false)
+  const [newContact, setNewContact] = useState({
+    firstName: "", lastName: "", functionalDomain: "",
+    standardizedRoles: "", email: "", primaryPhone: "",
+    linkedIn: "", isPrimary: false,
   })
 
   // ── Load all data ───────────────────────────────────────────────────────────
@@ -292,6 +318,14 @@ export default function AccountDetailPage() {
   const handleEdit = () => {
     if (!prospect) return
     setEditData({
+      accountName:         prospect.accountName       ?? "",
+      website:             prospect.website           ?? "",
+      country:             prospect.country           ?? "",
+      hqLocationCity:      prospect.hqLocationCity     ?? "",
+      primaryIndustry:     prospect.primaryIndustry    ?? "",
+      businessModel:       prospect.businessModel      ?? "",
+      noOfEmployees:       prospect.noOfEmployees      ?? "",
+      annualRevenue:       prospect.annualRevenue      ?? "",
       salesPriority:       prospect.salesPriority       ?? "",
       intentSignal:        prospect.intentSignal        ?? "",
       clvRanking:          prospect.clvRanking          ?? "",
@@ -301,7 +335,11 @@ export default function AccountDetailPage() {
       technologyAlignment: (prospect as any).technologyAlignment ?? "",
       servicePitch:        prospect.servicePitch        ?? "",
       historyTrigger:      prospect.historyTrigger      ?? "",
+      techAdoptionProfile: (prospect as any).techAdoptionProfile ?? "",
+      infrastructureRisk:  (prospect as any).infrastructureRisk  ?? "",
+      commercialCategory:  (prospect as any).commercialCategory  ?? "",
     })
+    setEditTechStack((prospect as any).primaryTechStack ?? [])
     setShowEditModal(true)
   }
 
@@ -311,6 +349,7 @@ export default function AccountDetailPage() {
     try {
       const payload: any = {}
       Object.entries(editData).forEach(([k, v]) => { if (v) payload[k] = v })
+      if (editTechStack.length > 0) payload.primaryTechStack = editTechStack
       const res = await api.put<any>(`/prospects/${id}`, payload)
       setProspect(res.data)
       saveMsg.setMessage("✅ Saved!")
@@ -318,6 +357,33 @@ export default function AccountDetailPage() {
       saveMsg.setMessage("❌ Save failed.")
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  // ── POST /api/contacts — create + auto-link to this account ─────────────────
+  const handleAddContact = async () => {
+    if (!newContact.firstName.trim() && !newContact.lastName.trim() && !newContact.email.trim()) return
+    setIsAddingContact(true)
+    try {
+      const payload: any = {
+        ...newContact,
+        accountId: id,
+        accountName: prospect?.accountName,
+      }
+      Object.keys(payload).forEach(k => { if (payload[k] === "") delete payload[k] })
+      const res = await api.post<any>("/contacts", payload)
+      setContacts(prev => [...prev, res.data])
+      setShowAddContactModal(false)
+      setNewContact({
+        firstName: "", lastName: "", functionalDomain: "",
+        standardizedRoles: "", email: "", primaryPhone: "",
+        linkedIn: "", isPrimary: false,
+      })
+    } catch (err) {
+      console.error("Add contact error:", err)
+      alert("❌ Could not add contact. Check the fields and try again.")
+    } finally {
+      setIsAddingContact(false)
     }
   }
 
@@ -899,12 +965,18 @@ export default function AccountDetailPage() {
                 <CardContent className="p-0">
                   <div className="p-4 border-b flex items-center justify-between">
                     <h2 className="font-semibold">Contacts ({contacts.length})</h2>
-                    <Button size="sm" variant="outline" className="gap-2 h-8 text-xs"
-                      onClick={handleSuggestPoc} disabled={isSuggestingPoc}>
-                      {isSuggestingPoc
-                        ? <><Loader2 className="h-3 w-3 animate-spin" />Suggesting...</>
-                        : <><Sparkles className="h-3 w-3" />Suggest POC</>}
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" variant="outline" className="gap-2 h-8 text-xs"
+                        onClick={() => setShowAddContactModal(true)}>
+                        <Plus className="h-3 w-3" />Add Contact
+                      </Button>
+                      <Button size="sm" variant="outline" className="gap-2 h-8 text-xs"
+                        onClick={handleSuggestPoc} disabled={isSuggestingPoc}>
+                        {isSuggestingPoc
+                          ? <><Loader2 className="h-3 w-3 animate-spin" />Suggesting...</>
+                          : <><Sparkles className="h-3 w-3" />Suggest POC</>}
+                      </Button>
+                    </div>
                   </div>
                   {contacts.length === 0 ? (
                     <div className="p-8 text-center text-sm text-muted-foreground">
@@ -1127,11 +1199,145 @@ export default function AccountDetailPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Add Contact */}
+      <Dialog open={showAddContactModal} onOpenChange={setShowAddContactModal}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader><DialogTitle>Add Contact — {prospect.accountName}</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label>First Name</Label>
+                <Input value={newContact.firstName}
+                  onChange={(e) => setNewContact(p => ({ ...p, firstName: e.target.value }))} />
+              </div>
+              <div className="space-y-1">
+                <Label>Last Name</Label>
+                <Input value={newContact.lastName}
+                  onChange={(e) => setNewContact(p => ({ ...p, lastName: e.target.value }))} />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label>Functional Domain</Label>
+              <Select value={newContact.functionalDomain}
+                onValueChange={(v) => setNewContact(p => ({ ...p, functionalDomain: v }))}>
+                <SelectTrigger><SelectValue placeholder="Select domain" /></SelectTrigger>
+                <SelectContent>
+                  {FUNCTIONAL_DOMAINS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>Role / Title</Label>
+              <Input placeholder="e.g. VP of Engineering" value={newContact.standardizedRoles}
+                onChange={(e) => setNewContact(p => ({ ...p, standardizedRoles: e.target.value }))} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label>Email</Label>
+                <Input type="email" value={newContact.email}
+                  onChange={(e) => setNewContact(p => ({ ...p, email: e.target.value }))} />
+              </div>
+              <div className="space-y-1">
+                <Label>Phone</Label>
+                <Input value={newContact.primaryPhone}
+                  onChange={(e) => setNewContact(p => ({ ...p, primaryPhone: e.target.value }))} />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label>LinkedIn</Label>
+              <Input value={newContact.linkedIn}
+                onChange={(e) => setNewContact(p => ({ ...p, linkedIn: e.target.value }))} />
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer pt-1">
+              <Checkbox checked={newContact.isPrimary}
+                onCheckedChange={(v) => setNewContact(p => ({ ...p, isPrimary: !!v }))} />
+              <span className="text-sm font-medium">Primary Contact</span>
+            </label>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddContactModal(false)}>Cancel</Button>
+            <Button onClick={handleAddContact} disabled={isAddingContact} className="gap-2">
+              {isAddingContact ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              {isAddingContact ? "Adding..." : "Add Contact"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Edit Account */}
       <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Edit — {prospect.accountName}</DialogTitle></DialogHeader>
-          <div className="grid grid-cols-2 gap-4 py-2">
+
+          {/* ── Basic Info ── */}
+          <div className="space-y-3 py-2">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Basic Info</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label>Account Name</Label>
+                <Input value={editData.accountName} onChange={(e) => setEditData(p => ({ ...p, accountName: e.target.value }))} />
+              </div>
+              <div className="space-y-1">
+                <Label>Website</Label>
+                <Input value={editData.website} onChange={(e) => setEditData(p => ({ ...p, website: e.target.value }))} />
+              </div>
+              <div className="space-y-1">
+                <Label>Country</Label>
+                <Input value={editData.country} onChange={(e) => setEditData(p => ({ ...p, country: e.target.value }))} />
+              </div>
+              <div className="space-y-1">
+                <Label>City</Label>
+                <Input value={editData.hqLocationCity} onChange={(e) => setEditData(p => ({ ...p, hqLocationCity: e.target.value }))} />
+              </div>
+              <div className="space-y-1">
+                <Label>Industry</Label>
+                <Select value={editData.primaryIndustry} onValueChange={(v) => setEditData(p => ({ ...p, primaryIndustry: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                  <SelectContent>
+                    {["BFSI","IT & ITES","SaaS","Fintech","E-commerce","Healthcare","EdTech","Logistics","Manufacturing","Retail & CPG","Media & Telecom","Real Estate"].map(i => (
+                      <SelectItem key={i} value={i}>{i}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label>Business Model</Label>
+                <Select value={editData.businessModel} onValueChange={(v) => setEditData(p => ({ ...p, businessModel: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                  <SelectContent>
+                    {["B2B","B2C","B2B2C","D2C","E-Commerce","Marketplace"].map(m => (
+                      <SelectItem key={m} value={m}>{m}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label>Employees</Label>
+                <Select value={editData.noOfEmployees} onValueChange={(v) => setEditData(p => ({ ...p, noOfEmployees: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                  <SelectContent>
+                    {["1-10","11-50","51-200","201-500","501-1,000","1,001-5,000","5,001-10,000","10,000+"].map(e => (
+                      <SelectItem key={e} value={e}>{e}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label>Annual Revenue</Label>
+                <Select value={editData.annualRevenue} onValueChange={(v) => setEditData(p => ({ ...p, annualRevenue: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                  <SelectContent>
+                    {["Seed <$1M","Early $1M-$10M","Scale-Up $10M-$50M","Mid-Market $50M-$250M","Corporate $250M-$1B","Enterprise $1B+"].map(r => (
+                      <SelectItem key={r} value={r}>{r}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 py-2 border-t pt-4">
+            <p className="col-span-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide -mb-1">Scoring Inputs</p>
             {/* Technology Alignment — important for scoring */}
             <div className="col-span-2 space-y-1">
               <Label>Technology Alignment <span className="text-xs text-primary">(scoring input)</span></Label>
@@ -1187,7 +1393,7 @@ export default function AccountDetailPage() {
                 onValueChange={(v) => setEditData(p => ({ ...p, intentSignal: v }))}>
                 <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                 <SelectContent>
-                  {["Hyper-Growth Mode","Cost Containment","Risk Mitigation","Modernization Mandate"].map(v =>
+                  {["Hyper-Growth Mode","Cost Containment","Risk Mitigation","Modernization Mandate","Capital Event","Regulatory Action","Earnings Shock","Strategic Pivot","Security Incident","Job Postings"].map(v =>
                     <SelectItem key={v} value={v}>{v}</SelectItem>
                   )}
                 </SelectContent>
@@ -1230,6 +1436,102 @@ export default function AccountDetailPage() {
               </Select>
             </div>
           </div>
+
+          {/* ── Tech Profile ── */}
+          <div className="border-t pt-4 space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Tech Profile</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label>Adoption Profile</Label>
+                <Select value={editData.techAdoptionProfile} onValueChange={(v) => setEditData(p => ({ ...p, techAdoptionProfile: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                  <SelectContent>
+                    {["Innovator","Early Adopter","Mainstream","Laggard","Leapfrog"].map(v => (
+                      <SelectItem key={v} value={v}>{v}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label>Infrastructure Risk</Label>
+                <Select value={editData.infrastructureRisk} onValueChange={(v) => setEditData(p => ({ ...p, infrastructureRisk: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                  <SelectContent>
+                    {["EOL","Data Silos","Security Gaps","Scalability Lock","Shadow IT"].map(v => (
+                      <SelectItem key={v} value={v}>{v}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="col-span-2 space-y-1">
+                <Label>Commercial Category</Label>
+                <Select value={editData.commercialCategory} onValueChange={(v) => setEditData(p => ({ ...p, commercialCategory: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                  <SelectContent>
+                    {["Product Led","SaaS-Subscriptions","Professional Services","Retail-E-Com"].map(v => (
+                      <SelectItem key={v} value={v}>{v}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Tech Stack multi-select by category */}
+            <div>
+              <Label className="text-sm font-medium">Tech Stack (multi-select)</Label>
+              <p className="text-xs text-muted-foreground mb-2">Click tools to add/remove.</p>
+              <div className="space-y-3 border rounded-lg p-3 bg-muted/20 max-h-48 overflow-y-auto">
+                {[
+                  { cat: "Cloud",    tools: ["AWS","Microsoft Azure","Google Cloud (GCP)","Oracle Cloud","Digital Ocean","On-Premise"] },
+                  { cat: "CRM/ERP",  tools: ["Salesforce","HubSpot","SAP S/4HANA","MS Dynamics 365","Zoho","Odoo"] },
+                  { cat: "Frontend", tools: ["React","Angular","Vue.js","Next.js","Flutter (Web)"] },
+                  { cat: "Backend",  tools: ["Python","Node.js","Java (Spring)","PHP (Laravel)",".NET Core","Go"] },
+                  { cat: "Database", tools: ["PostgreSQL","MySQL","MongoDB (NoSQL)","Snowflake","Redis"] },
+                  { cat: "DevOps",   tools: ["Docker","Kubernetes","GitHub Actions","Terraform","Jenkins"] },
+                  { cat: "Security", tools: ["CrowdStrike","Okta","Palo Alto Networks","Cloudflare","Splunk"] },
+                  { cat: "E-comm",   tools: ["Shopify","Magento","WooCommerce","BigCommerce"] },
+                ].map(({ cat, tools }) => (
+                  <div key={cat}>
+                    <p className="text-xs font-semibold text-muted-foreground mb-1">{cat}</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {tools.map(tool => {
+                        const selected = editTechStack.includes(tool)
+                        return (
+                          <button
+                            key={tool}
+                            type="button"
+                            onClick={() => setEditTechStack(prev =>
+                              prev.includes(tool) ? prev.filter(t => t !== tool) : [...prev, tool]
+                            )}
+                            className={`px-2.5 py-1 rounded-full text-xs border font-medium transition-colors ${
+                              selected
+                                ? "bg-primary text-white border-primary"
+                                : "bg-white text-muted-foreground border-border hover:border-primary hover:text-primary"
+                            }`}
+                          >
+                            {selected ? "✓ " : ""}{tool}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {editTechStack.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {editTechStack.map(tool => (
+                    <span key={tool}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary/10 text-primary text-xs rounded-full border border-primary/20">
+                      {tool}
+                      <button onClick={() => setEditTechStack(p => p.filter(t => t !== tool))}
+                        className="ml-0.5 hover:text-red-500">×</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
           {saveMsg.visible && (
             <AutoDismissBanner {...saveMsg} onDismiss={saveMsg.clearMessage} />
           )}
