@@ -185,10 +185,20 @@ export default function SegmentDetailPage() {
   }
 
   const handleDelete = async () => {
-    if (!selectedIds.length || !confirm(`Delete ${selectedIds.length} selected account(s)?`)) return
+    if (!selectedIds.length) return
+    let ids = selectedIds
+    if (isAllSelected) {
+      try {
+        const res = await api.get<any>(`/segments/${id}/accounts?page=1&limit=99999`)
+        const data = res.data?.data ?? res.data
+        ids = (data?.accounts || []).map((a: any) => a._id)
+        if (!ids.length) ids = selectedIds
+      } catch { ids = selectedIds }
+    }
+    if (!confirm(`Delete ${ids.length} selected account(s)?`)) return
     setIsDeleting(true)
     try {
-      await Promise.all(selectedIds.map(id => api.delete(`/prospects/${id}`)))
+      await Promise.all(ids.map(id => api.delete(`/prospects/${id}`)))
       setSelectedIds([])
       setIsAllSelected(false)
       await fetchAccounts(currentPage)

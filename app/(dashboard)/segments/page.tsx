@@ -146,12 +146,17 @@ export default function SegmentsPage() {
           >
             <Brain className="h-4 w-4" />New ICP
           </Button>
-          <Button
+
+      
+          {/* <Button
             className="gap-2"
             onClick={() => router.push("/segments/new")}
           >
             <Plus className="h-4 w-4" />New Segment
           </Button>
+ */}
+
+
         </div>
       </div>
 
