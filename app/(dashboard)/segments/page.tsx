@@ -18,7 +18,10 @@ import { Button }            from "@/components/ui/button"
 import { Badge }             from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { api }               from "@/lib/api"
+import { api }               from "@/lib/apiClient"
+import { useAuth } from "@/context/AuthContext"
+import { canEditContent } from "@/lib/permissions"
+import { DisabledEditorAction } from "@/components/DisabledEditorAction"
 
 // Format time ago — "2h ago", "3d ago" etc.
 const timeAgo = (dateStr?: string) => {
@@ -34,6 +37,13 @@ const timeAgo = (dateStr?: string) => {
 
 export default function SegmentsPage() {
   const router = useRouter()
+  const { user } = useAuth()
+  const canCreate = canEditContent(user?.role)
+
+  const viewerIcpTooltip =
+    "You're a Viewer — only Admins and Editors can create ICPs"
+  const viewerSegmentTooltip =
+    "You're a Viewer — only Admins and Editors can create segments"
 
   // Segments state
   const [segments,    setSegments]    = useState<any[]>([])
@@ -139,19 +149,34 @@ export default function SegmentsPage() {
 
         {/* Both create buttons visible at top level */}
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            className="gap-2"
-            onClick={() => router.push("/segments/icp-builder")}
-          >
-            <Brain className="h-4 w-4" />New ICP
-          </Button>
-          <Button
-            className="gap-2"
-            onClick={() => router.push("/segments/new")}
-          >
-            <Plus className="h-4 w-4" />New Segment
-          </Button>
+          {canCreate ? (
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={() => router.push("/segments/icp-builder")}
+            >
+              <Brain className="h-4 w-4" />New ICP
+            </Button>
+          ) : (
+            <DisabledEditorAction
+              label="New ICP"
+              tooltip={viewerIcpTooltip}
+              variant="outline"
+            />
+          )}
+          {canCreate ? (
+            <Button
+              className="gap-2"
+              onClick={() => router.push("/segments/new")}
+            >
+              <Plus className="h-4 w-4" />New Segment
+            </Button>
+          ) : (
+            <DisabledEditorAction
+              label="New Segment"
+              tooltip={viewerSegmentTooltip}
+            />
+          )}
         </div>
       </div>
 
@@ -187,12 +212,28 @@ export default function SegmentsPage() {
                 </p>
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => router.push("/segments/icp-builder")}>
-                  Create ICP first
-                </Button>
-                <Button onClick={() => router.push("/segments/new")}>
-                  New Segment
-                </Button>
+                {canCreate ? (
+                  <>
+                    <Button variant="outline" onClick={() => router.push("/segments/icp-builder")}>
+                      Create ICP first
+                    </Button>
+                    <Button onClick={() => router.push("/segments/new")}>
+                      New Segment
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <DisabledEditorAction
+                      label="Create ICP first"
+                      tooltip={viewerIcpTooltip}
+                      variant="outline"
+                    />
+                    <DisabledEditorAction
+                      label="New Segment"
+                      tooltip={viewerSegmentTooltip}
+                    />
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -275,13 +316,15 @@ export default function SegmentsPage() {
                         >
                           View Accounts
                         </Button>
-                        <Button
-                          variant="ghost" size="icon"
-                          className="h-8 w-8 text-muted-foreground hover:text-red-500"
-                          onClick={(e) => deleteSegment(seg._id, e)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        {canCreate && (
+                          <Button
+                            variant="ghost" size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-red-500"
+                            onClick={(e) => deleteSegment(seg._id, e)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
                       </div>
 
                     </CardContent>
@@ -331,9 +374,16 @@ export default function SegmentsPage() {
                   Define your Ideal Customer Profile — then create a Segment from it.
                 </p>
               </div>
-              <Button onClick={() => router.push("/segments/icp-builder")}>
-                Create ICP Profile
-              </Button>
+              {canCreate ? (
+                <Button onClick={() => router.push("/segments/icp-builder")}>
+                  Create ICP Profile
+                </Button>
+              ) : (
+                <DisabledEditorAction
+                  label="Create ICP Profile"
+                  tooltip={viewerIcpTooltip}
+                />
+              )}
             </div>
           )}
 
@@ -343,8 +393,10 @@ export default function SegmentsPage() {
                 {pageIcps.map((icp) => (
                   <Card
                     key={icp._id}
-                    className="hover:shadow-md transition-shadow cursor-pointer"
-                    onClick={() => router.push(`/segments/icp-builder?id=${icp._id}`)}
+                    className={`hover:shadow-md transition-shadow ${canCreate ? "cursor-pointer" : ""}`}
+                    onClick={() => {
+                      if (canCreate) router.push(`/segments/icp-builder?id=${icp._id}`)
+                    }}
                   >
                     <CardContent className="p-4 space-y-3">
 
@@ -402,29 +454,36 @@ export default function SegmentsPage() {
 
                       {/* Actions */}
                       <div className="flex gap-2 pt-1 border-t">
-                        {/* Create Segment from this ICP */}
-                        <Button
-                          variant="default" size="sm" className="flex-1 text-xs"
-                          onClick={(e) => createSegmentFromIcp(icp._id, e)}
-                        >
-                          Create Segment
-                        </Button>
-                        <Button
-                          variant="outline" size="sm" className="text-xs px-2"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            router.push(`/segments/icp-builder?id=${icp._id}`)
-                          }}
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          variant="ghost" size="icon"
-                          className="h-8 w-8 text-muted-foreground hover:text-red-500"
-                          onClick={(e) => deleteIcp(icp._id, e)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        {canCreate ? (
+                          <>
+                            <Button
+                              variant="default" size="sm" className="flex-1 text-xs"
+                              onClick={(e) => createSegmentFromIcp(icp._id, e)}
+                            >
+                              Create Segment
+                            </Button>
+                            <Button
+                              variant="outline" size="sm" className="text-xs px-2"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                router.push(`/segments/icp-builder?id=${icp._id}`)
+                              }}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              variant="ghost" size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-red-500"
+                              onClick={(e) => deleteIcp(icp._id, e)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </>
+                        ) : (
+                          <p className="text-xs text-muted-foreground py-1">
+                            View only — editing requires Editor or Admin access
+                          </p>
+                        )}
                       </div>
 
                     </CardContent>
