@@ -19,9 +19,12 @@ import { Label }             from "@/components/ui/label"
 import { Badge }             from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { Switch }            from "@/components/ui/switch"
-import { api }               from "@/lib/api"
+import { api, ApiError } from "@/lib/api"
 import { useAutoDismissMessage } from "@/hooks/useAutoDismissMessage"
 import { AutoDismissBanner } from "@/components/ui/auto-dismiss-banner"
+import { useAuth } from "@/context/AuthContext"
+import { canEditContent, isPermissionError, permissionDeniedMessage } from "@/lib/permissions"
+import { EditorBlockedState } from "@/components/EditorBlockedState"
 
 const INDUSTRIES      = ["BFSI","IT & ITES","SaaS","Fintech","E-commerce","Healthcare","EdTech","Logistics","Manufacturing","Retail & CPG","Media & Telecom","Real Estate"]
 const BUSINESS_MODELS = ["B2B","B2C","B2B2C","D2C","E-Commerce","Marketplace"]
@@ -39,6 +42,8 @@ function NewSegmentPageContent() {
   const router       = useRouter()
   const searchParams = useSearchParams()
   const fromIcpId    = searchParams.get("from_icp")
+  const { user, isLoading: authLoading } = useAuth()
+  const canEdit = canEditContent(user?.role)
 
   // Segment meta
   const [name,        setName]        = useState("")
@@ -151,8 +156,15 @@ function NewSegmentPageContent() {
         filters:     buildFilters(),
       })
       saveMsg.setMessage("✅ Segment saved!")
-    } catch (err: any) {
-      saveMsg.setMessage(`❌ ${err?.message || "Save failed."}`)
+    } catch (err: unknown) {
+      if (err instanceof ApiError && err.status === 403) {
+        saveMsg.setMessage(`❌ ${permissionDeniedMessage("create segments")}`)
+      } else if (isPermissionError(err)) {
+        saveMsg.setMessage(`❌ ${permissionDeniedMessage("create segments")}`)
+      } else {
+        const message = err instanceof Error ? err.message : "Save failed."
+        saveMsg.setMessage(`❌ ${message}`)
+      }
     } finally {
       setIsSaving(false)
     }
@@ -184,6 +196,23 @@ function NewSegmentPageContent() {
       </div>
     </div>
   )
+
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-56px)]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  if (user && !canEdit) {
+    return (
+      <EditorBlockedState
+        role={user.role}
+        resourceLabel="create or edit segments"
+      />
+    )
+  }
 
   if (isLoadingIcp) {
     return (

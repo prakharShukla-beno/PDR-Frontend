@@ -142,7 +142,11 @@ export function IcpImportPreviewModal({
               Cancel
             </Button>
             <Button onClick={onProceed} disabled={isProceeding}>
-              {isProceeding ? "Importing..." : "Proceed with Import"}
+              {isProceeding
+                ? totalRows >= 5000
+                  ? "Importing... this may take a minute for large files"
+                  : "Importing..."
+                : "Proceed with Import"}
             </Button>
           </div>
         </div>

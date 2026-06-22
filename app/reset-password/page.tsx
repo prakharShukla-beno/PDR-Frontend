@@ -7,7 +7,8 @@ import { Eye, EyeOff, Loader2, CheckCircle, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { getApiBaseUrl, setToken, setStoredUser } from "@/lib/api"
+import { getApiBaseUrl, setAuthSession, setStoredUser, extractAuthTokens } from "@/lib/api"
+import { parseFetchJson } from "@/lib/apiClient"
 
 function ResetPasswordPageContent() {
   const searchParams  = useSearchParams()
@@ -54,17 +55,23 @@ function ResetPasswordPageContent() {
         body: JSON.stringify({ token, newPassword }),
       })
 
-      const data = await res.json()
+      const data = await parseFetchJson<{
+        message?: string
+        data?: {
+          accessToken?: string
+          refreshToken?: string
+          user?: object
+        }
+      }>(res)
 
       if (!res.ok) {
         throw new Error(data.message || "Reset failed. Please try again.")
       }
 
-      // Auto login — backend returned a new token
-      if (data.data?.token) {
-        setToken(data.data.token)
-        setStoredUser(data.data.user)
-        document.cookie = `beno_token=${data.data.token}; path=/; SameSite=Lax`
+      const { accessToken, refreshToken } = extractAuthTokens(data.data ?? data)
+      if (accessToken) {
+        setAuthSession(accessToken, refreshToken ?? undefined)
+        if (data.data?.user) setStoredUser(data.data.user)
       }
 
       setIsSuccess(true)
@@ -74,8 +81,8 @@ function ResetPasswordPageContent() {
         router.push("/dashboard")
       }, 2000)
 
-    } catch (err: any) {
-      setError(err.message || "Something went wrong. Please try again.")
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.")
     } finally {
       setIsLoading(false)
     }

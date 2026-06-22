@@ -28,10 +28,13 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { api }               from "@/lib/api"
+import { api }               from "@/lib/apiClient"
 import { useAutoDismissMessage } from "@/hooks/useAutoDismissMessage"
 import { AutoDismissBanner } from "@/components/ui/auto-dismiss-banner"
 import { cn }                from "@/lib/utils"
+import { useAuth } from "@/context/AuthContext"
+import { canEditContent, isPermissionError, permissionDeniedMessage } from "@/lib/permissions"
+import { EditorBlockedState } from "@/components/EditorBlockedState"
 import type { Prospect }     from "@/types"
 import {
   SECTOR_TAXONOMY,
@@ -1229,6 +1232,8 @@ function IcpBuilderPageContent() {
   const searchParams = useSearchParams()
   const router       = useRouter()
   const editId       = searchParams.get("id")
+  const { user, isLoading: authLoading } = useAuth()
+  const canEdit = canEditContent(user?.role)
 
   // ── Basic info ──────────────────────────────────────────────────────────────
   const [name,        setName]        = useState("")
@@ -1621,18 +1626,41 @@ function IcpBuilderPageContent() {
 
       if (icpId) fetchMatches(icpId)
     } catch (err: unknown) {
-      const apiErr = err as { data?: { message?: string; errors?: { field: string; message: string }[] } }
+      const apiErr = err as { status?: number; data?: { message?: string; errors?: { field: string; message: string }[] }; message?: string }
+      if (isPermissionError(err)) {
+        saveMsg.setMessage(`❌ ${permissionDeniedMessage("create or edit ICP profiles")}`)
+        return
+      }
       const details = apiErr.data?.errors?.map((e) => e.message).join("; ")
       saveMsg.setMessage(
         details
           ? `❌ Save failed: ${details}`
           : apiErr.data?.message
             ? `❌ Save failed: ${apiErr.data.message}`
-            : "❌ Save failed. Please try again."
+            : apiErr.message
+              ? `❌ Save failed: ${apiErr.message}`
+              : "❌ Save failed. Please try again."
       )
     } finally {
       setIsSaving(false)
     }
+  }
+
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  if (user && !canEdit) {
+    return (
+      <EditorBlockedState
+        role={user.role}
+        resourceLabel="create or edit ICP profiles"
+      />
+    )
   }
 
   if (isLoadingIcp) {

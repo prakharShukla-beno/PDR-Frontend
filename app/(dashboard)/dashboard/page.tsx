@@ -24,12 +24,12 @@ import {
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { api } from "@/lib/api"
+import { api, getAccessToken } from "@/lib/apiClient"
 import { useAuth } from "@/context/AuthContext"
 import type { DashboardSummary, Prospect } from "@/types"
 
 export default function DashboardPage() {
-  const { user } = useAuth()
+  const { user, isLoading: authLoading } = useAuth()
   const router = useRouter()
 
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
@@ -43,6 +43,9 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
+    if (authLoading) return
+    if (!getAccessToken()) return
+
     const fetchAll = async () => {
       try {
         const [summaryRes, prospectsRes, campaignsRes, industryRes, countryRes, priorityRes, clvRes, importRes] =
@@ -71,7 +74,7 @@ export default function DashboardPage() {
       }
     }
     fetchAll()
-  }, [])
+  }, [authLoading])
 
   const firstName = user?.name?.split(" ")[0] ?? "there"
 
@@ -160,7 +163,7 @@ export default function DashboardPage() {
           {/* Sales-Ready Accounts */}
           <Card>
             <CardContent className="p-0">
-              <div className="flex items-center justify-between p-4 border-b">
+              <div className="flex items-center justify-between p-4 border-b border-gray-100">
                 <div>
                   <h2 className="font-semibold">Sales-Ready Accounts</h2>
                   <p className="text-sm text-muted-foreground">Top scored accounts matching your ICP</p>
@@ -169,16 +172,16 @@ export default function DashboardPage() {
                   View all <ArrowUpRight className="h-4 w-4" />
                 </Link>
               </div>
-              <div className="divide-y">
-                {topProspects.length === 0 ? (
-                  <div className="p-8 text-center text-muted-foreground">
-                    <p>No top prospects found.</p>
-                    <Button variant="outline" size="sm" className="mt-3 gap-2" onClick={() => router.push("/accounts")}>
-                      <Upload className="h-4 w-4" />Import Data
-                    </Button>
-                  </div>
-                ) : (
-                  topProspects.slice(0, 6).map((prospect) => (
+              {topProspects.length === 0 ? (
+                <div className="p-8 text-center text-muted-foreground">
+                  <p>No top prospects found.</p>
+                  <Button variant="outline" size="sm" className="mt-3 gap-2" onClick={() => router.push("/accounts")}>
+                    <Upload className="h-4 w-4" />Import Data
+                  </Button>
+                </div>
+              ) : (
+                <div className="max-h-[340px] overflow-y-auto divide-y">
+                  {topProspects.map((prospect) => (
                     <Link key={prospect._id} href={`/accounts/${prospect._id}`}
                       className="flex items-center gap-4 p-4 hover:bg-muted/50 transition-colors">
                       <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-white text-sm font-bold flex-shrink-0">
@@ -204,9 +207,9 @@ export default function DashboardPage() {
                         Sales-Ready
                       </Badge>
                     </Link>
-                  ))
-                )}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
 

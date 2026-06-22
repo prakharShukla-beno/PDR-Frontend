@@ -15,16 +15,31 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
-import { api, fileApi, ApiError } from "@/lib/api"
+import { fileApi, ApiError } from "@/lib/api"
+import { api, cancelImportJob } from "@/lib/apiClient"
+import { extractErrorMessage, readResponseBody } from "@/lib/responseUtils"
 import type { Prospect } from "@/types"
 import { FilterPanel, FilterState, EMPTY_FILTERS, buildFilterQuery, countActiveFilters } from "@/components/filters/FilterPanel"
 import { IcpImportPreviewModal } from "@/components/import/IcpImportPreviewModal"
+import {
+  ImportJobProgress,
+  isImportJobActive,
+  isImportJobTerminal,
+  type ImportJobState,
+} from "@/components/import/ImportJobProgress"
 import { useAutoDismissMessage } from "@/hooks/useAutoDismissMessage"
 import { AutoDismissBanner } from "@/components/ui/auto-dismiss-banner"
+import { useAuth } from "@/context/AuthContext"
+import { canEditContent } from "@/lib/permissions"
+import { DisabledEditorAction } from "@/components/DisabledEditorAction"
 
 function AccountsPageContent() {
   const router = useRouter()
-  const searchParams = useSearchParams()  // Segment URL parameters
+  const searchParams = useSearchParams()
+  const { user } = useAuth()
+  const canEdit = canEditContent(user?.role)
+  const viewerEditorTooltip =
+    "You're a Viewer — only Admins and Editors can perform this action"
 
   const [prospects, setProspects]           = useState<Prospect[]>([])
   const [total, setTotal]                   = useState(0)
@@ -48,12 +63,13 @@ function AccountsPageContent() {
     totalRows: number
   } | null>(null)
   const [isPreviewing, setIsPreviewing]     = useState(false)
+  const [importJob, setImportJob]           = useState<ImportJobState | null>(null)
+  const [isCancellingImport, setIsCancellingImport] = useState(false)
   const [isReTiering, setIsReTiering]       = useState(false)
   const [reTierMsg, setReTierMsg]           = useState("")
   const [showAddModal, setShowAddModal]     = useState(false)
   const [isAdding, setIsAdding]             = useState(false)
   const [segmentName, setSegmentName]       = useState("")  // ← Segment name header mein
-  // ── Add to Segment modal state ──────────────────────────────
   const [showSegmentModal, setShowSegmentModal] = useState(false)
   const [segments, setSegments]                 = useState<{ _id: string; name: string; matchCount: number }[]>([])
   const [segmentsLoading, setSegmentsLoading]   = useState(false)
@@ -144,8 +160,146 @@ function AccountsPageContent() {
     }
   }, [currentPage, recordsPerPage, search, appliedFilters])
 
+  const clearSelection = useCallback(() => {
+    setSelectedIds([])
+    setIsAllSelected(false)
+  }, [])
+
   const uploadMsg = useAutoDismissMessage()
   const enrichMsg = useAutoDismissMessage({ onAutoDismiss: () => fetchProspects() })
+
+  type ImportJobApi = {
+    _id: string
+    status: string
+    fileName?: string
+    totalRows?: number
+    processedRows?: number
+    successCount?: number
+    duplicateCount?: number
+    errorCount?: number
+    errorMessage?: string
+  }
+
+  const mapImportJob = (
+    job: ImportJobApi,
+    fallbackFileName?: string
+  ): ImportJobState => ({
+    jobId: String(job._id),
+    status: job.status,
+    fileName: job.fileName ?? fallbackFileName,
+    totalRows: job.totalRows ?? 0,
+    processedRows: job.processedRows ?? 0,
+    successCount: job.successCount ?? 0,
+    duplicateCount: job.duplicateCount ?? 0,
+    errorCount: job.errorCount ?? 0,
+    errorMessage: job.errorMessage,
+  })
+
+  useEffect(() => {
+    const checkForActiveImport = async () => {
+      try {
+        const res = await api.get<{ data?: ImportJobApi[] }>("/import/jobs")
+        const jobs = res?.data ?? []
+        if (!jobs.length) return
+
+        const mostRecent = jobs[0]
+        if (!isImportJobActive(mostRecent.status)) return
+
+        setImportJob(mapImportJob(mostRecent))
+      } catch (err) {
+        console.error("Failed to check for active imports:", err)
+      }
+    }
+
+    checkForActiveImport()
+  }, [])
+
+  const handleCancelImport = async () => {
+    if (!importJob || isCancellingImport) return
+    if (
+      !confirm(
+        "Cancel this import? Rows already processed will stay, but the rest will be stopped."
+      )
+    ) {
+      return
+    }
+
+    setIsCancellingImport(true)
+    try {
+      const res = await cancelImportJob(importJob.jobId) as {
+        data?: ImportJobApi
+        success?: boolean
+      }
+      const job = res?.data
+      if (job) {
+        setImportJob(mapImportJob(job, importJob.fileName))
+        uploadMsg.setMessage(
+          `Import cancelled — ${job.successCount ?? 0} accounts created before stopping.`
+        )
+        setCurrentPage(1)
+        fetchProspects()
+      }
+    } catch (err) {
+      console.error("Cancel failed:", err)
+      const message = err instanceof Error ? err.message : "Cancel failed"
+      uploadMsg.setMessage(`❌ ${message}`)
+    } finally {
+      setIsCancellingImport(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!importJob || isImportJobTerminal(importJob.status)) return
+
+    const poll = async () => {
+      try {
+        const res = await api.get<{ data?: ImportJobApi } & ImportJobApi>(
+          `/import/jobs/${importJob.jobId}`
+        )
+        const job = (res as { data?: ImportJobApi }).data ?? (res as ImportJobApi)
+        const mapped = mapImportJob(job, importJob.fileName)
+        setImportJob(mapped)
+
+        if (isImportJobTerminal(mapped.status)) {
+          if (mapped.status === "failed") {
+            uploadMsg.setMessage(`❌ ${mapped.errorMessage || "Import failed."}`)
+          } else if (mapped.status === "cancelled") {
+            uploadMsg.setMessage(
+              `Import cancelled — ${mapped.successCount} accounts created before stopping.`
+            )
+            setCurrentPage(1)
+            fetchProspects()
+          } else {
+            const summary = `${mapped.successCount} accounts created, ${mapped.duplicateCount} duplicates, ${mapped.errorCount} errors`
+            uploadMsg.setMessage(
+              mapped.status === "completed_with_errors"
+                ? `⚠️ Import complete — ${summary}`
+                : `✅ Import complete — ${summary}`
+            )
+            setCurrentPage(1)
+            fetchProspects()
+          }
+        }
+      } catch (err) {
+        console.error("Import job poll error:", err)
+      }
+    }
+
+    poll()
+    const interval = setInterval(poll, 2500)
+    return () => clearInterval(interval)
+  }, [importJob?.jobId, importJob?.status, importJob?.fileName, fetchProspects, uploadMsg])
+
+  useEffect(() => {
+    if (!importJob || !isImportJobTerminal(importJob.status)) return
+
+    const timer = setTimeout(() => {
+      setImportJob(null)
+    }, 5000)
+
+    return () => clearTimeout(timer)
+  }, [importJob?.status])
+
   const addMsg = useAutoDismissMessage({
     onAutoDismiss: () => {
       setShowAddModal(false)
@@ -219,11 +373,11 @@ function AccountsPageContent() {
     if (!confirm(`Do you want to delete ${ids.length} selected prospect(s)?`)) return
     try {
       await Promise.all(ids.map(id => api.delete(`/prospects/${id}`)))
-      setSelectedIds([]); setIsAllSelected(false); fetchProspects()
+      clearSelection()
+      fetchProspects()
     } catch { alert("Delete failed.") }
   }
 
-  // ── Add to Segment handlers ──────────────────────────────────────────────────
   const handleOpenSegmentModal = async () => {
     setShowSegmentModal(true)
     setSelectedSegmentId("")
@@ -246,13 +400,12 @@ function AccountsPageContent() {
       if (isAllSelected) {
         try {
           const res = await api.get<any>(`/prospects?limit=99999`)
-          ids = res.data?.map((p: any) => p._id) || selectedIds
+          ids = res.data?.prospects?.map((p: any) => p._id) || res.data?.map((p: any) => p._id) || selectedIds
         } catch { ids = selectedIds }
       }
       await api.post(`/segments/${selectedSegmentId}/add-accounts`, { accountIds: ids })
       setShowSegmentModal(false)
-      setSelectedIds([])
-      setIsAllSelected(false)
+      clearSelection()
       alert(`✅ ${ids.length} account(s) added to segment successfully!`)
     } catch (err: any) {
       alert(`❌ Failed — ${err?.message || "Unknown error"}`)
@@ -298,9 +451,10 @@ function AccountsPageContent() {
         },
       })
       if (!res.ok) {
-        const errText = await res.text()
-        console.error("Export API error:", res.status, errText)
-        alert(`Export failed (${res.status})`)
+        const body = await readResponseBody(res)
+        const message = extractErrorMessage(res, body, `Export failed (${res.status})`)
+        console.error("Export API error:", res.status, message)
+        alert(message)
         return
       }
       const blob = await res.blob()
@@ -317,40 +471,47 @@ function AccountsPageContent() {
     }
   }
 
-  const handleUpload = async () => {
-    if (!uploadFile) return
+  const startAsyncImport = async (file: File) => {
     setIsUploading(true)
     setShowImportPreview(false)
+    uploadMsg.clearMessage()
     try {
-      const formData = new FormData(); formData.append("file", uploadFile)
-      const res = await fileApi.upload<any>("/import/excel", formData)
-
-      // Response check — are there duplicates?
-      const result = res?.data || res
-      const duplicates = result?.duplicates || []
-
-      const saved     = result?.successCount ?? 0
-      const total     = result?.totalRows ?? saved
-      const failed    = result?.failedCount ?? 0
-      const dupCount  = duplicates.length
-      const errSample = (result?.errorDetails as string[] | undefined)?.[0]
-      let summary = `${saved} of ${total} rows saved`
-      if (dupCount > 0) summary += `, ${dupCount} duplicates for review`
-      if (failed > 0) summary += `, ${failed} errors`
-      if (errSample) summary += ` — e.g. ${errSample}`
-
-      if (dupCount > 0) {
-        uploadMsg.setMessage(`✅ ${summary}.`)
-        setTimeout(() => router.push("/duplicates"), 1200)
-      } else {
-        uploadMsg.setMessage(failed > 0 ? `⚠️ ${summary}.` : `✅ Import complete — ${summary}.`)
-        setCurrentPage(1)
-        setTimeout(fetchProspects, 1500)
+      const formData = new FormData()
+      formData.append("file", file)
+      const res = await fileApi.upload<{
+        success?: boolean
+        data?: { jobId: string; status: string }
+      }>("/import/excel/async", formData)
+      const payload = (res as { data?: { jobId: string; status: string } })?.data ?? res as {
+        jobId?: string
+        status?: string
       }
+      const jobId = payload?.jobId
+      if (!jobId) throw new Error("No job ID returned")
+
+      setImportJob({
+        jobId: String(jobId),
+        status: payload?.status ?? "pending",
+        fileName: file.name,
+        totalRows: importPreview?.totalRows ?? 0,
+        processedRows: 0,
+        successCount: 0,
+        duplicateCount: 0,
+        errorCount: 0,
+      })
       setUploadFile(null)
+      setImportPreview(null)
     } catch (err) {
       if (err instanceof ApiError) uploadMsg.setMessage(`❌ ${err.message}`)
-    } finally { setIsUploading(false) }
+      else uploadMsg.setMessage("❌ Import could not be started.")
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  const handleUpload = async () => {
+    if (!uploadFile) return
+    await startAsyncImport(uploadFile)
   }
 
   const handleAddAccount = async () => {
@@ -431,53 +592,88 @@ function AccountsPageContent() {
                 Clear Segment Filter
               </Button>
             )}
-            <label className="cursor-pointer">
-              <input type="file" accept=".xlsx,.csv" className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0]
-                  if (f) handleFileSelect(f)
-                  e.target.value = ""
-                }} />
-              <Button variant="outline" className="gap-2" asChild disabled={isPreviewing}>
-                <span>
-                  {isPreviewing
-                    ? <Loader2 className="h-4 w-4 animate-spin" />
-                    : <Upload className="h-4 w-4" />}
-                  {isPreviewing ? "Checking file..." : "Import"}
-                </span>
-              </Button>
-            </label>
+            {canEdit ? (
+              <label className="cursor-pointer">
+                <input type="file" accept=".xlsx,.csv" className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    if (f) handleFileSelect(f)
+                    e.target.value = ""
+                  }} />
+                <Button variant="outline" className="gap-2" asChild disabled={isPreviewing || (!!importJob && !isImportJobTerminal(importJob.status))}>
+                  <span>
+                    {isPreviewing
+                      ? <Loader2 className="h-4 w-4 animate-spin" />
+                      : <Upload className="h-4 w-4" />}
+                    {isPreviewing ? "Checking file..." : "Import"}
+                  </span>
+                </Button>
+              </label>
+            ) : (
+              <DisabledEditorAction
+                label={isPreviewing ? "Checking file..." : "Import"}
+                tooltip={viewerEditorTooltip}
+                variant="outline"
+              />
+            )}
             {uploadFile && !showImportPreview && (
-              <Button variant="outline" className="gap-2 text-primary border-primary" onClick={handleUpload} disabled={isUploading || isPreviewing}>
+              <Button variant="outline" className="gap-2 text-primary border-primary" onClick={handleUpload} disabled={isUploading || isPreviewing || (!!importJob && !isImportJobTerminal(importJob.status))}>
                 {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                Upload: {uploadFile.name.slice(0, 15)}...
+                {isUploading
+                  ? (importPreview?.totalRows ?? 0) >= 5000
+                    ? "Importing... may take a minute"
+                    : "Importing..."
+                  : `Upload: ${uploadFile.name.slice(0, 15)}...`}
               </Button>
             )}
             <Button variant="outline" className="gap-2" onClick={handleExport}><Download className="h-4 w-4" />Export</Button>
-            <Button 
-              variant="outline" 
-              className="gap-2" 
-              onClick={async () => {
-                try {
-                  await api.post(`/prospects/re-tier`, {})
-                  alert("Re-tiering all accounts...")
-                  await new Promise(r => setTimeout(r, 1000))
-                  fetchProspects()
-                } catch (err) {
-                  console.error("Re-tier error:", err)
-                  alert("Error re-tiering accounts")
-                }
-              }}
-            >
-              <Loader2 className="h-4 w-4" />Re-Tier All
-            </Button>
-            <Button className="gap-2 bg-primary hover:bg-primary/90" onClick={() => setShowAddModal(true)}>
-              <Plus className="h-4 w-4" />Add Account
-            </Button>
+            {canEdit ? (
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={async () => {
+                  try {
+                    await api.post(`/prospects/re-tier`, {})
+                    alert("Re-tiering all accounts...")
+                    await new Promise(r => setTimeout(r, 1000))
+                    fetchProspects()
+                  } catch (err) {
+                    console.error("Re-tier error:", err)
+                    alert("Error re-tiering accounts")
+                  }
+                }}
+              >
+                <Loader2 className="h-4 w-4" />Re-Tier All
+              </Button>
+            ) : (
+              <DisabledEditorAction
+                label="Re-Tier All"
+                tooltip={viewerEditorTooltip}
+                variant="outline"
+              />
+            )}
+            {canEdit ? (
+              <Button className="gap-2 bg-primary hover:bg-primary/90" onClick={() => setShowAddModal(true)}>
+                <Plus className="h-4 w-4" />Add Account
+              </Button>
+            ) : (
+              <DisabledEditorAction
+                label="Add Account"
+                tooltip={viewerEditorTooltip}
+              />
+            )}
           </div>
         </div>
 
         <AutoDismissBanner {...uploadMsg} onDismiss={uploadMsg.clearMessage} />
+
+        {importJob && (
+          <ImportJobProgress
+            job={importJob}
+            canCancel={canEdit && !isCancellingImport}
+            onCancel={() => void handleCancelImport()}
+          />
+        )}
 
         <div className="flex items-center gap-3 flex-wrap">
           <div className="relative flex-1 max-w-md">
@@ -663,17 +859,43 @@ function AccountsPageContent() {
 
       <div className="fixed bottom-0 left-[var(--sidebar-width)] right-0 bg-white border-t py-3 px-6 flex items-center justify-between z-50 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" className={`gap-2 ${hasSelection ? "text-destructive hover:text-destructive" : "text-muted-foreground/40"}`} disabled={!hasSelection} onClick={handleDelete}>
-            <X className="h-4 w-4" />DELETE
-          </Button>
-          <Button variant="outline" size="sm" disabled={!hasSelection} className={`gap-2 ${!hasSelection ? "opacity-40" : ""}`} onClick={handleOpenSegmentModal}>
-            <Layers className="h-4 w-4" />ADD TO SEGMENT
-          </Button>
-          <Button
-            variant="outline" size="sm"
-            disabled={!hasSelection || isEnriching}
-            className={`gap-2 ${!hasSelection ? "opacity-40" : "border-primary text-primary hover:bg-primary/5"}`}
-            onClick={async () => {
+          {canEdit ? (
+            <Button variant="ghost" size="sm" className={`gap-2 ${hasSelection ? "text-destructive hover:text-destructive" : "text-muted-foreground/40"}`} disabled={!hasSelection} onClick={handleDelete}>
+              <X className="h-4 w-4" />DELETE
+            </Button>
+          ) : (
+            <DisabledEditorAction
+              label="DELETE"
+              tooltip={viewerEditorTooltip}
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground/40"
+            />
+          )}
+          {canEdit ? (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!hasSelection}
+              className={`gap-2 ${!hasSelection ? "opacity-40" : ""}`}
+              onClick={handleOpenSegmentModal}
+            >
+              <Layers className="h-4 w-4" />ADD TO SEGMENT
+            </Button>
+          ) : (
+            <DisabledEditorAction
+              label="ADD TO SEGMENT"
+              tooltip={viewerEditorTooltip}
+              variant="outline"
+              size="sm"
+            />
+          )}
+          {canEdit ? (
+            <Button
+              variant="outline" size="sm"
+              disabled={!hasSelection || isEnriching}
+              className={`gap-2 ${!hasSelection ? "opacity-40" : "border-primary text-primary hover:bg-primary/5"}`}
+              onClick={async () => {
               let ids = selectedIds
               if (isAllSelected) {
                 try {
@@ -686,12 +908,17 @@ function AccountsPageContent() {
               try {
                 const res = await api.post<any>("/enrichment/bulk", { prospectIds: ids })
                 const { success = 0, failed = 0 } = res?.data || res || {}
-                if (failed > 0 && success === 0) {
+                const allFailed = failed > 0 && success === 0
+                if (allFailed) {
                   enrichMsg.setMessage(`❌ Enrichment failed for all ${ids.length} accounts. Check Gemini API key.`)
                 } else if (failed > 0) {
                   enrichMsg.setMessage(`⚠️ ${success} enriched, ${failed} failed`)
+                  clearSelection()
+                  fetchProspects()
                 } else {
                   enrichMsg.setMessage(`✅ ${ids.length} account${ids.length > 1 ? "s" : ""} enriched successfully!`)
+                  clearSelection()
+                  fetchProspects()
                 }
               } catch (err: any) {
                 const msg = err?.data?.message || err?.message || "Unknown error"
@@ -704,6 +931,14 @@ function AccountsPageContent() {
             {isEnriching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
             {isEnriching ? "Enriching..." : "AI ENRICH"}
           </Button>
+          ) : (
+            <DisabledEditorAction
+              label="AI ENRICH"
+              tooltip={viewerEditorTooltip}
+              variant="outline"
+              size="sm"
+            />
+          )}
           {enrichMsg.visible && (
             <AutoDismissBanner {...enrichMsg} inline onDismiss={enrichMsg.clearMessage} />
           )}
@@ -713,7 +948,7 @@ function AccountsPageContent() {
           size="sm"
           className={isAllSelected ? "bg-primary text-white" : ""}
           onClick={() => {
-            if (isAllSelected) { setIsAllSelected(false); setSelectedIds([]) }
+            if (isAllSelected) clearSelection()
             else { setIsAllSelected(true); setSelectedIds(prospects.map(p => p._id)) }
           }}
         >
@@ -721,7 +956,6 @@ function AccountsPageContent() {
         </Button>
       </div>
 
-      {/* ── Add to Segment Modal ─────────────────────────────────────────────── */}
       <Dialog open={showSegmentModal} onOpenChange={setShowSegmentModal}>
         <DialogContent className="sm:max-w-md">
           <DialogDescription className="sr-only">Select a segment to add the selected accounts to.</DialogDescription>
@@ -858,7 +1092,7 @@ function AccountsPageContent() {
                     <Select value={newAccount.noOfEmployees} onValueChange={(v) => setNewAccount(p => ({ ...p, noOfEmployees: v }))}>
                       <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                       <SelectContent>
-                        {["1-10","11-50","51-200","201-500","501-1,000","1,001-5,000","5,001-10,000","10,000+"].map(e => (
+                        {["1-50","51-200","201-1,000","1,001-5,000","5,000+"].map(e => (
                           <SelectItem key={e} value={e}>{e}</SelectItem>
                         ))}
                       </SelectContent>
@@ -979,7 +1213,7 @@ function AccountsPageContent() {
                   <Select value={newAccount.infrastructureRisk} onValueChange={(v) => setNewAccount(p => ({ ...p, infrastructureRisk: v }))}>
                     <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                     <SelectContent>
-                      {["EOL","Data Silos","Security Gaps","Scalability Lock","Shadow IT"].map(v => (
+                      {["End-of-Life (EOL)","Data Silos","Security Gaps","Scalability Lock","Shadow IT","Clean (Greenfield)"].map(v => (
                         <SelectItem key={v} value={v}>{v}</SelectItem>
                       ))}
                     </SelectContent>
@@ -1064,7 +1298,7 @@ function AccountsPageContent() {
         missingColumns={importPreview?.missingIcpColumns ?? []}
         previewRows={importPreview?.previewRows ?? []}
         totalRows={importPreview?.totalRows ?? 0}
-        isProceeding={isUploading}
+        isProceeding={isUploading || (!!importJob && !isImportJobTerminal(importJob.status))}
         onProceed={handleUpload}
         onCancel={() => {
           setShowImportPreview(false)

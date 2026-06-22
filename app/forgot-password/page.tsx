@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { getApiBaseUrl } from "@/lib/api"
+import { parseFetchJson } from "@/lib/apiClient"
 
 export default function ForgotPasswordPage() {
   const [email, setEmail]       = useState("")
@@ -36,11 +37,11 @@ export default function ForgotPasswordPage() {
       if (res.ok || res.status === 200) {
         setIsSubmitted(true)
       } else {
-        const data = await res.json()
+        const data = await parseFetchJson<{ message?: string }>(res)
         setError(data.message || "Something went wrong. Please try again.")
       }
-    } catch {
-      setError("Could not connect to server. Please try again.")
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Could not connect to server. Please try again.")
     } finally {
       setIsLoading(false)
     }

@@ -1,3 +1,5 @@
+import { readResponseBody, extractErrorMessage, API_UNAVAILABLE_MSG } from "./responseUtils"
+
 const DEFAULT_BACKEND = "http://localhost:5000"
 
 /** Backend origin without /api suffix */
@@ -33,30 +35,66 @@ export function getFileUploadBaseUrl(): string {
   return toApiBase(getDirectBackendUrl())
 }
 // ─── Token helpers ────────────────────────────────────────────────────────────
+const TOKEN_KEY = "beno_token"
+const REFRESH_TOKEN_KEY = "beno_refresh_token"
+const USER_KEY = "beno_user"
+
 export const getToken = (): string | null => {
   if (typeof window === "undefined") return null
-  return localStorage.getItem("beno_token")
+  return localStorage.getItem(TOKEN_KEY)
+}
+
+export const getRefreshToken = (): string | null => {
+  if (typeof window === "undefined") return null
+  return localStorage.getItem(REFRESH_TOKEN_KEY)
 }
 
 export const setToken = (token: string): void => {
-  localStorage.setItem("beno_token", token)
+  localStorage.setItem(TOKEN_KEY, token)
+}
+
+export const setRefreshToken = (token: string): void => {
+  localStorage.setItem(REFRESH_TOKEN_KEY, token)
+}
+
+export const setAuthSession = (accessToken: string, refreshToken?: string): void => {
+  setToken(accessToken)
+  if (refreshToken) setRefreshToken(refreshToken)
+  if (typeof document !== "undefined") {
+    document.cookie = `${TOKEN_KEY}=${accessToken}; path=/; SameSite=Lax`
+  }
 }
 
 export const removeToken = (): void => {
-  localStorage.removeItem("beno_token")
-  localStorage.removeItem("beno_user")
+  localStorage.removeItem(TOKEN_KEY)
+  localStorage.removeItem(REFRESH_TOKEN_KEY)
+  localStorage.removeItem(USER_KEY)
+  if (typeof document !== "undefined") {
+    document.cookie = `${TOKEN_KEY}=; path=/; max-age=0`
+  }
 }
 
 export const getStoredUser = () => {
   if (typeof window === "undefined") return null
   try {
-    const raw = localStorage.getItem("beno_user")
+    const raw = localStorage.getItem(USER_KEY)
     return raw ? JSON.parse(raw) : null
   } catch { return null }
 }
 
 export const setStoredUser = (user: object): void => {
-  localStorage.setItem("beno_user", JSON.stringify(user))
+  localStorage.setItem(USER_KEY, JSON.stringify(user))
+}
+
+/** Normalize login/register/reset responses (accessToken or legacy token). */
+export const extractAuthTokens = (data: {
+  accessToken?: string
+  refreshToken?: string
+  token?: string
+} | null | undefined) => {
+  const accessToken = data?.accessToken ?? data?.token ?? null
+  const refreshToken = data?.refreshToken ?? null
+  return { accessToken, refreshToken }
 }
 
 // ─── Error class ──────────────────────────────────────────────────────────────
@@ -70,7 +108,7 @@ export class ApiError extends Error {
   }
 }
 
-// ─── Core fetch ───────────────────────────────────────────────────────────────
+
 async function request<T>(
   baseUrl: string,
   endpoint: string,
@@ -84,7 +122,7 @@ async function request<T>(
 ): Promise<T> {
   const {
     method = "GET",
-    body,
+    body: requestBody,
     headers = {},
     isFormData = false,
     connectionHint,
@@ -103,8 +141,8 @@ async function request<T>(
     cache: "no-store",
   }
 
-  if (body) {
-    config.body = isFormData ? (body as FormData) : JSON.stringify(body)
+  if (requestBody) {
+    config.body = isFormData ? (requestBody as FormData) : JSON.stringify(requestBody)
   }
 
   let res: Response
@@ -114,16 +152,16 @@ async function request<T>(
     const hint =
       connectionHint ??
       (typeof window !== "undefined"
-        ? "Check BACKEND_URL in .env and restart npm run dev."
+        ? API_UNAVAILABLE_MSG
         : "Set BACKEND_URL in .env to your backend origin.")
     throw new ApiError(`Cannot connect to API. ${hint}`, 0)
   }
 
-  let data: unknown
-  try { data = await res.json() } catch { data = null }
+  const responseBody = await readResponseBody(res)
+  const data = responseBody.data
 
   if (res.status === 401) {
-    const isAuthAttempt = /^\/auth\/(login|register)/.test(endpoint)
+    const isAuthAttempt = /^\/auth\/(login|register|refresh)/.test(endpoint)
     if (!isAuthAttempt && getToken()) {
       removeToken()
       if (typeof window !== "undefined") window.location.href = "/"
@@ -132,14 +170,15 @@ async function request<T>(
   }
 
   if (!res.ok) {
-    const proxyHint =
-      res.status === 500 && typeof window !== "undefined"
-        ? " Backend may be unreachable — check BACKEND_URL in .env and restart npm run dev."
-        : ""
-    const message =
-      (data as { message?: string })?.message ||
-      `Request failed (${res.status}).${proxyHint}`
+    const message = extractErrorMessage(res, responseBody, `Request failed (${res.status})`)
     throw new ApiError(message, res.status, data)
+  }
+
+  if (!responseBody.isJson) {
+    throw new ApiError(
+      extractErrorMessage(res, responseBody, "Invalid response from server"),
+      res.status
+    )
   }
 
   return data as T
