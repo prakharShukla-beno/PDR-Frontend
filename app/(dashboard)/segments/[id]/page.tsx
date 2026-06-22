@@ -13,10 +13,12 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { api }      from "@/lib/api"
 import { useAutoDismissMessage } from "@/hooks/useAutoDismissMessage"
 import { AutoDismissBanner } from "@/components/ui/auto-dismiss-banner"
+import { useConfirmDialog } from "@/hooks/useConfirmDialog"
 
 export default function SegmentDetailPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
+  const { showConfirm, ConfirmDialogHost } = useConfirmDialog()
 
   const [segment,     setSegment]     = useState<any>(null)
   const [isLoading,   setIsLoading]   = useState(true)
@@ -195,19 +197,26 @@ export default function SegmentDetailPage() {
         if (!ids.length) ids = selectedIds
       } catch { ids = selectedIds }
     }
-    if (!confirm(`Delete ${ids.length} selected account(s)?`)) return
-    setIsDeleting(true)
-    try {
-      await Promise.all(ids.map(id => api.delete(`/prospects/${id}`)))
-      setSelectedIds([])
-      setIsAllSelected(false)
-      await fetchAccounts(currentPage)
-      await fetchSegment()
-    } catch {
-      alert("Delete failed.")
-    } finally {
-      setIsDeleting(false)
-    }
+    showConfirm({
+      title: `Delete ${ids.length} account(s)?`,
+      message: "This action cannot be undone. All selected accounts will be permanently deleted.",
+      confirmLabel: "Delete",
+      variant: "danger",
+      onConfirm: async () => {
+        setIsDeleting(true)
+        try {
+          await Promise.all(ids.map(accountId => api.delete(`/prospects/${accountId}`)))
+          setSelectedIds([])
+          setIsAllSelected(false)
+          await fetchAccounts(currentPage)
+          await fetchSegment()
+        } catch {
+          alert("Delete failed.")
+        } finally {
+          setIsDeleting(false)
+        }
+      },
+    })
   }
 
   const handleBulkEnrich = async () => {
@@ -554,6 +563,7 @@ export default function SegmentDetailPage() {
         </Button>
       </div>
 
+      {ConfirmDialogHost}
     </div>
   )
 }

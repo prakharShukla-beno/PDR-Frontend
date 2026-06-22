@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { useAuth } from "@/context/AuthContext"
 import { api } from "@/lib/apiClient"
 import { useRouter, usePathname } from "next/navigation"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 
 interface TeamUser {
   _id: string
@@ -27,6 +28,34 @@ export default function UsersPage() {
   const [inviteRole, setInviteRole] = useState<"editor" | "viewer">("editor")
   const [inviting, setInviting] = useState(false)
   const [message, setMessage] = useState("")
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean
+    title: string
+    message: string
+    confirmLabel: string
+    variant: "danger" | "warning" | "default"
+    onConfirm: () => void
+  } | null>(null)
+
+  const showConfirm = (config: {
+    title: string
+    message: string
+    confirmLabel?: string
+    variant?: "danger" | "warning" | "default"
+    onConfirm: () => void
+  }) => {
+    setConfirmDialog({
+      open: true,
+      title: config.title,
+      message: config.message,
+      confirmLabel: config.confirmLabel || "Confirm",
+      variant: config.variant || "danger",
+      onConfirm: () => {
+        setConfirmDialog(null)
+        config.onConfirm()
+      },
+    })
+  }
 
   const currentUserId = user?.id ?? user?._id
 
@@ -122,26 +151,27 @@ export default function UsersPage() {
     }
   }
 
-  const handleRemove = async (userId: string, userName: string) => {
-    if (
-      !confirm(
-        `Remove ${userName} from the team? They will lose access immediately but their data history will be preserved.`
-      )
-    ) {
-      return
-    }
-
-    try {
-      const data = await api.delete<{ success: boolean; message?: string }>(`/users/${userId}`)
-      if (data.success) {
-        setMessage(data.message || `${userName} has been removed from the team`)
-        await fetchUsers()
-      } else {
-        setMessage(data.message || "Failed to remove user")
-      }
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to remove user")
-    }
+  const handleRemove = (userId: string, userName: string) => {
+    showConfirm({
+      title: `Remove ${userName}?`,
+      message:
+        "They will lose access immediately. Their data history will be preserved and they can be re-invited later.",
+      confirmLabel: "Remove",
+      variant: "danger",
+      onConfirm: async () => {
+        try {
+          const data = await api.delete<{ success: boolean; message?: string }>(`/users/${userId}`)
+          if (data.success) {
+            setMessage(data.message || `${userName} has been removed from the team`)
+            await fetchUsers()
+          } else {
+            setMessage(data.message || "Failed to remove user")
+          }
+        } catch (error) {
+          setMessage(error instanceof Error ? error.message : "Failed to remove user")
+        }
+      },
+    })
   }
 
   const ROLE_COLORS = {
@@ -314,6 +344,18 @@ export default function UsersPage() {
         <p><strong>Editor</strong> — Import, enrich, create ICPs and segments</p>
         <p><strong>Viewer</strong> — Read-only access, can export</p>
       </div>
+
+      {confirmDialog && (
+        <ConfirmDialog
+          open={confirmDialog.open}
+          title={confirmDialog.title}
+          message={confirmDialog.message}
+          confirmLabel={confirmDialog.confirmLabel}
+          variant={confirmDialog.variant}
+          onConfirm={confirmDialog.onConfirm}
+          onCancel={() => setConfirmDialog(null)}
+        />
+      )}
     </div>
   )
 }
