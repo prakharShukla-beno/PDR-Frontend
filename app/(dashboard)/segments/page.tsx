@@ -22,6 +22,7 @@ import { api }               from "@/lib/apiClient"
 import { useAuth } from "@/context/AuthContext"
 import { canEditContent } from "@/lib/permissions"
 import { DisabledEditorAction } from "@/components/DisabledEditorAction"
+import { useConfirmDialog } from "@/hooks/useConfirmDialog"
 
 // Format time ago — "2h ago", "3d ago" etc.
 const timeAgo = (dateStr?: string) => {
@@ -44,6 +45,7 @@ export default function SegmentsPage() {
     "You're a Viewer — only Admins and Editors can create ICPs"
   const viewerSegmentTooltip =
     "You're a Viewer — only Admins and Editors can create segments"
+  const { showConfirm, ConfirmDialogHost } = useConfirmDialog()
 
   // Segments state
   const [segments,    setSegments]    = useState<any[]>([])
@@ -89,27 +91,41 @@ export default function SegmentsPage() {
   }, [fetchSegments, fetchIcps])
 
   // DELETE /api/segments/:id
-  const deleteSegment = async (id: string, e: React.MouseEvent) => {
+  const deleteSegment = (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
-    if (!confirm("This segment will be deleted permanently. Continue?")) return
-    try {
-      await api.delete(`/segments/${id}`)
-      fetchSegments()
-    } catch {
-      alert("Delete failed. Try again.")
-    }
+    showConfirm({
+      title: "Delete segment?",
+      message: "This segment will be deleted permanently. This action cannot be undone.",
+      confirmLabel: "Delete",
+      variant: "danger",
+      onConfirm: async () => {
+        try {
+          await api.delete(`/segments/${id}`)
+          fetchSegments()
+        } catch {
+          alert("Delete failed. Try again.")
+        }
+      },
+    })
   }
 
   // DELETE /api/icp/:id
-  const deleteIcp = async (id: string, e: React.MouseEvent) => {
+  const deleteIcp = (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
-    if (!confirm("This ICP profile will be deleted permanently. Continue?")) return
-    try {
-      await api.delete(`/icp/${id}`)
-      fetchIcps()
-    } catch {
-      alert("Delete failed. Try again.")
-    }
+    showConfirm({
+      title: "Delete ICP profile?",
+      message: "This ICP profile will be deleted permanently. This action cannot be undone.",
+      confirmLabel: "Delete",
+      variant: "danger",
+      onConfirm: async () => {
+        try {
+          await api.delete(`/icp/${id}`)
+          fetchIcps()
+        } catch {
+          alert("Delete failed. Try again.")
+        }
+      },
+    })
   }
 
   // POST /api/icp/:id/create-segment
@@ -515,6 +531,8 @@ export default function SegmentsPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      {ConfirmDialogHost}
     </div>
   )
 }

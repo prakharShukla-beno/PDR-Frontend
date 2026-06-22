@@ -35,9 +35,11 @@ import { api, ApiError } from "@/lib/api"
 import type { Campaign } from "@/types"
 import { useAutoDismissMessage } from "@/hooks/useAutoDismissMessage"
 import { AutoDismissBanner } from "@/components/ui/auto-dismiss-banner"
+import { useConfirmDialog } from "@/hooks/useConfirmDialog"
 
 export default function CampaignsPage() {
   const router = useRouter()
+  const { showConfirm, ConfirmDialogHost } = useConfirmDialog()
 
   // ── Data state ──────────────────────────────
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
@@ -103,15 +105,22 @@ export default function CampaignsPage() {
   }
 
   // ── DELETE /api/campaigns/:id ───────────────
-  const handleDelete = async (id: string, e: React.MouseEvent) => {
+  const handleDelete = (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
-    if (!confirm("Are you sure you want to delete this campaign?")) return
-    try {
-      await api.delete(`/campaigns/${id}`)
-      fetchCampaigns()
-    } catch {
-      alert("Delete failed.")
-    }
+    showConfirm({
+      title: "Delete campaign?",
+      message: "This campaign will be deleted permanently. This action cannot be undone.",
+      confirmLabel: "Delete",
+      variant: "danger",
+      onConfirm: async () => {
+        try {
+          await api.delete(`/campaigns/${id}`)
+          fetchCampaigns()
+        } catch {
+          alert("Delete failed.")
+        }
+      },
+    })
   }
 
   // ── Status badge ────────────────────────────
@@ -369,6 +378,7 @@ export default function CampaignsPage() {
         </DialogContent>
       </Dialog>
 
+      {ConfirmDialogHost}
     </div>
   )
 }

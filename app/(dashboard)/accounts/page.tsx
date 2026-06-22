@@ -32,6 +32,7 @@ import { AutoDismissBanner } from "@/components/ui/auto-dismiss-banner"
 import { useAuth } from "@/context/AuthContext"
 import { canEditContent } from "@/lib/permissions"
 import { DisabledEditorAction } from "@/components/DisabledEditorAction"
+import { useConfirmDialog } from "@/hooks/useConfirmDialog"
 
 function AccountsPageContent() {
   const router = useRouter()
@@ -40,6 +41,7 @@ function AccountsPageContent() {
   const canEdit = canEditContent(user?.role)
   const viewerEditorTooltip =
     "You're a Viewer — only Admins and Editors can perform this action"
+  const { showConfirm, ConfirmDialogHost } = useConfirmDialog()
 
   const [prospects, setProspects]           = useState<Prospect[]>([])
   const [total, setTotal]                   = useState(0)
@@ -214,38 +216,38 @@ function AccountsPageContent() {
     checkForActiveImport()
   }, [])
 
-  const handleCancelImport = async () => {
+  const handleCancelImport = () => {
     if (!importJob || isCancellingImport) return
-    if (
-      !confirm(
-        "Cancel this import? Rows already processed will stay, but the rest will be stopped."
-      )
-    ) {
-      return
-    }
-
-    setIsCancellingImport(true)
-    try {
-      const res = await cancelImportJob(importJob.jobId) as {
-        data?: ImportJobApi
-        success?: boolean
-      }
-      const job = res?.data
-      if (job) {
-        setImportJob(mapImportJob(job, importJob.fileName))
-        uploadMsg.setMessage(
-          `Import cancelled — ${job.successCount ?? 0} accounts created before stopping.`
-        )
-        setCurrentPage(1)
-        fetchProspects()
-      }
-    } catch (err) {
-      console.error("Cancel failed:", err)
-      const message = err instanceof Error ? err.message : "Cancel failed"
-      uploadMsg.setMessage(`❌ ${message}`)
-    } finally {
-      setIsCancellingImport(false)
-    }
+    showConfirm({
+      title: "Cancel this import?",
+      message: "Rows already processed will stay, but the rest will be stopped.",
+      confirmLabel: "Cancel Import",
+      variant: "warning",
+      onConfirm: async () => {
+        setIsCancellingImport(true)
+        try {
+          const res = await cancelImportJob(importJob.jobId) as {
+            data?: ImportJobApi
+            success?: boolean
+          }
+          const job = res?.data
+          if (job) {
+            setImportJob(mapImportJob(job, importJob.fileName))
+            uploadMsg.setMessage(
+              `Import cancelled — ${job.successCount ?? 0} accounts created before stopping.`
+            )
+            setCurrentPage(1)
+            fetchProspects()
+          }
+        } catch (err) {
+          console.error("Cancel failed:", err)
+          const message = err instanceof Error ? err.message : "Cancel failed"
+          uploadMsg.setMessage(`❌ ${message}`)
+        } finally {
+          setIsCancellingImport(false)
+        }
+      },
+    })
   }
 
   useEffect(() => {
@@ -370,12 +372,22 @@ function AccountsPageContent() {
         ids = res.data?.prospects?.map((p: any) => p._id) || res.data?.map((p: any) => p._id) || selectedIds
       } catch { ids = selectedIds }
     }
-    if (!confirm(`Do you want to delete ${ids.length} selected prospect(s)?`)) return
-    try {
-      await Promise.all(ids.map(id => api.delete(`/prospects/${id}`)))
-      clearSelection()
-      fetchProspects()
-    } catch { alert("Delete failed.") }
+    showConfirm({
+      title: `Delete ${ids.length} account(s)?`,
+      message:
+        "This action cannot be undone. All selected accounts and their contacts will be permanently deleted.",
+      confirmLabel: "Delete",
+      variant: "danger",
+      onConfirm: async () => {
+        try {
+          await Promise.all(ids.map(id => api.delete(`/prospects/${id}`)))
+          clearSelection()
+          fetchProspects()
+        } catch {
+          alert("Delete failed.")
+        }
+      },
+    })
   }
 
   const handleOpenSegmentModal = async () => {
@@ -1306,6 +1318,8 @@ function AccountsPageContent() {
           setImportPreview(null)
         }}
       />
+
+      {ConfirmDialogHost}
     </div>
   )
 }

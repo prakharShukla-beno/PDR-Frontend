@@ -21,6 +21,7 @@ import { FilterPanel, FilterState, EMPTY_FILTERS, buildFilterQuery, countActiveF
 import { IcpImportPreviewModal } from "@/components/import/IcpImportPreviewModal"
 import { useAutoDismissMessage } from "@/hooks/useAutoDismissMessage"
 import { AutoDismissBanner } from "@/components/ui/auto-dismiss-banner"
+import { useConfirmDialog } from "@/hooks/useConfirmDialog"
 
 const FUNCTIONAL_DOMAINS = [
   "Corporate Strategy","Technology & Digital","Data & AI","Finance & Accounting",
@@ -47,6 +48,7 @@ const DOMAIN_COLORS: Record<string, string> = {
 
 export default function ContactsPage() {
   const router = useRouter()
+  const { showConfirm, ConfirmDialogHost } = useConfirmDialog()
   const [contacts, setContacts]         = useState<Contact[]>([])
   const [total, setTotal]               = useState(0)
   const [totalPages, setTotalPages]     = useState(1)
@@ -164,11 +166,22 @@ export default function ContactsPage() {
         ids = res.data?.contacts?.map((c: any) => c._id) || res.data?.map((c: any) => c._id) || selectedIds
       } catch { ids = selectedIds }
     }
-    if (!confirm(`Do you want to delete ${ids.length} selected contact(s)?`)) return
-    try {
-      await Promise.all(ids.map(id => api.delete(`/contacts/${id}`)))
-      setSelectedIds([]); setIsAllSelected(false); fetchContacts()
-    } catch { alert("Delete failed.") }
+    showConfirm({
+      title: `Delete ${ids.length} contact(s)?`,
+      message: "This action cannot be undone. All selected contacts will be permanently deleted.",
+      confirmLabel: "Delete",
+      variant: "danger",
+      onConfirm: async () => {
+        try {
+          await Promise.all(ids.map(id => api.delete(`/contacts/${id}`)))
+          setSelectedIds([])
+          setIsAllSelected(false)
+          fetchContacts()
+        } catch {
+          alert("Delete failed.")
+        }
+      },
+    })
   }
 
   // ── Add to Campaign modal state ──────────────────────────────────────────────
@@ -796,6 +809,7 @@ const handleUpload = async () => {
       </Dialog>
 
       {/* Duplicate Review Modal — shown after contact import */}
+      {ConfirmDialogHost}
     </div>
   )
 }

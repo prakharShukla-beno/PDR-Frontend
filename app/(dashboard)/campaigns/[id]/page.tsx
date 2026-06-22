@@ -19,6 +19,7 @@ import { api, ApiError } from "@/lib/api"
 import type { Campaign, Contact } from "@/types"
 import { useAutoDismissMessage } from "@/hooks/useAutoDismissMessage"
 import { AutoDismissBanner } from "@/components/ui/auto-dismiss-banner"
+import { useConfirmDialog } from "@/hooks/useConfirmDialog"
 
 const DOMAIN_COLORS: Record<string, string> = {
   "Technology & Digital":      "bg-blue-50 text-blue-700 border-blue-200",
@@ -34,6 +35,7 @@ const DOMAIN_COLORS: Record<string, string> = {
 export default function CampaignDetailPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
+  const { showConfirm, ConfirmDialogHost } = useConfirmDialog()
 
   const [campaign, setCampaign]           = useState<Campaign | null>(null)
   const [isLoading, setIsLoading]         = useState(true)
@@ -120,12 +122,21 @@ export default function CampaignDetailPage() {
     } finally { setIsAdding(false) }
   }
 
-  const handleRemoveContact = async (contactId: string) => {
-    if (!confirm("Remove this contact from campaign?")) return
-    try {
-      await api.delete(`/campaigns/${id}/contacts/${contactId}`)
-      fetchCampaign()
-    } catch { alert("Could not remove contact.") }
+  const handleRemoveContact = (contactId: string) => {
+    showConfirm({
+      title: "Remove contact?",
+      message: "This contact will be removed from the campaign. The contact record itself will not be deleted.",
+      confirmLabel: "Remove",
+      variant: "warning",
+      onConfirm: async () => {
+        try {
+          await api.delete(`/campaigns/${id}/contacts/${contactId}`)
+          fetchCampaign()
+        } catch {
+          alert("Could not remove contact.")
+        }
+      },
+    })
   }
 
   const getFullName    = (c: Contact) => [c.firstName, c.lastName].filter(Boolean).join(" ") || "Unknown"
@@ -383,6 +394,7 @@ export default function CampaignDetailPage() {
           </div>
         </DialogContent>
       </Dialog>
+      {ConfirmDialogHost}
     </div>
   )
 }
