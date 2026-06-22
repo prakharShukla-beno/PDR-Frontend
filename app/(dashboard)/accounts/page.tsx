@@ -6,7 +6,7 @@ import Link from "next/link"
 import { useSearchParams } from "next/navigation"  // For reading URL params
 import {
   Search, Upload, Download, Plus, SlidersHorizontal,
-  X, ChevronLeft, ChevronRight, Loader2, Sparkles
+  X, ChevronLeft, ChevronRight, Loader2, Sparkles, Layers
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -70,6 +70,11 @@ function AccountsPageContent() {
   const [showAddModal, setShowAddModal]     = useState(false)
   const [isAdding, setIsAdding]             = useState(false)
   const [segmentName, setSegmentName]       = useState("")  // ← Segment name header mein
+  const [showSegmentModal, setShowSegmentModal] = useState(false)
+  const [segments, setSegments]                 = useState<{ _id: string; name: string; matchCount: number }[]>([])
+  const [segmentsLoading, setSegmentsLoading]   = useState(false)
+  const [selectedSegmentId, setSelectedSegmentId] = useState<string>("")
+  const [isAddingToSegment, setIsAddingToSegment] = useState(false)
   const [newAccount, setNewAccount] = useState({
     accountName: "", website: "", primaryIndustry: "",
     businessModel: "", country: "", hqLocationCity: "", source: "",
@@ -357,12 +362,56 @@ function AccountsPageContent() {
   }
 
   const handleDelete = async () => {
-    if (!selectedIds.length || !confirm(`Do you want to delete ${selectedIds.length} selected prospect(s)?`)) return
+    if (!selectedIds.length) return
+    let ids = selectedIds
+    if (isAllSelected) {
+      try {
+        const res = await api.get<any>(`/prospects?limit=99999`)
+        ids = res.data?.prospects?.map((p: any) => p._id) || res.data?.map((p: any) => p._id) || selectedIds
+      } catch { ids = selectedIds }
+    }
+    if (!confirm(`Do you want to delete ${ids.length} selected prospect(s)?`)) return
     try {
-      await Promise.all(selectedIds.map(id => api.delete(`/prospects/${id}`)))
+      await Promise.all(ids.map(id => api.delete(`/prospects/${id}`)))
       clearSelection()
       fetchProspects()
     } catch { alert("Delete failed.") }
+  }
+
+  const handleOpenSegmentModal = async () => {
+    setShowSegmentModal(true)
+    setSelectedSegmentId("")
+    setSegmentsLoading(true)
+    try {
+      const res = await api.get<any>("/segments")
+      setSegments(res?.data?.segments ?? res?.data ?? [])
+    } catch {
+      setSegments([])
+    } finally {
+      setSegmentsLoading(false)
+    }
+  }
+
+  const handleAddToSegment = async () => {
+    if (!selectedSegmentId) return
+    setIsAddingToSegment(true)
+    try {
+      let ids = selectedIds
+      if (isAllSelected) {
+        try {
+          const res = await api.get<any>(`/prospects?limit=99999`)
+          ids = res.data?.prospects?.map((p: any) => p._id) || res.data?.map((p: any) => p._id) || selectedIds
+        } catch { ids = selectedIds }
+      }
+      await api.post(`/segments/${selectedSegmentId}/add-accounts`, { accountIds: ids })
+      setShowSegmentModal(false)
+      clearSelection()
+      alert(`✅ ${ids.length} account(s) added to segment successfully!`)
+    } catch (err: any) {
+      alert(`❌ Failed — ${err?.message || "Unknown error"}`)
+    } finally {
+      setIsAddingToSegment(false)
+    }
   }
 
   const handleFileSelect = async (file: File) => {
@@ -823,7 +872,24 @@ function AccountsPageContent() {
               className="text-muted-foreground/40"
             />
           )}
-          <Button variant="outline" size="sm" disabled={!hasSelection} className={!hasSelection ? "opacity-40" : ""}>ADD TO SEGMENT</Button>
+          {canEdit ? (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!hasSelection}
+              className={`gap-2 ${!hasSelection ? "opacity-40" : ""}`}
+              onClick={handleOpenSegmentModal}
+            >
+              <Layers className="h-4 w-4" />ADD TO SEGMENT
+            </Button>
+          ) : (
+            <DisabledEditorAction
+              label="ADD TO SEGMENT"
+              tooltip={viewerEditorTooltip}
+              variant="outline"
+              size="sm"
+            />
+          )}
           {canEdit ? (
             <Button
               variant="outline" size="sm"
@@ -889,6 +955,58 @@ function AccountsPageContent() {
           {isAllSelected ? `✓ All ${total} Selected` : `Select All`}
         </Button>
       </div>
+
+      <Dialog open={showSegmentModal} onOpenChange={setShowSegmentModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogDescription className="sr-only">Select a segment to add the selected accounts to.</DialogDescription>
+          <DialogHeader>
+            <DialogTitle>Add to Segment</DialogTitle>
+          </DialogHeader>
+          <div className="py-2 space-y-4">
+            <p className="text-sm text-muted-foreground">
+              {isAllSelected ? `All ${total}` : selectedIds.length} account(s) will be added to the selected segment.
+            </p>
+            {segmentsLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : segments.length === 0 ? (
+              <p className="text-sm text-center text-muted-foreground py-6">
+                No segments found. Create a segment first from the Segments page.
+              </p>
+            ) : (
+              <div className="max-h-64 overflow-y-auto space-y-1 border rounded-md p-2">
+                {segments.map((seg) => (
+                  <div
+                    key={seg._id}
+                    onClick={() => setSelectedSegmentId(seg._id)}
+                    className={`flex items-center justify-between px-3 py-2.5 rounded-md cursor-pointer transition-colors ${
+                      selectedSegmentId === seg._id
+                        ? "bg-primary text-white"
+                        : "hover:bg-muted"
+                    }`}
+                  >
+                    <span className="text-sm font-medium">{seg.name}</span>
+                    <span className={`text-xs ${selectedSegmentId === seg._id ? "text-white/70" : "text-muted-foreground"}`}>
+                      {seg.matchCount} accounts
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setShowSegmentModal(false)}>Cancel</Button>
+            <Button
+              size="sm"
+              disabled={!selectedSegmentId || isAddingToSegment}
+              onClick={handleAddToSegment}
+            >
+              {isAddingToSegment ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Adding...</> : "Add to Segment"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <FilterPanel
         isOpen={showFilters}

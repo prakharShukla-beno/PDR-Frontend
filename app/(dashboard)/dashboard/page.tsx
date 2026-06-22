@@ -120,9 +120,9 @@ export default function DashboardPage() {
           <p className="text-muted-foreground">Here&apos;s what&apos;s happening across your prospect workspace.</p>
         </div>
         <div className="flex gap-3">
-          <Button variant="outline" onClick={() => router.push("/segments/icp-builder")}>
+          {/* <Button variant="outline" onClick={() => router.push("/segments/icp-builder")}>
             New Segment
-          </Button>
+          </Button> */}
           <Button className="gap-2" onClick={() => router.push("/campaigns")}>
             <Sparkles className="h-4 w-4" />New Campaign
           </Button>

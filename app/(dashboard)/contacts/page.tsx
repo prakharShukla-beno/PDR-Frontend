@@ -5,10 +5,11 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import {
   Search, Upload, Plus, X, SlidersHorizontal,
-  ChevronLeft, ChevronRight, Loader2, Users, Sparkles
+  ChevronLeft, ChevronRight, Loader2, Users, Sparkles, Layers
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
@@ -155,11 +156,113 @@ export default function ContactsPage() {
   }
 
   const handleDelete = async () => {
-    if (!selectedIds.length || !confirm(`Do you want to delete ${selectedIds.length} selected contact(s)?`)) return
+    if (!selectedIds.length) return
+    let ids = selectedIds
+    if (isAllSelected) {
+      try {
+        const res = await api.get<any>(`/contacts?limit=99999`)
+        ids = res.data?.contacts?.map((c: any) => c._id) || res.data?.map((c: any) => c._id) || selectedIds
+      } catch { ids = selectedIds }
+    }
+    if (!confirm(`Do you want to delete ${ids.length} selected contact(s)?`)) return
     try {
-      await Promise.all(selectedIds.map(id => api.delete(`/contacts/${id}`)))
-      setSelectedIds([]); fetchContacts()
+      await Promise.all(ids.map(id => api.delete(`/contacts/${id}`)))
+      setSelectedIds([]); setIsAllSelected(false); fetchContacts()
     } catch { alert("Delete failed.") }
+  }
+
+  // ── Add to Campaign modal state ──────────────────────────────────────────────
+  const [showCampaignModal, setShowCampaignModal] = useState(false)
+  const [campaigns, setCampaigns]                 = useState<{ _id: string; name: string; contactIds?: any[] }[]>([])
+  const [campaignsLoading, setCampaignsLoading]   = useState(false)
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string>("")
+  const [isAddingToCampaign, setIsAddingToCampaign] = useState(false)
+  // Quick-create campaign inline (within Add to Campaign modal)
+  const [isCreatingNewCampaign, setIsCreatingNewCampaign] = useState(false)   // toggles create-form view
+  const [isSubmittingNewCampaign, setIsSubmittingNewCampaign] = useState(false)
+  const [newCampaign, setNewCampaign] = useState({
+    name: "", description: "", status: "draft", promptUsed: "",
+  })
+  const [campaignFormError, setCampaignFormError] = useState("")
+
+  const handleOpenCampaignModal = async () => {
+    setShowCampaignModal(true)
+    setSelectedCampaignId("")
+    setIsCreatingNewCampaign(false)
+    setCampaignFormError("")
+    setNewCampaign({ name: "", description: "", status: "draft", promptUsed: "" })
+    setCampaignsLoading(true)
+    try {
+      const res = await api.get<any>("/campaigns")
+      setCampaigns(res?.data?.campaigns ?? res?.data ?? [])
+    } catch {
+      setCampaigns([])
+    } finally {
+      setCampaignsLoading(false)
+    }
+  }
+
+  // ── Quick-create a campaign, then immediately add selected contacts to it ────
+  const handleCreateAndAddCampaign = async () => {
+    if (!newCampaign.name.trim()) {
+      setCampaignFormError("Campaign name is required.")
+      return
+    }
+    setIsSubmittingNewCampaign(true)
+    setCampaignFormError("")
+    try {
+      const createRes = await api.post<any>("/campaigns", {
+        name: newCampaign.name,
+        description: newCampaign.description || undefined,
+        status: newCampaign.status,
+        promptUsed: newCampaign.promptUsed || undefined,
+      })
+      const created = createRes?.data ?? createRes
+      const campaignId = created?._id ?? created?.id
+      if (!campaignId) throw new Error("Campaign created but ID missing in response")
+
+      let ids = selectedIds
+      if (isAllSelected) {
+        try {
+          const res = await api.get<any>(`/contacts?limit=99999`)
+          ids = res.data?.contacts?.map((c: any) => c._id) || res.data?.map((c: any) => c._id) || selectedIds
+        } catch { ids = selectedIds }
+      }
+      await api.post(`/campaigns/${campaignId}/contacts`, { contactIds: ids })
+
+      setShowCampaignModal(false)
+      setSelectedIds([])
+      setIsAllSelected(false)
+      setNewCampaign({ name: "", description: "", status: "draft", promptUsed: "" })
+      alert(`✅ Campaign "${newCampaign.name}" created and ${ids.length} contact(s) added!`)
+    } catch (err: any) {
+      setCampaignFormError(err?.message || "Failed to create campaign.")
+    } finally {
+      setIsSubmittingNewCampaign(false)
+    }
+  }
+
+  const handleAddToCampaign = async () => {
+    if (!selectedCampaignId) return
+    setIsAddingToCampaign(true)
+    try {
+      let ids = selectedIds
+      if (isAllSelected) {
+        try {
+          const res = await api.get<any>(`/contacts?limit=99999`)
+          ids = res.data?.contacts?.map((c: any) => c._id) || res.data?.map((c: any) => c._id) || selectedIds
+        } catch { ids = selectedIds }
+      }
+      await api.post(`/campaigns/${selectedCampaignId}/contacts`, { contactIds: ids })
+      setShowCampaignModal(false)
+      setSelectedIds([])
+      setIsAllSelected(false)
+      alert(`✅ ${ids.length} contact(s) added to campaign successfully!`)
+    } catch (err: any) {
+      alert(`❌ Failed — ${err?.message || "Unknown error"}`)
+    } finally {
+      setIsAddingToCampaign(false)
+    }
   }
 
 
@@ -430,7 +533,9 @@ const handleUpload = async () => {
           <Button variant="ghost" size="sm" className={`gap-2 ${hasSelection ? "text-destructive hover:text-destructive" : "text-muted-foreground/40"}`} disabled={!hasSelection} onClick={handleDelete}>
             <X className="h-4 w-4" />DELETE
           </Button>
-          <Button variant="outline" size="sm" disabled={!hasSelection} className={!hasSelection ? "opacity-40" : ""}>ADD TO CAMPAIGN</Button>
+          <Button variant="outline" size="sm" disabled={!hasSelection} className={`gap-2 ${!hasSelection ? "opacity-40" : ""}`} onClick={handleOpenCampaignModal}>
+            <Layers className="h-4 w-4" />ADD TO CAMPAIGN
+          </Button>
           <Button
             variant="outline" size="sm"
             disabled={!hasSelection || isEnriching}
@@ -481,6 +586,118 @@ const handleUpload = async () => {
           {isAllSelected ? `✓ All ${total} Selected` : `Select All `}
         </Button>
       </div>
+
+      {/* ── Add to Campaign Modal ────────────────────────────────────────────── */}
+      <Dialog open={showCampaignModal} onOpenChange={setShowCampaignModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogDescription className="sr-only">Select a campaign to add the selected contacts to, or create a new one.</DialogDescription>
+          <DialogHeader>
+            <div className="flex items-center justify-between pr-6">
+              <DialogTitle>{isCreatingNewCampaign ? "Create New Campaign" : "Add to Campaign"}</DialogTitle>
+              <Button
+                variant="link" size="sm" className="h-auto p-0 text-xs"
+                onClick={() => { setIsCreatingNewCampaign(v => !v); setCampaignFormError("") }}
+              >
+                {isCreatingNewCampaign ? "← Select existing" : "+ Create new"}
+              </Button>
+            </div>
+          </DialogHeader>
+
+          {isCreatingNewCampaign ? (
+            // ── Quick-create form ──────────────────────────────────────────────
+            <div className="py-2 space-y-4">
+              <p className="text-sm text-muted-foreground">
+                {isAllSelected ? `All ${total}` : selectedIds.length} contact(s) will be added to this campaign once created.
+              </p>
+              <div className="space-y-1">
+                <Label>Campaign Name *</Label>
+                <Input placeholder="e.g. Q3 Fintech Outreach" value={newCampaign.name}
+                  onChange={(e) => setNewCampaign(p => ({ ...p, name: e.target.value }))} />
+              </div>
+              <div className="space-y-1">
+                <Label>Description</Label>
+                <Textarea placeholder="Campaign purpose..." value={newCampaign.description}
+                  onChange={(e) => setNewCampaign(p => ({ ...p, description: e.target.value }))} rows={2} />
+              </div>
+              <div className="space-y-1">
+                <Label>Status</Label>
+                <Select value={newCampaign.status} onValueChange={(v) => setNewCampaign(p => ({ ...p, status: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="draft">Draft</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label>AI Prompt (Optional)</Label>
+                <Textarea placeholder="What should the AI do..." value={newCampaign.promptUsed}
+                  onChange={(e) => setNewCampaign(p => ({ ...p, promptUsed: e.target.value }))} rows={3} />
+              </div>
+              {campaignFormError && (
+                <p className="text-sm text-destructive">❌ {campaignFormError}</p>
+              )}
+            </div>
+          ) : (
+            // ── Existing campaigns list ────────────────────────────────────────
+            <div className="py-2 space-y-4">
+              <p className="text-sm text-muted-foreground">
+                {isAllSelected ? `All ${total}` : selectedIds.length} contact(s) will be added to the selected campaign.
+              </p>
+              {campaignsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : campaigns.length === 0 ? (
+                <p className="text-sm text-center text-muted-foreground py-6">
+                  No campaigns found yet. Use "+ Create new" above to add one.
+                </p>
+              ) : (
+                <div className="max-h-64 overflow-y-auto space-y-1 border rounded-md p-2">
+                  {campaigns.map((camp) => (
+                    <div
+                      key={camp._id}
+                      onClick={() => setSelectedCampaignId(camp._id)}
+                      className={`flex items-center justify-between px-3 py-2.5 rounded-md cursor-pointer transition-colors ${
+                        selectedCampaignId === camp._id
+                          ? "bg-primary text-white"
+                          : "hover:bg-muted"
+                      }`}
+                    >
+                      <span className="text-sm font-medium">{camp.name}</span>
+                      <span className={`text-xs ${selectedCampaignId === camp._id ? "text-white/70" : "text-muted-foreground"}`}>
+                        {camp.contactIds?.length ?? 0} contacts
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setShowCampaignModal(false)}>Cancel</Button>
+            {isCreatingNewCampaign ? (
+              <Button
+                size="sm"
+                disabled={isSubmittingNewCampaign}
+                onClick={handleCreateAndAddCampaign}
+              >
+                {isSubmittingNewCampaign ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Creating...</> : "Create & Add"}
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                disabled={!selectedCampaignId || isAddingToCampaign}
+                onClick={handleAddToCampaign}
+              >
+                {isAddingToCampaign ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Adding...</> : "Add to Campaign"}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <FilterPanel
         isOpen={showFilters}
