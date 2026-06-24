@@ -22,6 +22,7 @@ import { IcpImportPreviewModal } from "@/components/import/IcpImportPreviewModal
 import { useAutoDismissMessage } from "@/hooks/useAutoDismissMessage"
 import { AutoDismissBanner } from "@/components/ui/auto-dismiss-banner"
 import { useConfirmDialog } from "@/hooks/useConfirmDialog"
+import { useAppAlert } from "@/hooks/useAppAlert"
 
 const FUNCTIONAL_DOMAINS = [
   "Corporate Strategy","Technology & Digital","Data & AI","Finance & Accounting",
@@ -49,6 +50,7 @@ const DOMAIN_COLORS: Record<string, string> = {
 export default function ContactsPage() {
   const router = useRouter()
   const { showConfirm, ConfirmDialogHost } = useConfirmDialog()
+  const { showAlert, AlertHost } = useAppAlert()
   const [contacts, setContacts]         = useState<Contact[]>([])
   const [total, setTotal]               = useState(0)
   const [totalPages, setTotalPages]     = useState(1)
@@ -177,8 +179,13 @@ export default function ContactsPage() {
           setSelectedIds([])
           setIsAllSelected(false)
           fetchContacts()
+          showAlert({
+            title: "Deleted",
+            message: `${ids.length} contact(s) deleted successfully.`,
+            variant: "success",
+          })
         } catch {
-          alert("Delete failed.")
+          showAlert({ message: "Delete failed.", variant: "error" })
         }
       },
     })
@@ -247,7 +254,11 @@ export default function ContactsPage() {
       setSelectedIds([])
       setIsAllSelected(false)
       setNewCampaign({ name: "", description: "", status: "draft", promptUsed: "" })
-      alert(`✅ Campaign "${newCampaign.name}" created and ${ids.length} contact(s) added!`)
+      showAlert({
+        title: "Campaign created",
+        message: `Campaign "${newCampaign.name}" created and ${ids.length} contact(s) added!`,
+        variant: "success",
+      })
     } catch (err: any) {
       setCampaignFormError(err?.message || "Failed to create campaign.")
     } finally {
@@ -270,9 +281,16 @@ export default function ContactsPage() {
       setShowCampaignModal(false)
       setSelectedIds([])
       setIsAllSelected(false)
-      alert(`✅ ${ids.length} contact(s) added to campaign successfully!`)
+      showAlert({
+        title: "Added to campaign",
+        message: `${ids.length} contact(s) added to campaign successfully!`,
+        variant: "success",
+      })
     } catch (err: any) {
-      alert(`❌ Failed — ${err?.message || "Unknown error"}`)
+      showAlert({
+        message: err?.message || "Failed to add contacts to campaign.",
+        variant: "error",
+      })
     } finally {
       setIsAddingToCampaign(false)
     }
@@ -810,6 +828,7 @@ const handleUpload = async () => {
 
       {/* Duplicate Review Modal — shown after contact import */}
       {ConfirmDialogHost}
+      {AlertHost}
     </div>
   )
 }

@@ -36,10 +36,12 @@ import type { Campaign } from "@/types"
 import { useAutoDismissMessage } from "@/hooks/useAutoDismissMessage"
 import { AutoDismissBanner } from "@/components/ui/auto-dismiss-banner"
 import { useConfirmDialog } from "@/hooks/useConfirmDialog"
+import { useAppAlert } from "@/hooks/useAppAlert"
 
 export default function CampaignsPage() {
   const router = useRouter()
   const { showConfirm, ConfirmDialogHost } = useConfirmDialog()
+  const { showAlert, AlertHost } = useAppAlert()
 
   // ── Data state ──────────────────────────────
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
@@ -96,6 +98,11 @@ export default function CampaignsPage() {
         promptUsed: newCampaign.promptUsed || undefined,
       })
       createMsg.setMessage("✅ Campaign created successfully!")
+      showAlert({
+        title: "Campaign created",
+        message: "Campaign created successfully!",
+        variant: "success",
+      })
     } catch (err) {
       if (err instanceof ApiError) createMsg.setMessage(`❌ ${err.message}`)
       else createMsg.setMessage("❌ Creation failed.")
@@ -116,8 +123,13 @@ export default function CampaignsPage() {
         try {
           await api.delete(`/campaigns/${id}`)
           fetchCampaigns()
+          showAlert({
+            title: "Deleted",
+            message: "Campaign deleted successfully.",
+            variant: "success",
+          })
         } catch {
-          alert("Delete failed.")
+          showAlert({ message: "Delete failed.", variant: "error" })
         }
       },
     })
@@ -379,6 +391,7 @@ export default function CampaignsPage() {
       </Dialog>
 
       {ConfirmDialogHost}
+      {AlertHost}
     </div>
   )
 }

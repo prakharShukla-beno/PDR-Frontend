@@ -33,6 +33,7 @@ import { useAuth } from "@/context/AuthContext"
 import { canEditContent } from "@/lib/permissions"
 import { DisabledEditorAction } from "@/components/DisabledEditorAction"
 import { useConfirmDialog } from "@/hooks/useConfirmDialog"
+import { useAppAlert } from "@/hooks/useAppAlert"
 
 function AccountsPageContent() {
   const router = useRouter()
@@ -42,6 +43,7 @@ function AccountsPageContent() {
   const viewerEditorTooltip =
     "You're a Viewer — only Admins and Editors can perform this action"
   const { showConfirm, ConfirmDialogHost } = useConfirmDialog()
+  const { showAlert, AlertHost } = useAppAlert()
 
   const [prospects, setProspects]           = useState<Prospect[]>([])
   const [total, setTotal]                   = useState(0)
@@ -383,8 +385,13 @@ function AccountsPageContent() {
           await Promise.all(ids.map(id => api.delete(`/prospects/${id}`)))
           clearSelection()
           fetchProspects()
+          showAlert({
+            title: "Deleted",
+            message: `${ids.length} account(s) deleted successfully.`,
+            variant: "success",
+          })
         } catch {
-          alert("Delete failed.")
+          showAlert({ message: "Delete failed.", variant: "error" })
         }
       },
     })
@@ -418,9 +425,16 @@ function AccountsPageContent() {
       await api.post(`/segments/${selectedSegmentId}/add-accounts`, { accountIds: ids })
       setShowSegmentModal(false)
       clearSelection()
-      alert(`✅ ${ids.length} account(s) added to segment successfully!`)
+      showAlert({
+        title: "Added to segment",
+        message: `${ids.length} account(s) added to segment successfully!`,
+        variant: "success",
+      })
     } catch (err: any) {
-      alert(`❌ Failed — ${err?.message || "Unknown error"}`)
+      showAlert({
+        message: err?.message || "Failed to add accounts to segment.",
+        variant: "error",
+      })
     } finally {
       setIsAddingToSegment(false)
     }
@@ -466,7 +480,7 @@ function AccountsPageContent() {
         const body = await readResponseBody(res)
         const message = extractErrorMessage(res, body, `Export failed (${res.status})`)
         console.error("Export API error:", res.status, message)
-        alert(message)
+        showAlert({ message, variant: "error" })
         return
       }
       const blob = await res.blob()
@@ -477,9 +491,17 @@ function AccountsPageContent() {
       link.click()
       document.body.removeChild(link)
       URL.revokeObjectURL(link.href)
+      showAlert({
+        title: "Export started",
+        message: "Your file should download shortly.",
+        variant: "success",
+      })
     } catch (err) {
       console.error("Export error:", err)
-      alert("Export failed — check console for details.")
+      showAlert({
+        message: "Export failed — check console for details.",
+        variant: "error",
+      })
     }
   }
 
@@ -646,12 +668,16 @@ function AccountsPageContent() {
                 onClick={async () => {
                   try {
                     await api.post(`/prospects/re-tier`, {})
-                    alert("Re-tiering all accounts...")
                     await new Promise(r => setTimeout(r, 1000))
                     fetchProspects()
+                    showAlert({
+                      title: "Re-tier complete",
+                      message: "All accounts have been re-tiered successfully.",
+                      variant: "success",
+                    })
                   } catch (err) {
                     console.error("Re-tier error:", err)
-                    alert("Error re-tiering accounts")
+                    showAlert({ message: "Error re-tiering accounts.", variant: "error" })
                   }
                 }}
               >
@@ -1320,6 +1346,7 @@ function AccountsPageContent() {
       />
 
       {ConfirmDialogHost}
+      {AlertHost}
     </div>
   )
 }

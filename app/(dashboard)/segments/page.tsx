@@ -23,6 +23,7 @@ import { useAuth } from "@/context/AuthContext"
 import { canEditContent } from "@/lib/permissions"
 import { DisabledEditorAction } from "@/components/DisabledEditorAction"
 import { useConfirmDialog } from "@/hooks/useConfirmDialog"
+import { useAppAlert } from "@/hooks/useAppAlert"
 
 // Format time ago — "2h ago", "3d ago" etc.
 const timeAgo = (dateStr?: string) => {
@@ -46,6 +47,7 @@ export default function SegmentsPage() {
   const viewerSegmentTooltip =
     "You're a Viewer — only Admins and Editors can create segments"
   const { showConfirm, ConfirmDialogHost } = useConfirmDialog()
+  const { showAlert, AlertHost } = useAppAlert()
 
   // Segments state
   const [segments,    setSegments]    = useState<any[]>([])
@@ -102,8 +104,9 @@ export default function SegmentsPage() {
         try {
           await api.delete(`/segments/${id}`)
           fetchSegments()
+          showAlert({ title: "Deleted", message: "Segment deleted successfully.", variant: "success" })
         } catch {
-          alert("Delete failed. Try again.")
+          showAlert({ message: "Delete failed. Try again.", variant: "error" })
         }
       },
     })
@@ -121,8 +124,9 @@ export default function SegmentsPage() {
         try {
           await api.delete(`/icp/${id}`)
           fetchIcps()
+          showAlert({ title: "Deleted", message: "ICP profile deleted successfully.", variant: "success" })
         } catch {
-          alert("Delete failed. Try again.")
+          showAlert({ message: "Delete failed. Try again.", variant: "error" })
         }
       },
     })
@@ -138,7 +142,10 @@ export default function SegmentsPage() {
       if (!segmentId) throw new Error("Segment ID missing in response")
       router.push(`/segments/${segmentId}`)
     } catch (err: any) {
-      alert(err?.message || "Failed to create segment from ICP.")
+      showAlert({
+        message: err?.message || "Failed to create segment from ICP.",
+        variant: "error",
+      })
     }
   }
 
@@ -533,6 +540,7 @@ export default function SegmentsPage() {
       </Tabs>
 
       {ConfirmDialogHost}
+      {AlertHost}
     </div>
   )
 }

@@ -42,6 +42,7 @@ import { api }                            from "@/lib/api"
 import type { Prospect, Interaction, InteractionType, InteractionOutcome } from "@/types"
 import { useAutoDismissMessage } from "@/hooks/useAutoDismissMessage"
 import { AutoDismissBanner } from "@/components/ui/auto-dismiss-banner"
+import { useAppAlert } from "@/hooks/useAppAlert"
 
 // ── Tech Stack categories — matches requirement doc ───────────────────────────
 const TECH_CATEGORIES: Record<string, string[]> = {
@@ -220,6 +221,8 @@ export default function AccountDetailPage() {
   const saveMsg = useAutoDismissMessage({
     onAutoDismiss: () => setShowEditModal(false),
   })
+  const contactMsg = useAutoDismissMessage()
+  const { showAlert, AlertHost } = useAppAlert()
 
   // ── POST /api/prospects/:id/calculate-score ──────────────────────────────
   // Runs scoring formula, saves to DB, then loads fresh breakdown
@@ -364,6 +367,7 @@ export default function AccountDetailPage() {
   const handleAddContact = async () => {
     if (!newContact.firstName.trim() && !newContact.lastName.trim() && !newContact.email.trim()) return
     setIsAddingContact(true)
+    contactMsg.clearMessage()
     try {
       const payload: any = {
         ...newContact,
@@ -381,7 +385,11 @@ export default function AccountDetailPage() {
       })
     } catch (err) {
       console.error("Add contact error:", err)
-      alert("❌ Could not add contact. Check the fields and try again.")
+      contactMsg.setMessage("❌ Could not add contact. Check the fields and try again.")
+      showAlert({
+        message: "Could not add contact. Check the fields and try again.",
+        variant: "error",
+      })
     } finally {
       setIsAddingContact(false)
     }
@@ -1203,6 +1211,9 @@ export default function AccountDetailPage() {
       <Dialog open={showAddContactModal} onOpenChange={setShowAddContactModal}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader><DialogTitle>Add Contact — {prospect.accountName}</DialogTitle></DialogHeader>
+          {contactMsg.visible && (
+            <AutoDismissBanner {...contactMsg} onDismiss={contactMsg.clearMessage} />
+          )}
           <div className="space-y-3 py-2">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
@@ -1594,6 +1605,7 @@ export default function AccountDetailPage() {
         </DialogContent>
       </Dialog>
 
+      {AlertHost}
     </div>
   )
 }
