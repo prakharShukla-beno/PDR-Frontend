@@ -29,8 +29,12 @@ import { EditorBlockedState } from "@/components/EditorBlockedState"
 const INDUSTRIES      = ["BFSI","IT & ITES","SaaS","Fintech","E-commerce","Healthcare","EdTech","Logistics","Manufacturing","Retail & CPG","Media & Telecom","Real Estate"]
 const BUSINESS_MODELS = ["B2B","B2C","B2B2C","D2C","E-Commerce","Marketplace"]
 const EMPLOYEE_RANGES = ["1-50","51-200","201-1,000","1,001-5,000","5,000+"]
-const REVENUE_RANGES  = ["Seed <$1M","Early $1M-$10M","Scale-Up $10M-$50M","Mid-Market $50M-$250M","Corporate $250M-$1B","Enterprise $1B+"]
+
+
+const REVENUE_RANGES  = ["Seed <$1M","Early $1M-$10M","Growth $10M-$50M","Scale $50M-$100M","Mid-Market $100M-$500M","Enterprise $500M-$1B","Mega $1B+"]
+
 const PRIORITIES      = ["P1 (Tier A+Active)","P2 (Tier B+Active)","P3 (Tier A+Cold)","P4 (Tier B+Cold)"]
+
 
 const COUNTRIES = ["India","UAE","Singapore","USA","UK","Australia","Canada","Germany"]
 
