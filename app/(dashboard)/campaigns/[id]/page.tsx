@@ -92,8 +92,7 @@ export default function CampaignDetailPage() {
         if (domainFilter)   url += `&functionalDomainInclude[]=${encodeURIComponent(domainFilter)}`
 
         const res = await api.get<any>(url)
-        const contacts = res.data?.contacts || res.contacts || []
-
+        const contacts = Array.isArray(res.data) ? res.data : (res.data?.contacts || res.contacts || [])
         // Remove contacts already in campaign
         const existingIds = new Set(
           ((campaign?.contactIds || []) as any[]).map((c: any) =>

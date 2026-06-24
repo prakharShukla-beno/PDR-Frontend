@@ -405,7 +405,7 @@ export function FilterPanel({ isOpen, onClose, filters, onChange, onApply, mode 
           cities:        ["San Francisco","New York","London","Bangalore","Mumbai","Singapore","Dubai"],
           businessModels:["B2B","B2C","D2C","E-Commerce","B2B2C","Marketplace"],
           employeeBands: ["1-50","51-200","201-1,000","1,001-5,000","5,000+"],
-          revenueBands:  ["Seed <$1M","Early $1M-$10M","Scale-Up $10M-$50M","Mid-Market $50M-$250M","Corporate $250M-$1B","Enterprise $1B+"],
+          revenueBands:  ["Seed <$1M","Early $1M-$10M","Growth $10M-$50M","Scale $50M-$100M","Mid-Market $100M-$500M","Enterprise $500M-$1B","Mega $1B+"],
           salesPriorities:["P1 (Tier A+Active)","P2 (Tier B+Active)","P3 (Tier A+Cold)","P4 (Tier B+Cold)"],
           clvRankings:   ["Tier-A (Strategic)","Tier-B (Core)","Tier-C (Mass)"],
           intentSignals: ["Hyper-Growth Mode","Cost Containment","Risk Mitigation","Modernization Mandate"],
@@ -520,7 +520,9 @@ export function FilterPanel({ isOpen, onClose, filters, onChange, onApply, mode 
                   />
                   <CheckboxListFilter
                     label="Annual Revenue"
-                    options={["Seed <$1M","Early $1M-$10M","Scale-Up $10M-$50M","Mid-Market $50M-$250M","Corporate $250M-$1B","Enterprise $1B+"]}
+                   
+                    options={["Seed <$1M","Early $1M-$10M","Growth $10M-$50M","Scale $50M-$100M","Mid-Market $100M-$500M","Enterprise $500M-$1B","Mega $1B+"]}
+                   
                     selected={filters.revenueInclude}
                     onChange={vals => update("revenueInclude", vals)}
                   />
