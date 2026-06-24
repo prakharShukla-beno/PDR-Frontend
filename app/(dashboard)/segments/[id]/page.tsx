@@ -14,11 +14,13 @@ import { api }      from "@/lib/api"
 import { useAutoDismissMessage } from "@/hooks/useAutoDismissMessage"
 import { AutoDismissBanner } from "@/components/ui/auto-dismiss-banner"
 import { useConfirmDialog } from "@/hooks/useConfirmDialog"
+import { useAppAlert } from "@/hooks/useAppAlert"
 
 export default function SegmentDetailPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
   const { showConfirm, ConfirmDialogHost } = useConfirmDialog()
+  const { showAlert, AlertHost } = useAppAlert()
 
   const [segment,     setSegment]     = useState<any>(null)
   const [isLoading,   setIsLoading]   = useState(true)
@@ -210,8 +212,13 @@ export default function SegmentDetailPage() {
           setIsAllSelected(false)
           await fetchAccounts(currentPage)
           await fetchSegment()
+          showAlert({
+            title: "Deleted",
+            message: `${ids.length} account(s) deleted successfully.`,
+            variant: "success",
+          })
         } catch {
-          alert("Delete failed.")
+          showAlert({ message: "Delete failed.", variant: "error" })
         } finally {
           setIsDeleting(false)
         }
@@ -564,6 +571,7 @@ export default function SegmentDetailPage() {
       </div>
 
       {ConfirmDialogHost}
+      {AlertHost}
     </div>
   )
 }

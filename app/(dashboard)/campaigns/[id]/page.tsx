@@ -20,6 +20,7 @@ import type { Campaign, Contact } from "@/types"
 import { useAutoDismissMessage } from "@/hooks/useAutoDismissMessage"
 import { AutoDismissBanner } from "@/components/ui/auto-dismiss-banner"
 import { useConfirmDialog } from "@/hooks/useConfirmDialog"
+import { useAppAlert } from "@/hooks/useAppAlert"
 
 const DOMAIN_COLORS: Record<string, string> = {
   "Technology & Digital":      "bg-blue-50 text-blue-700 border-blue-200",
@@ -36,6 +37,7 @@ export default function CampaignDetailPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
   const { showConfirm, ConfirmDialogHost } = useConfirmDialog()
+  const { showAlert, AlertHost } = useAppAlert()
 
   const [campaign, setCampaign]           = useState<Campaign | null>(null)
   const [isLoading, setIsLoading]         = useState(true)
@@ -132,8 +134,13 @@ export default function CampaignDetailPage() {
         try {
           await api.delete(`/campaigns/${id}/contacts/${contactId}`)
           fetchCampaign()
+          showAlert({
+            title: "Removed",
+            message: "Contact removed from campaign.",
+            variant: "success",
+          })
         } catch {
-          alert("Could not remove contact.")
+          showAlert({ message: "Could not remove contact.", variant: "error" })
         }
       },
     })
@@ -395,6 +402,7 @@ export default function CampaignDetailPage() {
         </DialogContent>
       </Dialog>
       {ConfirmDialogHost}
+      {AlertHost}
     </div>
   )
 }
