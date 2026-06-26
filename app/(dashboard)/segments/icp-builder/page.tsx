@@ -136,10 +136,13 @@ const EMPLOYEE_RANGES = [
   "1-10", "11-50", "51-200", "201-500", "501-1,000",
   "1,001-5,000", "5,001-10,000", "10,000+",
 ]
+
+
 const REVENUE_RANGES  = [
-  "Seed <$1M", "Early $1M-$10M", "Scale-Up $10M-$50M",
-  "Mid-Market $50M-$250M", "Corporate $250M-$1B", "Enterprise $1B+",
+  "Seed <$1M", "Early $1M-$10M", "Growth $10M-$50M",
+  "Scale $50M-$100M", "Mid-Market $100M-$500M", "Enterprise $500M-$1B", "Mega $1B+",
 ]
+
 
 // Preferential Market — region → country mapping (complete)
 const REGION_COUNTRIES: Record<string, string[]> = {
