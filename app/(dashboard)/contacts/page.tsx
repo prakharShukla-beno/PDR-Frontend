@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -296,14 +297,7 @@ export default function ContactsPage() {
     }
   }
 
-
-
-
-
-
-
-
-const handleUpload = async () => {
+  const handleUpload = async () => {
     if (!uploadFile) return
     setIsUploading(true); uploadMsg.clearMessage()
     try {
@@ -338,10 +332,6 @@ const handleUpload = async () => {
       setIsUploading(false)
     }
   }
-
-
-
-
 
   const handleAddContact = async () => {
     if (!newContact.accountId) { addMsg.setMessage("❌ Selecting an account is required."); return }
@@ -810,6 +800,24 @@ const handleUpload = async () => {
               <div className="space-y-1"><Label>Country</Label>
                 <Input placeholder="India" value={newContact.country}
                   onChange={e => setNewContact(p => ({ ...p, country: e.target.value }))} /></div>
+            </div>
+
+            <div className="space-y-1">
+              <Label>Contact Type</Label>
+              <RadioGroup
+                value={newContact.isPrimary ? "primary" : "secondary"}
+                onValueChange={(v) => setNewContact(p => ({ ...p, isPrimary: v === "primary" }))}
+                className="flex items-center gap-6"
+              >
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <RadioGroupItem value="primary" />
+                  <span className="text-sm font-medium">Primary Contact</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <RadioGroupItem value="secondary" />
+                  <span className="text-sm font-medium">Secondary Contact</span>
+                </label>
+              </RadioGroup>
             </div>
 
             {addMsg.visible && (

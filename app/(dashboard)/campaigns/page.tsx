@@ -14,12 +14,11 @@ import { useEffect, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import {
   Plus, Loader2, Megaphone, Trash2,
-  ChevronLeft, ChevronRight, Send,
-  Eye, MousePointerClick, TrendingUp
+  ChevronLeft, ChevronRight, Users,
+  MoreHorizontal, Eye,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
@@ -31,6 +30,9 @@ import {
   Select, SelectContent, SelectItem,
   SelectTrigger, SelectValue
 } from "@/components/ui/select"
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
+} from "@/components/ui/dropdown-menu"
 import { api, ApiError } from "@/lib/api"
 import type { Campaign } from "@/types"
 import { useAutoDismissMessage } from "@/hooks/useAutoDismissMessage"
@@ -135,15 +137,7 @@ export default function CampaignsPage() {
     })
   }
 
-  // ── Status badge ────────────────────────────
-  const getStatusStyle = (status: string) => {
-    if (status === "active") return "bg-green-100 text-green-700 border-green-200"
-    if (status === "completed") return "bg-blue-100 text-blue-700 border-blue-200"
-    return "bg-gray-100 text-gray-600 border-gray-200"
-  }
-
-  // ── Summary KPIs — from campaigns data ─────
-  const totalSent = campaigns.reduce((s, c) => s + ((c as any).sent ?? 0), 0)
+  // ── Header summary ──────────────────────────
   const activeCampaigns = campaigns.filter(c => c.status === "active").length
 
   return (
@@ -175,28 +169,6 @@ export default function CampaignsPage() {
         </div>
       </div>
 
-      {/* ── Summary KPI Cards ── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: "Total Sent", value: totalSent.toLocaleString(), icon: Send, color: "text-blue-500" },
-          { label: "Avg Open Rate", value: "—", icon: Eye, color: "text-green-500" },
-          { label: "Avg CTR", value: "—", icon: MousePointerClick, color: "text-purple-500" },
-          { label: "Conversions", value: "—", icon: TrendingUp, color: "text-primary" },
-        ].map((stat) => (
-          <Card key={stat.label} className="py-4">
-            <CardContent className="flex items-start justify-between p-0 px-4">
-              <div>
-                <p className="text-sm text-muted-foreground">{stat.label}</p>
-                <p className="text-2xl font-bold">{stat.value}</p>
-              </div>
-              <div className="p-2 rounded-lg bg-accent">
-                <stat.icon className={`h-5 w-5 ${stat.color}`} />
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
       {/* ── Loading ── */}
       {isLoading && (
         <div className="flex justify-center py-12">
@@ -220,104 +192,69 @@ export default function CampaignsPage() {
         </div>
       )}
 
-      {/* ── Campaigns Performance Table ── */}
+      {/* ── Campaigns Table — simple, LinkedIn Sales Navigator style ── */}
       {!isLoading && campaigns.length > 0 && (
         <>
           <Card>
             <CardContent className="p-0">
-              <div className="p-4 border-b">
-                <h2 className="font-semibold">All Campaigns</h2>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-muted/30 border-b">
-                    <tr className="text-left text-xs text-muted-foreground uppercase tracking-wider">
-                      <th className="p-4 font-medium">Campaign</th>
-                      <th className="p-4 font-medium">Status</th>
-                      <th className="p-4 font-medium text-center">Prospects</th>
-                      <th className="p-4 font-medium text-center">Sent</th>
-                      <th className="p-4 font-medium text-center">Open</th>
-                      <th className="p-4 font-medium text-center">CTR</th>
-                      <th className="p-4 font-medium text-center">Conv</th>
-                      <th className="p-4 font-medium">Performance</th>
-                      <th className="p-4 w-10"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {campaigns.map((campaign) => {
-                      const prospects = Array.isArray(campaign.prospectIds)
-                        ? campaign.prospectIds.length : 0
-                      const sent = (campaign as any).sent ?? 0
-                      const openRate = (campaign as any).openRate ?? 0
-                      const ctr = (campaign as any).ctr ?? 0
-                      const conv = (campaign as any).conversions ?? 0
+              <table className="w-full">
+                <thead className="border-b">
+                  <tr className="text-left text-xs text-muted-foreground uppercase tracking-wider">
+                    <th className="p-4 font-medium">Campaign Name</th>
+                    <th className="p-4 font-medium">Contacts</th>
+                    <th className="p-4 font-medium">Last Updated</th>
+                    <th className="p-4 w-10"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {campaigns.map((campaign) => {
+                    const contactCount = Array.isArray((campaign as any).contactIds)
+                      ? (campaign as any).contactIds.length : 0
 
-                      return (
-                        <tr
-                          key={campaign._id}
-                          className="hover:bg-muted/20 transition-colors cursor-pointer"
-                          onClick={() => router.push(`/campaigns/${campaign._id}`)}
-                        >
-                          <td className="p-4">
-                            <p className="font-medium text-sm">{campaign.name}</p>
-                            {campaign.description && (
-                              <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
-                                {campaign.description}
-                              </p>
-                            )}
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              {new Date(campaign.createdAt ?? "").toLocaleDateString("en-IN", {
-                                day: "numeric", month: "short", year: "numeric"
-                              })}
-                            </p>
-                          </td>
-                          <td className="p-4">
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getStatusStyle(campaign.status)}`}>
-                              {campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1)}
-                            </span>
-                          </td>
-                          <td className="p-4 text-center text-sm font-medium">{prospects}</td>
-                          <td className="p-4 text-center text-sm">{sent || "—"}</td>
-                          <td className="p-4 text-center text-sm">{openRate ? `${openRate}%` : "—"}</td>
-                          <td className="p-4 text-center text-sm">{ctr ? `${ctr}%` : "—"}</td>
-                          <td className="p-4 text-center text-sm">{conv || "—"}</td>
-                          <td className="p-4">
-                            {/* Performance bar — prospects based */}
-                            <div className="w-20">
-                              <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                                <div
-                                  className={`h-full rounded-full ${
-                                    campaign.status === "active" ? "bg-green-500" :
-                                    campaign.status === "completed" ? "bg-blue-400" : "bg-gray-300"
-                                  }`}
-                                  style={{
-                                    width: campaign.status === "completed" ? "100%" :
-                                           campaign.status === "active" ? "60%" : "10%"
-                                  }}
-                                />
-                              </div>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                {campaign.status === "completed" ? "Done" :
-                                 campaign.status === "active" ? "Running" : "Draft"}
-                              </p>
-                            </div>
-                          </td>
-                          <td className="p-4">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 text-muted-foreground hover:text-red-500"
-                              onClick={(e) => handleDelete(campaign._id, e)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                    return (
+                      <tr
+                        key={campaign._id}
+                        className="hover:bg-muted/20 transition-colors cursor-pointer"
+                        onClick={() => router.push(`/campaigns/${campaign._id}`)}
+                      >
+                        <td className="p-4">
+                          <p className="font-medium text-sm">{campaign.name}</p>
+                        </td>
+                        <td className="p-4">
+                          <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                            <Users className="h-3.5 w-3.5" />{contactCount}
+                          </div>
+                        </td>
+                        <td className="p-4 text-sm text-muted-foreground">
+                          {new Date(campaign.updatedAt ?? campaign.createdAt ?? "").toLocaleDateString("en-IN", {
+                            day: "numeric", month: "short", year: "numeric"
+                          })}
+                        </td>
+                        <td className="p-4" onClick={(e) => e.stopPropagation()}>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => router.push(`/campaigns/${campaign._id}`)}>
+                                <Eye className="h-4 w-4 mr-2" />View
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onClick={(e: any) => handleDelete(campaign._id, e)}
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             </CardContent>
           </Card>
 

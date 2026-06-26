@@ -9,7 +9,7 @@
 //   POST /api/enrichment/:id             → AI enrich
 //   GET  /api/contacts?accountId=:id     → linked contacts
 //   POST /api/prospects/:id/calculate-score  → run scoring formula
-//   GET  /api/prospects/:id/score-breakdown  → scoring breakdown
+//   GET  /api/prospects/:id/score-breakdown  → scoring breakdownm
 //   PUT  /api/prospects/:id/override-tier    → manual override
 
 import { useEffect, useState } from "react"
@@ -32,7 +32,7 @@ import {
 }                                         from "@/components/ui/dialog"
 import { Label }                          from "@/components/ui/label"
 import { Input }                          from "@/components/ui/input"
-import { Checkbox }                       from "@/components/ui/checkbox"
+import { RadioGroup, RadioGroupItem }     from "@/components/ui/radio-group"
 import { Textarea }                       from "@/components/ui/textarea"
 import {
   Select, SelectContent, SelectItem,
@@ -174,6 +174,7 @@ export default function AccountDetailPage() {
   // ── Add Contact modal state ───────────────────────────────────────────────────
   const [showAddContactModal, setShowAddContactModal] = useState(false)
   const [isAddingContact, setIsAddingContact]         = useState(false)
+  const [removingContactId, setRemovingContactId]     = useState<string | null>(null)
   const [newContact, setNewContact] = useState({
     firstName: "", lastName: "", functionalDomain: "",
     standardizedRoles: "", email: "", primaryPhone: "",
@@ -392,6 +393,23 @@ export default function AccountDetailPage() {
       })
     } finally {
       setIsAddingContact(false)
+    }
+  }
+
+  // ── DELETE /api/contacts/:id/account — unlink contact from this account ─────
+  // Contact record is preserved, only the account association is cleared
+  const handleRemoveContact = async (contactId: string) => {
+    const ok = window.confirm("Remove this contact from the account? The contact will not be deleted.")
+    if (!ok) return
+    setRemovingContactId(contactId)
+    try {
+      await api.delete<any>(`/contacts/${contactId}/account`)
+      setContacts(prev => prev.filter(c => c._id !== contactId))
+    } catch (err) {
+      console.error("Remove contact error:", err)
+      alert("❌ Could not remove contact. Please try again.")
+    } finally {
+      setRemovingContactId(null)
     }
   }
 
@@ -1027,6 +1045,17 @@ export default function AccountDetailPage() {
                             <Button variant="ghost" size="sm" className="h-7 text-xs" asChild>
                               <Link href={`/contacts/${contact._id}`}>View</Link>
                             </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs text-destructive hover:text-destructive"
+                              disabled={removingContactId === contact._id}
+                              onClick={() => handleRemoveContact(contact._id)}
+                            >
+                              {removingContactId === contact._id
+                                ? <Loader2 className="h-3 w-3 animate-spin" />
+                                : "Remove"}
+                            </Button>
                           </div>
                         </div>
                       ))}
@@ -1259,11 +1288,27 @@ export default function AccountDetailPage() {
               <Input value={newContact.linkedIn}
                 onChange={(e) => setNewContact(p => ({ ...p, linkedIn: e.target.value }))} />
             </div>
-            <label className="flex items-center gap-2 cursor-pointer pt-1">
-              <Checkbox checked={newContact.isPrimary}
-                onCheckedChange={(v) => setNewContact(p => ({ ...p, isPrimary: !!v }))} />
-              <span className="text-sm font-medium">Primary Contact</span>
-            </label>
+           
+           
+           
+    <div className="space-y-1 pt-1">
+              <Label>Contact Type</Label>
+              <RadioGroup
+                value={newContact.isPrimary ? "primary" : "secondary"}
+                onValueChange={(v) => setNewContact(p => ({ ...p, isPrimary: v === "primary" }))}
+                className="flex items-center gap-6"
+              >
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <RadioGroupItem value="primary" />
+                  <span className="text-sm font-medium">Primary Contact</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <RadioGroupItem value="secondary" />
+                  <span className="text-sm font-medium">Secondary Contact</span>
+                </label>
+              </RadioGroup>
+            </div>
+
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowAddContactModal(false)}>Cancel</Button>
