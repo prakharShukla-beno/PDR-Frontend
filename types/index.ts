@@ -143,9 +143,22 @@ export interface Prospect {
   disqualificationReason?: string
   disqualifiedAt?: string
 
-  // Optional computed-at-query-time ICP fit score (not persisted on prospect)
-  icpMatchScore?: number
-  icpScoreBreakdown?: Record<string, unknown>
+  // ICP match score (persisted from benchmark scoring)
+  icpMatchScore?: number | null
+  icpFinalScore?: number | null
+  techFitScoreIcp?: number | null
+  techFitBand?: string | null
+  icpScoreBreakdown?: {
+    firmographic?: number | null
+    market?: number | null
+    tech?: number | null
+    persona?: number | null
+  }
+  icpTier?: string | null
+  icpSalesPriority?: string | null
+  icpScoreStale?: boolean
+  icpScoredAt?: string
+  icpBenchmarkRef?: string
 
   // Relations
   assignedTo?: User | string

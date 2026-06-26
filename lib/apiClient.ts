@@ -1,7 +1,16 @@
 import { getApiBaseUrl, getFileUploadBaseUrl, setAuthSession, removeToken } from "./api"
-import { parseFetchJson, parseApiResponse, readResponseBody, extractErrorMessage } from "./responseUtils"
+import { parseFetchJson, parseApiResponse, readResponseBody, extractErrorMessage, API_UNAVAILABLE_MSG } from "./responseUtils"
 
-export { parseFetchJson, parseApiResponse, readResponseBody, extractErrorMessage, API_UNAVAILABLE_MSG } from "./responseUtils"
+export {
+  parseFetchJson,
+  parseApiResponse,
+  readResponseBody,
+  extractErrorMessage,
+  API_UNAVAILABLE_MSG,
+  formatEnrichmentError,
+  isNetworkError,
+  ENRICHMENT_NETWORK_ERROR_MSG,
+} from "./responseUtils"
 
 const ACCESS_KEY = "pdr_access_token"
 const REFRESH_KEY = "pdr_refresh_token"
@@ -79,12 +88,21 @@ export const apiClient = async (
       },
     })
 
-  let res = await makeRequest(token)
+  let res: Response
+  try {
+    res = await makeRequest(token)
+  } catch {
+    throw new Error(API_UNAVAILABLE_MSG)
+  }
 
   if (res.status === 401 && !endpoint.startsWith("/auth/")) {
     const newToken = await refreshTokens()
     if (newToken) {
-      res = await makeRequest(newToken)
+      try {
+        res = await makeRequest(newToken)
+      } catch {
+        throw new Error(API_UNAVAILABLE_MSG)
+      }
     } else {
       clearTokens()
       if (typeof window !== "undefined") {
@@ -125,6 +143,8 @@ export const api = {
       method: "POST",
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: formData,
+    }).catch(() => {
+      throw new Error(API_UNAVAILABLE_MSG)
     })
   },
 }
@@ -132,14 +152,19 @@ export const api = {
 /** Cancel import — direct to backend (same as file uploads) */
 export const cancelImportJob = async (jobId: string) => {
   const token = getAccessToken()
-  const res = await fetch(`${getFileUploadBaseUrl()}/import/jobs/${jobId}/cancel`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: "{}",
-    cache: "no-store",
-  })
+  let res: Response
+  try {
+    res = await fetch(`${getFileUploadBaseUrl()}/import/jobs/${jobId}/cancel`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: "{}",
+      cache: "no-store",
+    })
+  } catch {
+    throw new Error(API_UNAVAILABLE_MSG)
+  }
   return parseApiResponse(res)
 }

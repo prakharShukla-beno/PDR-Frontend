@@ -1,16 +1,18 @@
 "use client"
 
-import { Target, TrendingUp, Zap } from "lucide-react"
+import { AlertTriangle, Target, TrendingUp, Zap } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import {
   formatIcpBreakdownLines,
+  formatIcpFinalScoreTooltip,
   getClvTierBadgeClass,
   getClvTierShort,
   getClvValueLabel,
   getIcpMatchLabel,
-  getPriorityExplanation,
+  getIcpPriorityExplanation,
+  getIcpScoreCircleClass,
   type IcpScoreBreakdown,
 } from "@/lib/scoreDisplay"
 import type { Prospect } from "@/types"
@@ -35,23 +37,25 @@ export function IcpClvScorePanel({
   prospect: Prospect
   scoreCalc?: ScoreCalc | null
 }) {
-  const icpScore = prospect.icpMatchScore
-  const hasIcp = icpScore != null && icpScore > 0
+  const icpScore = prospect.icpFinalScore
+  const hasIcp = icpScore != null
   const icpMeta = hasIcp ? getIcpMatchLabel(icpScore) : null
-  const icpLines = formatIcpBreakdownLines(prospect.icpScoreBreakdown as IcpScoreBreakdown | undefined)
+  const icpFormula = formatIcpFinalScoreTooltip(prospect)
+  const icpLines = formatIcpBreakdownLines(
+    prospect.icpScoreBreakdown as IcpScoreBreakdown | undefined
+  )
 
   const clvRanking = scoreCalc?.clvRanking ?? prospect.clvRanking
   const finalScore = scoreCalc?.finalScore ?? prospect.finalScore
   const hasClv = clvRanking != null || finalScore != null
-  const priority = scoreCalc?.salesPriority ?? prospect.salesPriority
-  const priorityInfo = getPriorityExplanation(priority)
+  const priority = prospect.icpSalesPriority ?? scoreCalc?.salesPriority ?? prospect.salesPriority
+  const priorityInfo = getIcpPriorityExplanation(priority)
 
   const breakdown = scoreCalc?.breakdown
 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* ICP Fit card */}
         <Card className="border-green-100">
           <CardContent className="p-5 space-y-3">
             <div className="flex items-center gap-2 text-sm font-semibold">
@@ -62,13 +66,20 @@ export function IcpClvScorePanel({
             {hasIcp ? (
               <>
                 <div className="text-center">
-                  <p className="text-4xl font-bold text-green-700">{icpScore} / 100</p>
+                  <p className={`text-4xl font-bold ${getIcpScoreCircleClass(icpScore).split(" ")[0]}`}>
+                    {icpScore} / 100
+                  </p>
                   <Progress value={icpScore} className="h-2 mt-2" />
                 </div>
                 {icpMeta && (
                   <Badge variant="outline" className={icpMeta.className}>
                     {icpMeta.label}
                   </Badge>
+                )}
+                {icpFormula && (
+                  <p className="text-xs text-muted-foreground text-center">
+                    {icpFormula}
+                  </p>
                 )}
                 {prospect.icpScoreBreakdown && (
                   <div className="text-xs text-muted-foreground space-y-1 pt-2 border-t">
@@ -78,16 +89,24 @@ export function IcpClvScorePanel({
                     <p>Persona: {icpLines.persona}</p>
                   </div>
                 )}
+                {prospect.icpScoreStale && (
+                  <div className="mt-2 flex items-center gap-1.5 text-xs text-yellow-600 bg-yellow-50 rounded-lg px-2 py-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                    Score is stale — click Re-Tier All to refresh
+                  </div>
+                )}
               </>
             ) : (
-              <p className="text-sm text-muted-foreground py-4 text-center">
-                Run ICP Match to see score — open ICP Builder and match prospects, or add this account to a segment created from an ICP.
-              </p>
+              <div className="text-center py-6">
+                <p className="text-sm text-gray-400 mb-1">No ICP Score yet</p>
+                <p className="text-xs text-gray-300">
+                  Set a Benchmark ICP and run Re-Tier All
+                </p>
+              </div>
             )}
           </CardContent>
         </Card>
 
-        {/* CLV card */}
         <Card className="border-blue-100">
           <CardContent className="p-5 space-y-3">
             <div className="flex items-center gap-2 text-sm font-semibold">
@@ -124,7 +143,6 @@ export function IcpClvScorePanel({
         </Card>
       </div>
 
-      {/* Sales Priority */}
       <Card className="border-orange-100 bg-orange-50/30">
         <CardContent className="p-4 flex gap-3">
           <Zap className="h-5 w-5 text-orange-500 flex-shrink-0 mt-0.5" />

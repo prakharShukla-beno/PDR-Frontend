@@ -6,7 +6,7 @@ import Link from "next/link"
 import { useSearchParams } from "next/navigation"  // For reading URL params
 import {
   Search, Upload, Download, Plus, SlidersHorizontal,
-  X, ChevronLeft, ChevronRight, Loader2, Sparkles, Layers
+  X, ChevronLeft, ChevronRight, Loader2, Sparkles, Layers, AlertTriangle
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { fileApi, ApiError } from "@/lib/api"
 import { api, cancelImportJob } from "@/lib/apiClient"
-import { extractErrorMessage, readResponseBody } from "@/lib/responseUtils"
+import { extractErrorMessage, readResponseBody, formatEnrichmentError } from "@/lib/responseUtils"
 import type { Prospect } from "@/types"
 import { FilterPanel, FilterState, EMPTY_FILTERS, buildFilterQuery, countActiveFilters } from "@/components/filters/FilterPanel"
 import { IcpImportPreviewModal } from "@/components/import/IcpImportPreviewModal"
@@ -34,6 +34,12 @@ import { canEditContent } from "@/lib/permissions"
 import { DisabledEditorAction } from "@/components/DisabledEditorAction"
 import { useConfirmDialog } from "@/hooks/useConfirmDialog"
 import { useAppAlert } from "@/hooks/useAppAlert"
+import {
+  IcpScoreCell,
+  IcpTierCell,
+  IcpPriorityCell,
+  TechFitScoreCell,
+} from "@/components/scores/IcpAccountCells"
 
 function AccountsPageContent() {
   const router = useRouter()
@@ -568,12 +574,34 @@ function AccountsPageContent() {
   const allPageSelected = prospects.length > 0 && prospects.every(p => selectedIds.includes(p._id))
   const hasSelection    = selectedIds.length > 0
   const chips           = getActiveChips()
+  const hasStaleScores  = prospects.some((a) => a.icpScoreStale)
 
-  const getScoreColor = (score?: number) => {
-    if (!score) return "border-gray-300 text-gray-400"
-    if (score >= 90) return "border-green-500 text-green-600"
-    if (score >= 70) return "border-yellow-500 text-yellow-600"
-    return "border-gray-400 text-gray-500"
+  const handleReTierAll = async () => {
+    setIsReTiering(true)
+    setReTierMsg("")
+    try {
+      const res = await api.post<{
+        data?: { icp?: { scored?: number; total?: number } }
+        icp?: { scored?: number; total?: number }
+      }>("/prospects/re-tier", {})
+
+      await fetchProspects()
+
+      const icpResult = res.data?.icp ?? res.icp
+      const icpScored = icpResult?.scored ?? 0
+      const totalScored = icpResult?.total ?? 0
+
+      setReTierMsg(
+        icpScored > 0
+          ? `Re-tier complete — ${icpScored}/${totalScored} accounts scored against Benchmark ICP`
+          : "Re-tier complete — set a Benchmark ICP to calculate ICP scores"
+      )
+    } catch (err) {
+      console.error("Re-tier error:", err)
+      setReTierMsg("Re-tier failed. Please try again.")
+    } finally {
+      setIsReTiering(false)
+    }
   }
 
   const getPageNumbers = () => {
@@ -665,23 +693,13 @@ function AccountsPageContent() {
               <Button
                 variant="outline"
                 className="gap-2"
-                onClick={async () => {
-                  try {
-                    await api.post(`/prospects/re-tier`, {})
-                    await new Promise(r => setTimeout(r, 1000))
-                    fetchProspects()
-                    showAlert({
-                      title: "Re-tier complete",
-                      message: "All accounts have been re-tiered successfully.",
-                      variant: "success",
-                    })
-                  } catch (err) {
-                    console.error("Re-tier error:", err)
-                    showAlert({ message: "Error re-tiering accounts.", variant: "error" })
-                  }
-                }}
+                onClick={handleReTierAll}
+                disabled={isReTiering}
               >
-                <Loader2 className="h-4 w-4" />Re-Tier All
+                {isReTiering
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <Loader2 className="h-4 w-4" />}
+                {isReTiering ? "Re-Tiering..." : "Re-Tier All"}
               </Button>
             ) : (
               <DisabledEditorAction
@@ -704,6 +722,33 @@ function AccountsPageContent() {
         </div>
 
         <AutoDismissBanner {...uploadMsg} onDismiss={uploadMsg.clearMessage} />
+
+        {reTierMsg && (
+          <div className="mb-4 rounded-lg border bg-muted/20 px-4 py-3 text-sm text-foreground">
+            {reTierMsg}
+          </div>
+        )}
+
+        {hasStaleScores && (
+          <div className="mb-4 flex items-center justify-between px-4 py-3 bg-yellow-50 border border-yellow-200 rounded-xl text-sm">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-yellow-500 flex-shrink-0" />
+              <span className="text-yellow-800">
+                Some ICP scores are outdated — Benchmark ICP was recently updated.
+              </span>
+            </div>
+            {canEdit && (
+              <button
+                type="button"
+                onClick={handleReTierAll}
+                disabled={isReTiering}
+                className="text-xs font-medium text-yellow-700 hover:text-yellow-900 underline flex-shrink-0 ml-4"
+              >
+                {isReTiering ? "Updating..." : "Update Now"}
+              </button>
+            )}
+          </div>
+        )}
 
         {importJob && (
           <ImportJobProgress
@@ -779,7 +824,7 @@ function AccountsPageContent() {
                 <th className="p-4 font-medium">Employees</th>
                 <th className="p-4 font-medium">Location</th>
                 <th className="p-4 font-medium">TechFit Score</th>
-                <th className="p-4 font-medium">Final Score</th>
+                <th className="p-4 font-medium">ICP Score</th>
                 <th className="p-4 font-medium">Tier</th>
                 <th className="p-4 font-medium">CLV</th>
                 <th className="p-4 font-medium">Priority</th>
@@ -815,29 +860,13 @@ function AccountsPageContent() {
                     <td className="p-4 text-sm">{p.noOfEmployees || "—"}</td>
                     <td className="p-4 text-sm">{[p.hqLocationCity, p.country].filter(Boolean).join(", ") || "—"}</td>
                     <td className="p-4">
-                      <div className={`flex h-10 w-10 items-center justify-center rounded-full border-2 font-semibold text-sm ${getScoreColor(p.techFitScore)}`}>
-                        {p.techFitScore ?? "—"}
-                      </div>
+                      <TechFitScoreCell prospect={p} />
                     </td>
                     <td className="p-4">
-                      <div className={`flex h-10 w-10 items-center justify-center rounded-full border-2 font-semibold text-sm ${
-                        p.finalScore && p.finalScore >= 60 ? "bg-green-50 text-green-700 border-green-200" :
-                        p.finalScore && p.finalScore >= 30 ? "bg-blue-50 text-blue-700 border-blue-200" :
-                        "bg-gray-50 text-gray-600 border-gray-200"
-                      }`}>
-                        {p.finalScore !== undefined ? Math.round(p.finalScore) : "—"}
-                      </div>
+                      <IcpScoreCell prospect={p} />
                     </td>
                     <td className="p-4">
-                      <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium border
-                        ${p.finalScore && p.finalScore >= 60 ? "bg-green-50 text-green-700 border-green-200" :
-                          p.finalScore && p.finalScore >= 30 ? "bg-blue-50 text-blue-700 border-blue-200" :
-                          p.finalScore !== undefined ? "bg-red-50 text-red-700 border-red-200" :
-                          "bg-gray-50 text-gray-600 border-gray-200"}`}>
-                        {p.finalScore && p.finalScore >= 60 ? "Tier A" :
-                         p.finalScore && p.finalScore >= 30 ? "Tier B" :
-                         p.finalScore !== undefined ? "Tier C" : "—"}
-                      </span>
+                      <IcpTierCell prospect={p} />
                     </td>
                     <td className="p-4">
                       <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium border
@@ -848,15 +877,7 @@ function AccountsPageContent() {
                       </span>
                     </td>
                     <td className="p-4">
-                      <div className="flex items-center gap-1.5">
-                        <span className={`h-2 w-2 rounded-full
-                          ${p.salesPriority?.startsWith("P1") ? "bg-green-500" :
-                            p.salesPriority?.startsWith("P2") ? "bg-yellow-500" : "bg-gray-400"}`} />
-                        <span className="text-sm">
-                          {p.salesPriority?.startsWith("P1") ? "Sales-Ready" :
-                           p.salesPriority?.startsWith("P2") ? "Nurturing" : p.salesPriority ?? "New"}
-                        </span>
-                      </div>
+                      <IcpPriorityCell prospect={p} />
                     </td>
                   </tr>
                 ))
@@ -958,9 +979,8 @@ function AccountsPageContent() {
                   clearSelection()
                   fetchProspects()
                 }
-              } catch (err: any) {
-                const msg = err?.data?.message || err?.message || "Unknown error"
-                enrichMsg.setMessage(`❌ Enrichment failed — ${msg}`)
+              } catch (err: unknown) {
+                enrichMsg.setMessage(`❌ ${formatEnrichmentError(err)}`)
               } finally {
                 setIsEnriching(false)
               }
