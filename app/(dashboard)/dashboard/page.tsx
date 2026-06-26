@@ -38,8 +38,14 @@ export default function DashboardPage() {
   const [campaigns, setCampaigns] = useState<any[]>([])
   const [byIndustry, setByIndustry] = useState<{ count: number; industry: string }[]>([])
   const [byCountry, setByCountry] = useState<{ count: number; country: string }[]>([])
-  const [byPriority, setByPriority] = useState<{ count: number; priority: string }[]>([])
   const [byCLV, setByCLV] = useState<{ count: number; clvRanking: string }[]>([])
+  const [icpStats, setIcpStats] = useState<{
+    priorities?: Record<string, number>
+    tiers?: Record<string, number>
+    staleCount?: number
+    unscoredCount?: number
+    totalScored?: number
+  } | null>(null)
   const [importHistory, setImportHistory] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
@@ -49,25 +55,25 @@ export default function DashboardPage() {
 
     const fetchAll = async () => {
       try {
-        const [summaryRes, prospectsRes, campaignsRes, industryRes, countryRes, priorityRes, clvRes, importRes] =
+        const [summaryRes, prospectsRes, campaignsRes, industryRes, countryRes, clvRes, importRes, icpStatsRes] =
           await Promise.all([
             api.get<any>("/dashboard/summary"),
             api.get<any>("/dashboard/top-prospects"),
             api.get<any>("/campaigns?page=1&limit=5"),
             api.get<any>("/dashboard/by-industry"),
             api.get<any>("/dashboard/by-country"),
-            api.get<any>("/dashboard/by-priority"),
             api.get<any>("/dashboard/by-clv"),
             api.get<any>("/dashboard/import-history"),
+            api.get<any>("/prospects/icp-stats"),
           ])
         setSummary(summaryRes.data)
         setTopProspects(prospectsRes.data || [])
         setCampaigns(campaignsRes.data || [])
         setByIndustry(industryRes.data || [])
         setByCountry(countryRes.data || [])
-        setByPriority(priorityRes.data || [])
         setByCLV(clvRes.data || [])
         setImportHistory(importRes.data || [])
+        setIcpStats(icpStatsRes.data ?? icpStatsRes)
       } catch (err) {
         console.error("Dashboard load error:", err)
       } finally {
@@ -84,13 +90,6 @@ export default function DashboardPage() {
     if (h < 12) return "Good morning"
     if (h < 17) return "Good afternoon"
     return "Good evening"
-  }
-
-  const getPriorityColor = (p: string) => {
-    if (p?.startsWith("P1")) return "bg-red-500"
-    if (p?.startsWith("P2")) return "bg-orange-400"
-    if (p?.startsWith("P3")) return "bg-yellow-400"
-    return "bg-gray-300"
   }
 
   const getCLVColor = (c: string) => {
@@ -158,7 +157,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { title: "Total Prospects", value: summary?.totalProspects ?? 0, sub: `${summary?.enrichmentCoverage ?? 0}% enriched`, icon: TrendingUp, href: "/accounts" },
-          { title: "ICP Matches", value: summary?.icpMatchCount ?? 0, sub: "matched to ICP", icon: Target, href: "/segments" },
+          { title: "ICP Matches", value: summary?.icpMatchCount ?? 0, sub: "Tier A + Tier B accounts", icon: Target, href: "/segments" },
           { title: "AI Enriched", value: summary?.enrichedCount ?? 0, sub: "prospects enriched", icon: Sparkles, href: "/accounts" },
           { title: "Pending Duplicates", value: summary?.pendingDuplicates ?? 0, sub: "need review", icon: Copy, href: "/duplicates" },
         ].map((stat) => (
@@ -210,7 +209,7 @@ export default function DashboardPage() {
                     <Link key={prospect._id} href={`/accounts/${prospect._id}`}
                       className="flex items-center gap-4 p-4 hover:bg-muted/50 transition-colors">
                       <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-white text-sm font-bold flex-shrink-0">
-                        {prospect.techFitScore ?? "—"}
+                        {prospect.icpFinalScore ?? prospect.techFitScore ?? "—"}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -223,8 +222,13 @@ export default function DashboardPage() {
                           {prospect.intentSignal && (
                             <Badge variant="secondary" className="text-xs">{prospect.intentSignal}</Badge>
                           )}
-                          {prospect.salesPriority && (
-                            <Badge variant="outline" className="text-xs">{prospect.salesPriority}</Badge>
+                          {(prospect.icpSalesPriority ?? prospect.salesPriority) && (
+                            <Badge variant="outline" className="text-xs">
+                              {prospect.icpSalesPriority ?? prospect.salesPriority}
+                            </Badge>
+                          )}
+                          {prospect.icpTier && (
+                            <Badge variant="secondary" className="text-xs">{prospect.icpTier}</Badge>
                           )}
                         </div>
                       </div>
@@ -346,23 +350,30 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* By Priority */}
-          {byPriority.length > 0 && (
-            <Card>
-              <CardContent className="p-4 space-y-3">
-                <h3 className="font-semibold text-sm">By Priority</h3>
-                <div className="space-y-2">
-                  {byPriority.map((item) => (
-                    <div key={item.priority} className="flex items-center gap-2">
-                      <div className={`h-2 w-2 rounded-full flex-shrink-0 ${getPriorityColor(item.priority)}`} />
-                      <span className="text-xs text-muted-foreground flex-1 truncate">{item.priority}</span>
-                      <span className="text-xs font-medium">{item.count}</span>
+          {/* By Priority (ICP-based) */}
+          <Card>
+            <CardContent className="p-4 space-y-3">
+              <h3 className="font-semibold text-sm">By Priority</h3>
+              <div className="space-y-2">
+                {[
+                  { key: "P1", label: "P1 (Tier A+Active)", color: "bg-red-500" },
+                  { key: "P2", label: "P2 (Tier B+Active)", color: "bg-orange-400" },
+                  { key: "P3", label: "P3 (Tier A+Cold)", color: "bg-blue-500" },
+                  { key: "P4", label: "P4 (Tier B+Cold)", color: "bg-gray-400" },
+                ].map(({ key, label, color }) => (
+                  <div key={key} className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full ${color}`} />
+                      <span className="text-gray-600">{label}</span>
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+                    <span className="font-medium text-gray-900">
+                      {icpStats?.priorities?.[key] ?? 0}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
 
           {/* By CLV */}
           {byCLV.length > 0 && (

@@ -62,6 +62,7 @@ type IcpScoreBreakdown = {
 
 type MatchedProspect = Prospect & {
   icpMatchScore?: number
+  icpFinalScore?: number | null
   icpScoreBreakdown?: IcpScoreBreakdown
 }
 
@@ -1353,14 +1354,25 @@ function IcpBuilderPageContent() {
   const fetchMatches = async (icpId: string) => {
     setIsMatching(true)
     try {
-      const res = await api.get<any>(`/icp/${icpId}/match-prospects?page=1&limit=20`)
-      const prospects = Array.isArray(res.data)
-        ? res.data
-        : (res.data?.prospects ?? [])
+      const res = await api.get<{
+        data?: MatchedProspect[]
+        prospects?: MatchedProspect[]
+        pagination?: { total?: number }
+        diagnosis?: Record<string, unknown>
+      } | MatchedProspect[]>(`/icp/${icpId}/match-prospects?page=1&limit=20`)
+
+      const prospects = Array.isArray(res)
+        ? res
+        : Array.isArray(res.data)
+          ? res.data
+          : (res.prospects ?? [])
+
       setMatchedProspects(prospects)
-      const total = res.pagination?.total ?? res.data?.pagination?.total ?? 0
+      const total = Array.isArray(res)
+        ? prospects.length
+        : (res.pagination?.total ?? prospects.length)
       setMatchTotal(total)
-      setMatchDiagnosis(res.diagnosis ?? {})
+      setMatchDiagnosis(Array.isArray(res) ? {} : (res.diagnosis ?? {}))
       matchMsg.setMessage(
         total > 0
           ? `✅ ${total} prospect${total === 1 ? "" : "s"} matched`

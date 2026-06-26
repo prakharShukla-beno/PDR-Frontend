@@ -39,10 +39,18 @@ import {
   SelectTrigger, SelectValue
 }                                         from "@/components/ui/select"
 import { api }                            from "@/lib/api"
+import { formatEnrichmentError }          from "@/lib/responseUtils"
 import type { Prospect, Interaction, InteractionType, InteractionOutcome } from "@/types"
 import { useAutoDismissMessage } from "@/hooks/useAutoDismissMessage"
 import { AutoDismissBanner } from "@/components/ui/auto-dismiss-banner"
 import { useAppAlert } from "@/hooks/useAppAlert"
+import { IcpClvScorePanel } from "@/components/scores/IcpClvScorePanel"
+import {
+  formatIcpFinalScoreTooltip,
+  getIcpPriorityDisplay,
+  getIcpScoreCircleClass,
+  getIcpTierBadgeClass,
+} from "@/lib/scoreDisplay"
 
 // ── Tech Stack categories — matches requirement doc ───────────────────────────
 const TECH_CATEGORIES: Record<string, string[]> = {
@@ -294,8 +302,8 @@ export default function AccountDetailPage() {
       ])
       setProspect(prospectRes.data)
       setScoreData(scoreRes.data)
-    } catch {
-      enrichMsg.setMessage("❌ Enrichment failed. Check Gemini API key.")
+    } catch (err: unknown) {
+      enrichMsg.setMessage(`❌ ${formatEnrichmentError(err, "Enrichment failed. Check Gemini API key.")}`)
     } finally {
       setIsEnriching(false)
     }
@@ -491,15 +499,14 @@ export default function AccountDetailPage() {
               <div>
                 <div className="flex items-center gap-3">
                   <h1 className="text-2xl font-bold">{prospect.accountName}</h1>
-                  {prospect.salesPriority && (
-                    <Badge className={
-                      prospect.salesPriority.startsWith("P1") ? "bg-green-600 text-white" :
-                      prospect.salesPriority.startsWith("P2") ? "bg-blue-600 text-white" :
-                      "bg-gray-200 text-gray-700"
-                    }>
-                      {prospect.salesPriority}
-                    </Badge>
-                  )}
+                  {prospect.icpSalesPriority && (() => {
+                    const p = getIcpPriorityDisplay(prospect.icpSalesPriority)
+                    return p ? (
+                      <Badge className={`${p.color} bg-white border`}>
+                        {p.label}
+                      </Badge>
+                    ) : null
+                  })()}
                 </div>
                 <div className="flex items-center gap-2 text-muted-foreground mt-1">
                   {prospect.website    && <span className="text-sm">{prospect.website}</span>}
@@ -509,10 +516,19 @@ export default function AccountDetailPage() {
                   {prospect.primaryIndustry && <Badge variant="outline">{prospect.primaryIndustry}</Badge>}
                   {prospect.noOfEmployees   && <Badge variant="outline"><Users className="h-3 w-3 mr-1" />{prospect.noOfEmployees}</Badge>}
                   {prospect.annualRevenue   && <Badge variant="outline">{prospect.annualRevenue}</Badge>}
-                  {prospect.clvRanking      && <Badge className={getTierBadgeClass(prospect.clvRanking)}>{prospect.clvRanking}</Badge>}
-                  {(prospect as any).finalScore != null && (
+                  {prospect.icpTier && (
+                    <Badge className={getIcpTierBadgeClass(prospect.icpTier)}>
+                      {prospect.icpTier}
+                    </Badge>
+                  )}
+                  {prospect.clvRanking && (
+                    <Badge className={getTierBadgeClass(prospect.clvRanking)} variant="outline">
+                      CLV: {prospect.clvRanking}
+                    </Badge>
+                  )}
+                  {prospect.icpFinalScore != null && (
                     <Badge variant="outline" className="font-bold">
-                      Score: {Math.round((prospect as any).finalScore)}
+                      ICP: {prospect.icpFinalScore}
                     </Badge>
                   )}
                 </div>
@@ -570,6 +586,8 @@ export default function AccountDetailPage() {
 
             {/* ══ SCORING TAB ══════════════════════════════════════════════════ */}
             <TabsContent value="scoring" className="mt-4 space-y-4">
+              <IcpClvScorePanel prospect={prospect} scoreCalc={calc} />
+
               <Card>
                 <CardContent className="p-5 space-y-5">
 
@@ -1093,17 +1111,33 @@ export default function AccountDetailPage() {
           {/* Score ring */}
           <Card>
             <CardContent className="p-5 text-center">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide mb-3">Final Score</p>
-              <div className="inline-flex h-28 w-28 items-center justify-center rounded-full border-4 border-primary mx-auto">
-                <span className={`text-4xl font-bold ${getScoreColor((prospect as any).finalScore)}`}>
-                  {(prospect as any).finalScore != null ? Math.round((prospect as any).finalScore) : "—"}
+              <p className="text-xs text-muted-foreground uppercase tracking-wide mb-3">ICP Score</p>
+              <div
+                className={`inline-flex h-28 w-28 items-center justify-center rounded-full border-4 mx-auto ${
+                  prospect.icpFinalScore != null
+                    ? getIcpScoreCircleClass(prospect.icpFinalScore)
+                    : "border-gray-200 text-gray-300"
+                }`}
+              >
+                <span className="text-4xl font-bold">
+                  {prospect.icpFinalScore != null ? prospect.icpFinalScore : "—"}
                 </span>
               </div>
               <div className="mt-3 space-y-1">
-                {prospect.clvRanking && (
-                  <Badge className={`${getTierBadgeClass(prospect.clvRanking)} w-full justify-center`}>
-                    {prospect.clvRanking}
+                {formatIcpFinalScoreTooltip(prospect) && (
+                  <p className="text-xs text-muted-foreground px-2">
+                    {formatIcpFinalScoreTooltip(prospect)}
+                  </p>
+                )}
+                {prospect.icpTier && (
+                  <Badge className={`${getIcpTierBadgeClass(prospect.icpTier)} w-full justify-center`}>
+                    {prospect.icpTier}
                   </Badge>
+                )}
+                {prospect.clvRanking && (
+                  <p className="text-xs text-muted-foreground">
+                    CLV: {prospect.clvRanking}
+                  </p>
                 )}
                 {prospect.techFitScore != null && (
                   <p className="text-xs text-muted-foreground">Tech Fit: {prospect.techFitScore}</p>

@@ -20,6 +20,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { api } from "@/lib/api"
+import { getIcpPriorityDisplay, getIcpScoreCircleClass } from "@/lib/scoreDisplay"
 import type { Prospect, DashboardSummary } from "@/types"
 
 export default function InsightsPage() {
@@ -187,15 +188,13 @@ export default function InsightsPage() {
                       {index + 1}
                     </div>
 
-                    {/* Lead Score circle */}
+                    {/* ICP Match score */}
                     <div className={`flex h-12 w-12 items-center justify-center rounded-full border-2 font-bold text-sm flex-shrink-0 ${
-                      (prospect.techFitScore ?? 0) >= 90
-                        ? "border-primary text-primary bg-primary/5"
-                        : (prospect.techFitScore ?? 0) >= 70
-                        ? "border-yellow-500 text-yellow-600 bg-yellow-50"
-                        : "border-gray-400 text-gray-600"
+                      prospect.icpFinalScore != null
+                        ? getIcpScoreCircleClass(prospect.icpFinalScore)
+                        : "border-gray-300 text-gray-400"
                     }`}>
-                      {prospect.techFitScore ?? "—"}
+                      {prospect.icpFinalScore ?? "—"}
                     </div>
 
                     {/* Account info */}
@@ -217,14 +216,19 @@ export default function InsightsPage() {
                             {prospect.intentSignal}
                           </Badge>
                         )}
-                        {prospect.salesPriority && (
+                        {(prospect.icpSalesPriority ?? prospect.salesPriority) && (() => {
+                          const p = getIcpPriorityDisplay(
+                            prospect.icpSalesPriority ?? prospect.salesPriority
+                          )
+                          return p ? (
+                            <Badge variant="outline" className={`text-xs ${p.color}`}>
+                              {p.label.split(" · ")[0]}
+                            </Badge>
+                          ) : null
+                        })()}
+                        {prospect.icpTier && (
                           <Badge variant="outline" className="text-xs">
-                            {prospect.salesPriority}
-                          </Badge>
-                        )}
-                        {prospect.clvRanking && (
-                          <Badge variant="outline" className="text-xs">
-                            {prospect.clvRanking}
+                            {prospect.icpTier}
                           </Badge>
                         )}
                       </div>
@@ -232,12 +236,14 @@ export default function InsightsPage() {
 
                     {/* AI score badge */}
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      <div className="flex items-center gap-1 bg-primary/10 text-primary rounded-full px-2 py-1">
-                        <Sparkles className="h-3 w-3" />
-                        <span className="text-xs font-medium">
-                          AI {prospect.techFitScore ?? 0}%
-                        </span>
-                      </div>
+                      {prospect.icpFinalScore != null && (
+                        <div className="flex items-center gap-1 bg-green-50 text-green-700 border border-green-200 rounded-full px-2 py-1">
+                          <Sparkles className="h-3 w-3" />
+                          <span className="text-xs font-medium">
+                            ICP {prospect.icpFinalScore}
+                          </span>
+                        </div>
+                      )}
 
                       {/* Open link */}
                       <Link

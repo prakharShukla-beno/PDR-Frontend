@@ -11,10 +11,16 @@ import { Button }   from "@/components/ui/button"
 import { Badge }    from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { api }      from "@/lib/api"
+import { formatEnrichmentError } from "@/lib/responseUtils"
 import { useAutoDismissMessage } from "@/hooks/useAutoDismissMessage"
 import { AutoDismissBanner } from "@/components/ui/auto-dismiss-banner"
 import { useConfirmDialog } from "@/hooks/useConfirmDialog"
 import { useAppAlert } from "@/hooks/useAppAlert"
+import {
+  getIcpPriorityDisplay,
+  getIcpScoreCircleClass,
+  getIcpTierBadgeClass,
+} from "@/lib/scoreDisplay"
 
 export default function SegmentDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -181,9 +187,8 @@ export default function SegmentDetailPage() {
       const segRes = await api.get<any>(`/segments/${id}`)
       setSegment(segRes.data?.data ?? segRes.data)
       setCurrentPage(1)
-    } catch (err: any) {
-      const msg = err?.data?.message || err?.message || "Enrichment failed. Please try again."
-      enrichMsg.setMessage(msg)
+    } catch (err: unknown) {
+      enrichMsg.setMessage(formatEnrichmentError(err))
       setIsEnriching(false)
     }
   }
@@ -248,9 +253,8 @@ export default function SegmentDetailPage() {
       } else {
         bulkEnrichMsg.setMessage(`✅ ${ids.length} account${ids.length > 1 ? "s" : ""} enriched successfully!`)
       }
-    } catch (err: any) {
-      const msg = err?.data?.message || err?.message || "Unknown error"
-      bulkEnrichMsg.setMessage(`❌ Enrichment failed — ${msg}`)
+    } catch (err: unknown) {
+      bulkEnrichMsg.setMessage(`❌ ${formatEnrichmentError(err)}`)
     } finally {
       setIsBulkEnriching(false)
     }
@@ -403,7 +407,8 @@ export default function SegmentDetailPage() {
                 <th className="p-4 font-medium">Industry</th>
                 <th className="p-4 font-medium">Country</th>
                 <th className="p-4 font-medium">Employees</th>
-                <th className="p-4 font-medium">Score</th>
+                <th className="p-4 font-medium">ICP Score</th>
+                <th className="p-4 font-medium">Tier</th>
                 <th className="p-4 font-medium">Priority</th>
                 <th className="p-4 font-medium">Intent</th>
               </tr>
@@ -412,14 +417,14 @@ export default function SegmentDetailPage() {
               {acLoading ? (
                 Array.from({ length: LIMIT }).map((_, i) => (
                   <tr key={i} className="animate-pulse">
-                    {Array.from({ length: 8 }).map((_, j) => (
+                    {Array.from({ length: 9 }).map((_, j) => (
                       <td key={j} className="p-4"><div className="h-4 bg-muted rounded" /></td>
                     ))}
                   </tr>
                 ))
               ) : accounts.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-12 text-center text-muted-foreground">
+                  <td colSpan={9} className="p-12 text-center text-muted-foreground">
                     No accounts in this segment. Click Sync to refresh.
                   </td>
                 </tr>
@@ -449,44 +454,40 @@ export default function SegmentDetailPage() {
                     <td className="p-4 text-sm">{account.country || "—"}</td>
                     <td className="p-4 text-sm">{account.noOfEmployees || "—"}</td>
                     <td className="p-4">
-                      <div className="flex flex-col items-start gap-1">
-                        <div className={`flex h-9 w-9 items-center justify-center rounded-full border-2 font-bold text-sm ${
-                          (account.finalScore ?? 0) > 60
-                            ? "border-green-500 text-green-600 bg-green-50"
-                            : (account.finalScore ?? 0) >= 30
-                            ? "border-yellow-500 text-yellow-600 bg-yellow-50"
-                            : account.finalScore != null
-                            ? "border-red-400 text-red-500 bg-red-50"
-                            : "border-gray-300 text-gray-400"
-                        }`}>
-                          {account.finalScore ?? "—"}
+                      {account.icpFinalScore != null ? (
+                        <div
+                          className={`flex h-9 w-9 items-center justify-center rounded-full border-2 font-bold text-sm ${getIcpScoreCircleClass(account.icpFinalScore)}`}
+                        >
+                          {account.icpFinalScore}
                         </div>
-                        {account.clvRanking && (
-                          <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${
-                            account.clvRanking.includes("A")
-                              ? "bg-green-100 text-green-700"
-                              : account.clvRanking.includes("B")
-                              ? "bg-yellow-100 text-yellow-700"
-                              : "bg-gray-100 text-gray-500"
-                          }`}>
-                            {account.clvRanking.includes("A") ? "Tier A"
-                              : account.clvRanking.includes("B") ? "Tier B"
-                              : "Tier C"}
-                          </span>
-                        )}
-                      </div>
+                      ) : (
+                        <span className="text-gray-300 text-sm">--</span>
+                      )}
                     </td>
                     <td className="p-4">
-                      <Badge
-                        variant={
-                          account.salesPriority?.startsWith("P1") ? "default" :
-                          account.salesPriority?.startsWith("P2") ? "secondary" :
-                          "outline"
-                        }
-                        className="text-xs"
-                      >
-                        {account.salesPriority?.split(" ")[0] || "—"}
-                      </Badge>
+                      {account.icpTier ? (
+                        <span
+                          className={`text-xs font-medium px-2 py-0.5 rounded ${getIcpTierBadgeClass(account.icpTier)}`}
+                        >
+                          {account.icpTier}
+                        </span>
+                      ) : (
+                        <span className="text-gray-300 text-sm">--</span>
+                      )}
+                    </td>
+                    <td className="p-4">
+                      {account.icpSalesPriority ? (() => {
+                        const p = getIcpPriorityDisplay(account.icpSalesPriority)
+                        return p ? (
+                          <span className={`text-xs font-medium ${p.color}`}>
+                            {p.label.split(" · ")[0]}
+                          </span>
+                        ) : (
+                          <span className="text-gray-300 text-sm">--</span>
+                        )
+                      })() : (
+                        <span className="text-gray-300 text-sm">--</span>
+                      )}
                     </td>
                     <td className="p-4 text-xs text-muted-foreground">
                       {account.intentSignal || "—"}

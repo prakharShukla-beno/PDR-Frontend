@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { api, fileApi, ApiError } from "@/lib/api"
+import { formatEnrichmentError } from "@/lib/responseUtils"
 import type { Contact, Prospect } from "@/types"
 import { FilterPanel, FilterState, EMPTY_FILTERS, buildFilterQuery, countActiveFilters } from "@/components/filters/FilterPanel"
 import { IcpImportPreviewModal } from "@/components/import/IcpImportPreviewModal"
@@ -580,9 +581,8 @@ export default function ContactsPage() {
                 } else {
                   enrichMsg.setMessage(`✅ ${accountIds.length} linked account${accountIds.length > 1 ? "s" : ""} enriched successfully!`)
                 }
-              } catch (err: any) {
-                const msg = err?.data?.message || err?.message || "Unknown error"
-                enrichMsg.setMessage(`❌ Enrichment failed — ${msg}`)
+              } catch (err: unknown) {
+                enrichMsg.setMessage(`❌ ${formatEnrichmentError(err)}`)
               } finally {
                 setIsEnriching(false)
               }

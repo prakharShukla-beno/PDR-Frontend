@@ -17,14 +17,17 @@ import {
 
 type ScoreProspect = {
   icpMatchScore?: number | null
+  icpFinalScore?: number | null
+  icpSalesPriority?: string | null
   clvRanking?: string | null
   salesPriority?: string | null
   finalScore?: number | null
 }
 
 export function AccountScoreBadges({ prospect }: { prospect: ScoreProspect }) {
-  const icpScore = prospect.icpMatchScore
+  const icpScore = prospect.icpFinalScore
   const hasIcp = icpScore != null && icpScore > 0
+  const priority = prospect.icpSalesPriority ?? prospect.salesPriority
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
@@ -53,13 +56,13 @@ export function AccountScoreBadges({ prospect }: { prospect: ScoreProspect }) {
       <Tooltip>
         <TooltipTrigger asChild>
           <span
-            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium border ${getPriorityBadgeClass(prospect.salesPriority)}`}
+            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium border ${getPriorityBadgeClass(priority)}`}
           >
-            {getPriorityShort(prospect.salesPriority)}
+            {getPriorityShort(priority)}
           </span>
         </TooltipTrigger>
         <TooltipContent>
-          {prospect.salesPriority || "No sales priority — score account first"}
+          {priority || "No sales priority — run Re-Tier All after setting Benchmark ICP"}
         </TooltipContent>
       </Tooltip>
     </div>

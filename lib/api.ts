@@ -117,7 +117,6 @@ async function request<T>(
     body?: object | FormData
     headers?: Record<string, string>
     isFormData?: boolean
-    connectionHint?: string
   } = {}
 ): Promise<T> {
   const {
@@ -125,7 +124,6 @@ async function request<T>(
     body: requestBody,
     headers = {},
     isFormData = false,
-    connectionHint,
   } = options
   const token = getToken()
 
@@ -149,12 +147,7 @@ async function request<T>(
   try {
     res = await fetch(`${baseUrl}${endpoint}`, config)
   } catch {
-    const hint =
-      connectionHint ??
-      (typeof window !== "undefined"
-        ? API_UNAVAILABLE_MSG
-        : "Set BACKEND_URL in .env to your backend origin.")
-    throw new ApiError(`Cannot connect to API. ${hint}`, 0)
+    throw new ApiError(API_UNAVAILABLE_MSG, 0)
   }
 
   const responseBody = await readResponseBody(res)
@@ -184,29 +177,28 @@ async function request<T>(
   return data as T
 }
 
-function createClient(baseUrl: string, connectionHint?: string) {
+function createClient(baseUrl: string) {
   return {
     get: <T>(endpoint: string) =>
-      request<T>(baseUrl, endpoint, { method: "GET", connectionHint }),
+      request<T>(baseUrl, endpoint, { method: "GET" }),
 
     post: <T>(endpoint: string, body?: object) =>
-      request<T>(baseUrl, endpoint, { method: "POST", body, connectionHint }),
+      request<T>(baseUrl, endpoint, { method: "POST", body }),
 
     put: <T>(endpoint: string, body?: object) =>
-      request<T>(baseUrl, endpoint, { method: "PUT", body, connectionHint }),
+      request<T>(baseUrl, endpoint, { method: "PUT", body }),
 
     patch: <T>(endpoint: string, body?: object) =>
-      request<T>(baseUrl, endpoint, { method: "PATCH", body, connectionHint }),
+      request<T>(baseUrl, endpoint, { method: "PATCH", body }),
 
     delete: <T>(endpoint: string) =>
-      request<T>(baseUrl, endpoint, { method: "DELETE", connectionHint }),
+      request<T>(baseUrl, endpoint, { method: "DELETE" }),
 
     upload: <T>(endpoint: string, formData: FormData) =>
       request<T>(baseUrl, endpoint, {
         method: "POST",
         body: formData,
         isFormData: true,
-        connectionHint,
       }),
   }
 }
@@ -216,10 +208,7 @@ function createClient(baseUrl: string, connectionHint?: string) {
 export const api = createClient(getApiBaseUrl())
 
 /** File uploads — direct to backend (avoids Vercel payload limit) */
-export const fileApi = createClient(
-  getFileUploadBaseUrl(),
-  "Check NEXT_PUBLIC_BACKEND_URL points to your Render backend."
-)
+export const fileApi = createClient(getFileUploadBaseUrl())
 
 // ─── Prospects: Scoring & Tiering ─────────────────────────────────────────────
 
