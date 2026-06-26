@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
+import Link from "next/link"
 import {
   ArrowLeft, Search, Plus, X, Users, Building2,
   Mail, Phone, Linkedin, Loader2
@@ -49,6 +50,15 @@ export default function CampaignDetailPage() {
   const [isAdding, setIsAdding]           = useState(false)
   const [industries, setIndustries]       = useState<string[]>([])
   const [functionalDomains, setFunctionalDomains] = useState<string[]>([])
+
+  // ── Bulk selection on the main "Contacts in Campaign" table ────────────────
+  const [selectedContactIds, setSelectedContactIds] = useState<string[]>([])
+  const [isBulkRemoving, setIsBulkRemoving] = useState(false)
+
+  // ── Basic filter for the main table (client-side — contacts already loaded) ─
+  const [tableSearch, setTableSearch]   = useState("")
+  const [tableDomain, setTableDomain]   = useState("")
+  const [tableIndustry, setTableIndustry] = useState("")
 
   const fetchCampaign = useCallback(async () => {
     setIsLoading(true)
@@ -138,12 +148,57 @@ export default function CampaignDetailPage() {
     })
   }
 
+  // ── Bulk remove — selected rows from the main table ───────────────────────
+  const handleBulkRemove = () => {
+    if (!selectedContactIds.length) return
+    showConfirm({
+      title: "Remove contacts?",
+      message: `${selectedContactIds.length} contact(s) will be removed from this campaign. The contact records themselves will not be deleted.`,
+      confirmLabel: "Remove",
+      variant: "warning",
+      onConfirm: async () => {
+        setIsBulkRemoving(true)
+        try {
+          await Promise.all(
+            selectedContactIds.map(cid => api.delete(`/campaigns/${id}/contacts/${cid}`))
+          )
+          setSelectedContactIds([])
+          fetchCampaign()
+        } catch {
+          alert("Could not remove some contacts.")
+        } finally {
+          setIsBulkRemoving(false)
+        }
+      },
+    })
+  }
+
   const getFullName    = (c: Contact) => [c.firstName, c.lastName].filter(Boolean).join(" ") || "Unknown"
   const getAccountName = (c: Contact) =>
     typeof c.accountId === "object" && c.accountId
       ? (c.accountId as any).accountName : c.accountName || "—"
 
   const contacts = ((campaign?.contactIds || []) as Contact[])
+
+  // ── Filter options — derived from contacts already in this campaign ────────
+  const tableDomainOptions   = [...new Set(contacts.map(c => c.functionalDomain).filter(Boolean))] as string[]
+  const tableIndustryOptions = [...new Set(contacts.map(c => (c as any).accountIndustry).filter(Boolean))] as string[]
+
+  const filteredContacts = contacts.filter((c) => {
+    if (tableDomain   && c.functionalDomain !== tableDomain) return false
+    if (tableIndustry && (c as any).accountIndustry !== tableIndustry) return false
+    if (tableSearch) {
+      const q = tableSearch.toLowerCase()
+      const name  = getFullName(c).toLowerCase()
+      const email = (c.email || "").toLowerCase()
+      const role  = (c.standardizedRoles || "").toLowerCase()
+      if (!name.includes(q) && !email.includes(q) && !role.includes(q)) return false
+    }
+    return true
+  })
+
+  const allPageSelected = filteredContacts.length > 0 && filteredContacts.every(c => selectedContactIds.includes(c._id))
+  const hasBulkSelection = selectedContactIds.length > 0
 
   if (isLoading) return (
     <div className="flex h-full items-center justify-center">
@@ -185,30 +240,17 @@ export default function CampaignDetailPage() {
         </div>
       </div>
 
-      {/* Performance stats */}
-      {campaign.stats && (
-        <div className="grid grid-cols-5 gap-px bg-border mx-6 mt-4 rounded-lg overflow-hidden flex-shrink-0">
-          {[
-            { label: "Sent",        value: campaign.stats.sentCount   ?? 0 },
-            { label: "Opened",      value: campaign.stats.openCount   ?? 0 },
-            { label: "Clicked",     value: campaign.stats.clickCount  ?? 0 },
-            { label: "Replied",     value: campaign.stats.replyCount  ?? 0 },
-            { label: "Conversions", value: campaign.stats.conversions ?? 0 },
-          ].map(stat => (
-            <div key={stat.label} className="bg-white p-4 text-center">
-              <div className="text-2xl font-bold">{stat.value}</div>
-              <div className="text-xs text-muted-foreground mt-0.5">{stat.label}</div>
-            </div>
-          ))}
-        </div>
-      )}
-
       {/* Contacts table */}
       <div className="flex-1 overflow-auto p-6 pt-4">
         <div className="rounded-lg border bg-white overflow-hidden">
           <div className="p-4 border-b flex items-center justify-between">
             <h2 className="font-semibold text-sm">Contacts in Campaign</h2>
-            <span className="text-xs text-muted-foreground">{contacts.length} total</span>
+            <span className="text-xs text-muted-foreground">
+              {contacts.length} total
+              {hasBulkSelection && (
+                <span className="ml-2">• <span className="text-foreground font-medium">{selectedContactIds.length} selected</span></span>
+              )}
+            </span>
           </div>
           {contacts.length === 0 ? (
             <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground">
@@ -222,6 +264,15 @@ export default function CampaignDetailPage() {
             <table className="w-full">
               <thead className="bg-muted/30">
                 <tr className="text-left text-xs text-muted-foreground uppercase tracking-wider">
+                  <th className="p-4 w-10">
+                    <Checkbox
+                      checked={allPageSelected}
+                      ref={(el) => { if (el) { const input = el.querySelector('input'); if (input) input.indeterminate = hasBulkSelection && !allPageSelected } }}
+                      onCheckedChange={() => {
+                        if (allPageSelected) setSelectedContactIds([])
+                        else setSelectedContactIds(contacts.map(c => c._id))
+                      }} />
+                  </th>
                   <th className="p-4">Contact</th>
                   <th className="p-4">Account</th>
                   <th className="p-4">Domain</th>
@@ -242,10 +293,19 @@ export default function CampaignDetailPage() {
                   return (
                     <tr key={contact._id} className="hover:bg-muted/20 transition-colors">
                       <td className="p-4">
+                        <Checkbox checked={selectedContactIds.includes(contact._id)}
+                          onCheckedChange={() => setSelectedContactIds(ids =>
+                            ids.includes(contact._id) ? ids.filter(i => i !== contact._id) : [...ids, contact._id]
+                          )} />
+                      </td>
+                      <td className="p-4">
                         <div className="flex items-center gap-3">
                           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-semibold flex-shrink-0">{initials}</div>
                           <div>
-                            <div className="font-medium text-sm">{fullName}</div>
+                            <Link href={`/contacts/${contact._id}`}
+                              className="font-medium text-sm hover:text-primary hover:underline">
+                              {fullName}
+                            </Link>
                             <div className="text-xs text-muted-foreground">{contact.standardizedRoles || "—"}</div>
                           </div>
                         </div>
@@ -285,7 +345,33 @@ export default function CampaignDetailPage() {
             </table>
           )}
         </div>
+        <div className="h-20" />
       </div>
+
+      {/* ── Bulk action bar — appears once contacts exist ───────────────────── */}
+      {contacts.length > 0 && (
+        <div className="fixed bottom-0 left-[var(--sidebar-width)] right-0 bg-white border-t py-3 px-6 flex items-center justify-between z-50 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost" size="sm"
+              className={`gap-2 ${hasBulkSelection ? "text-destructive hover:text-destructive" : "text-muted-foreground/40"}`}
+              disabled={!hasBulkSelection || isBulkRemoving}
+              onClick={handleBulkRemove}
+            >
+              {isBulkRemoving ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
+              REMOVE
+            </Button>
+          </div>
+          <Button
+            variant={allPageSelected ? "default" : "outline"}
+            size="sm"
+            className={allPageSelected ? "bg-primary text-white" : ""}
+            onClick={() => setSelectedContactIds(allPageSelected ? [] : contacts.map(c => c._id))}
+          >
+            {allPageSelected ? `✓ All ${contacts.length} Selected` : "Select All"}
+          </Button>
+        </div>
+      )}
 
       {/* Add Contacts Modal */}
       <Dialog open={showAddModal} onOpenChange={(open) => {

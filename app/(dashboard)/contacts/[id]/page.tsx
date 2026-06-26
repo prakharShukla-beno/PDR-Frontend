@@ -168,7 +168,7 @@ export default function ContactDetailPage() {
     campaignMsg.clearMessage()
     try {
       const res = await api.get<any>("/campaigns?limit=100")
-      setCampaigns(res.data?.campaigns || res.campaigns || [])
+      setCampaigns(res.data?.campaigns ?? res.data ?? [])
     } catch {
       setCampaigns([])
     }
@@ -557,7 +557,9 @@ export default function ContactDetailPage() {
           </Card>
 
           {/* Save to Campaign shortcut */}
-          <Card>
+
+
+          {/* <Card>
             <CardContent className="p-4">
               <h2 className="font-semibold mb-3 flex items-center gap-2">
                 <Save className="h-4 w-4 text-primary" />Save to Campaign
@@ -569,7 +571,9 @@ export default function ContactDetailPage() {
                 <Plus className="h-4 w-4" />Select Campaign
               </Button>
             </CardContent>
-          </Card>
+          </Card> */}
+
+
         </div>
       </div>
 

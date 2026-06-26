@@ -27,6 +27,7 @@ import { Badge } from "@/components/ui/badge"
 import { api, getAccessToken } from "@/lib/apiClient"
 import { useAuth } from "@/context/AuthContext"
 import type { DashboardSummary, Prospect } from "@/types"
+import { findParentsForIndustry, expandSectorValuesToIndustries } from "@/lib/taxonomy"
 
 export default function DashboardPage() {
   const { user, isLoading: authLoading } = useAuth()
@@ -98,8 +99,32 @@ export default function DashboardPage() {
     return "bg-gray-300"
   }
 
-  const maxInd = Math.max(...byIndustry.map(i => i.count), 1)
+  // ── Regroup leaf-level industries (e.g. "Fintech", "Banking") into their
+  // parent sector (e.g. "BFSI") so the dashboard shows all 11 sectors,
+  // matching the same parent→child taxonomy used in the Accounts filter panel.
+  const byIndustrySector = (() => {
+    const sectorCounts = new Map<string, number>()
+    byIndustry.forEach((item) => {
+      const parent = findParentsForIndustry(item.industry)
+      const sectorName = parent?.sector ?? item.industry // fallback if not mapped
+      sectorCounts.set(sectorName, (sectorCounts.get(sectorName) ?? 0) + item.count)
+    })
+    return Array.from(sectorCounts.entries())
+      .map(([sector, count]) => ({ sector, count }))
+      .sort((a, b) => b.count - a.count)
+  })()
+
+  const maxInd = Math.max(...byIndustrySector.map(i => i.count), 1)
   const maxCty = Math.max(...byCountry.map(c => c.count), 1)
+
+  // Click handler — expand sector into all its child industries before navigating,
+  // same as the Accounts filter panel does when a sector is selected.
+  const goToSectorAccounts = (sector: string) => {
+    const childIndustries = expandSectorValuesToIndustries([sector])
+    const params = new URLSearchParams()
+    childIndustries.forEach((ind) => params.append("industryInclude[]", ind))
+    router.push(`/accounts?${params.toString()}`)
+  }
 
   if (isLoading) {
     return (
@@ -222,10 +247,14 @@ export default function DashboardPage() {
                   <h3 className="font-semibold text-sm">By Industry</h3>
                 </div>
                 <div className="space-y-2">
-                  {byIndustry.slice(0, 5).map((item) => (
-                    <div key={item.industry}>
+                  {byIndustrySector.map((item) => (
+                    <div
+                      key={item.sector}
+                      className="cursor-pointer group"
+                      onClick={() => goToSectorAccounts(item.sector)}
+                    >
                       <div className="flex justify-between text-xs mb-1">
-                        <span className="text-muted-foreground truncate max-w-[120px]">{item.industry}</span>
+                        <span className="text-muted-foreground truncate max-w-[140px] group-hover:text-primary group-hover:underline">{item.sector}</span>
                         <span className="font-medium">{item.count}</span>
                       </div>
                       <div className="h-1.5 bg-muted rounded-full overflow-hidden">
@@ -245,9 +274,13 @@ export default function DashboardPage() {
                 </div>
                 <div className="space-y-2">
                   {byCountry.slice(0, 5).map((item) => (
-                    <div key={item.country}>
+                    <div
+                      key={item.country}
+                      className="cursor-pointer group"
+                      onClick={() => router.push(`/accounts?countryInclude[]=${encodeURIComponent(item.country)}`)}
+                    >
                       <div className="flex justify-between text-xs mb-1">
-                        <span className="text-muted-foreground">{item.country}</span>
+                        <span className="text-muted-foreground group-hover:text-primary group-hover:underline">{item.country}</span>
                         <span className="font-medium">{item.count}</span>
                       </div>
                       <div className="h-1.5 bg-muted rounded-full overflow-hidden">
