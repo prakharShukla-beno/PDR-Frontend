@@ -340,13 +340,24 @@ export default function SegmentsPage() {
                           View Accounts
                         </Button>
                         {canCreate && (
-                          <Button
-                            variant="ghost" size="icon"
-                            className="h-8 w-8 text-muted-foreground hover:text-red-500"
-                            onClick={(e) => deleteSegment(seg._id, e)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <>
+                            <Button
+                              variant="default" size="sm" className="text-xs px-3"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                router.push(`/segments/${seg._id}/edit`)
+                              }}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              variant="ghost" size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-red-500"
+                              onClick={(e) => deleteSegment(seg._id, e)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </>
                         )}
                       </div>
 
