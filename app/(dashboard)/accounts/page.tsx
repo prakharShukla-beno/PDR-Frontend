@@ -34,6 +34,7 @@ import { canEditContent } from "@/lib/permissions"
 import { DisabledEditorAction } from "@/components/DisabledEditorAction"
 import { useConfirmDialog } from "@/hooks/useConfirmDialog"
 import { useAppAlert } from "@/hooks/useAppAlert"
+import { extractProspectIds, normalizeIdList } from "@/lib/segment-api-utils"
 import {
   IcpScoreCell,
   IcpTierCell,
@@ -281,13 +282,23 @@ function AccountsPageContent() {
             fetchProspects()
           } else {
             const summary = `${mapped.successCount} accounts created, ${mapped.duplicateCount} duplicates, ${mapped.errorCount} errors`
-            uploadMsg.setMessage(
-              mapped.status === "completed_with_errors"
-                ? `⚠️ Import complete — ${summary}`
-                : `✅ Import complete — ${summary}`
-            )
-            setCurrentPage(1)
-            fetchProspects()
+            if (mapped.duplicateCount > 0) {
+              uploadMsg.setMessage(
+                `✅ Import complete — ${summary}. ${mapped.duplicateCount} duplicates need review.`
+              )
+              setTimeout(
+                () => router.push(`/duplicates?entityType=Prospect&refresh=${Date.now()}`),
+                400
+              )
+            } else {
+              uploadMsg.setMessage(
+                mapped.status === "completed_with_errors"
+                  ? `⚠️ Import complete — ${summary}`
+                  : `✅ Import complete — ${summary}`
+              )
+              setCurrentPage(1)
+              fetchProspects()
+            }
           }
         }
       } catch (err) {
@@ -298,7 +309,7 @@ function AccountsPageContent() {
     poll()
     const interval = setInterval(poll, 2500)
     return () => clearInterval(interval)
-  }, [importJob?.jobId, importJob?.status, importJob?.fileName, fetchProspects, uploadMsg])
+  }, [importJob?.jobId, importJob?.status, importJob?.fileName, fetchProspects, uploadMsg, router])
 
   useEffect(() => {
     if (!importJob || !isImportJobTerminal(importJob.status)) return
@@ -417,17 +428,42 @@ function AccountsPageContent() {
     }
   }
 
+  const resolveSelectedAccountIds = async (): Promise<string[]> => {
+    if (isAllSelected) {
+      try {
+        const res = await api.get<any>(`/prospects?limit=99999`)
+        const prospects = (res as { data?: unknown })?.data ?? res
+        return extractProspectIds(prospects)
+      } catch {
+        return selectedIds
+      }
+    }
+    return normalizeIdList(selectedIds)
+  }
+
+  const handleCreateNewSegment = async () => {
+    const ids = await resolveSelectedAccountIds()
+    if (!ids.length) return
+    setShowSegmentModal(false)
+
+    // URL for modest selections (reliable across navigation); sessionStorage for large "select all"
+    if (ids.length <= 100) {
+      const params = new URLSearchParams()
+      params.set("ids", ids.join(","))
+      router.push(`/segments/new?${params.toString()}`)
+      return
+    }
+
+    sessionStorage.setItem("segmentNewPrefillIds", JSON.stringify(ids))
+    router.push("/segments/new")
+  }
+
   const handleAddToSegment = async () => {
     if (!selectedSegmentId) return
     setIsAddingToSegment(true)
     try {
-      let ids = selectedIds
-      if (isAllSelected) {
-        try {
-          const res = await api.get<any>(`/prospects?limit=99999`)
-          ids = res.data?.prospects?.map((p: any) => p._id) || res.data?.map((p: any) => p._id) || selectedIds
-        } catch { ids = selectedIds }
-      }
+      const ids = await resolveSelectedAccountIds()
+      if (!ids.length) return
       await api.post(`/segments/${selectedSegmentId}/add-accounts`, { accountIds: ids })
       setShowSegmentModal(false)
       clearSelection()
@@ -1018,7 +1054,17 @@ function AccountsPageContent() {
         <DialogContent className="sm:max-w-md">
           <DialogDescription className="sr-only">Select a segment to add the selected accounts to.</DialogDescription>
           <DialogHeader>
-            <DialogTitle>Add to Segment</DialogTitle>
+            <div className="flex items-center justify-between pr-6">
+              <DialogTitle>Add to Segment</DialogTitle>
+              <Button
+                variant="link"
+                size="sm"
+                className="h-auto p-0 text-xs"
+                onClick={handleCreateNewSegment}
+              >
+                + Create new
+              </Button>
+            </div>
           </DialogHeader>
           <div className="py-2 space-y-4">
             <p className="text-sm text-muted-foreground">
@@ -1030,7 +1076,7 @@ function AccountsPageContent() {
               </div>
             ) : segments.length === 0 ? (
               <p className="text-sm text-center text-muted-foreground py-6">
-                No segments found. Create a segment first from the Segments page.
+                No segments found yet. Use "+ Create new" above to add one.
               </p>
             ) : (
               <div className="max-h-64 overflow-y-auto space-y-1 border rounded-md p-2">

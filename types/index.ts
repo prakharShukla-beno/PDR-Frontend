@@ -305,6 +305,7 @@ export interface Duplicate {
   _id: string
   prospectId1: Prospect | string
   prospectId2?: Prospect | string | null
+  entityType?: "Prospect" | "Contact"
   newData?: Record<string, any> | null
   source?: "import" | "manual"
   importLogId?: string
