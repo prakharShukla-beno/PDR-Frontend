@@ -17,10 +17,11 @@ import { AutoDismissBanner } from "@/components/ui/auto-dismiss-banner"
 import { useConfirmDialog } from "@/hooks/useConfirmDialog"
 import { useAppAlert } from "@/hooks/useAppAlert"
 import {
-  getIcpPriorityDisplay,
-  getIcpScoreCircleClass,
-  getIcpTierBadgeClass,
-} from "@/lib/scoreDisplay"
+  TechFitScoreCell,
+  IcpScoreCell,
+  IcpTierCell,
+  IcpPriorityCell,
+} from "@/components/scores/IcpAccountCells"
 
 export default function SegmentDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -405,26 +406,27 @@ export default function SegmentDetailPage() {
                 </th>
                 <th className="p-4 font-medium">Account</th>
                 <th className="p-4 font-medium">Industry</th>
-                <th className="p-4 font-medium">Country</th>
                 <th className="p-4 font-medium">Employees</th>
+                <th className="p-4 font-medium">Location</th>
+                <th className="p-4 font-medium">TechFit Score</th>
                 <th className="p-4 font-medium">ICP Score</th>
                 <th className="p-4 font-medium">Tier</th>
+                <th className="p-4 font-medium">CLV</th>
                 <th className="p-4 font-medium">Priority</th>
-                <th className="p-4 font-medium">Intent</th>
               </tr>
             </thead>
             <tbody className="divide-y">
               {acLoading ? (
                 Array.from({ length: LIMIT }).map((_, i) => (
                   <tr key={i} className="animate-pulse">
-                    {Array.from({ length: 9 }).map((_, j) => (
+                    {Array.from({ length: 10 }).map((_, j) => (
                       <td key={j} className="p-4"><div className="h-4 bg-muted rounded" /></td>
                     ))}
                   </tr>
                 ))
               ) : accounts.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="p-12 text-center text-muted-foreground">
+                  <td colSpan={10} className="p-12 text-center text-muted-foreground">
                     No accounts in this segment. Click Sync to refresh.
                   </td>
                 </tr>
@@ -445,52 +447,33 @@ export default function SegmentDetailPage() {
                       />
                     </td>
                     <td className="p-4 cursor-pointer" onClick={() => router.push(`/accounts/${account._id}`)}>
-                      <div className="font-medium text-sm">{account.accountName}</div>
-                      {account.website && (
-                        <div className="text-xs text-muted-foreground">{account.website}</div>
-                      )}
+                      <div className="font-medium text-foreground">{account.accountName}</div>
+                      <div className="text-sm text-muted-foreground">{account.website}</div>
                     </td>
                     <td className="p-4 text-sm">{account.primaryIndustry || "—"}</td>
-                    <td className="p-4 text-sm">{account.country || "—"}</td>
                     <td className="p-4 text-sm">{account.noOfEmployees || "—"}</td>
-                    <td className="p-4">
-                      {account.icpFinalScore != null ? (
-                        <div
-                          className={`flex h-9 w-9 items-center justify-center rounded-full border-2 font-bold text-sm ${getIcpScoreCircleClass(account.icpFinalScore)}`}
-                        >
-                          {account.icpFinalScore}
-                        </div>
-                      ) : (
-                        <span className="text-gray-300 text-sm">--</span>
-                      )}
+                    <td className="p-4 text-sm">
+                      {[account.hqLocationCity, account.country].filter(Boolean).join(", ") || "—"}
                     </td>
                     <td className="p-4">
-                      {account.icpTier ? (
-                        <span
-                          className={`text-xs font-medium px-2 py-0.5 rounded ${getIcpTierBadgeClass(account.icpTier)}`}
-                        >
-                          {account.icpTier}
-                        </span>
-                      ) : (
-                        <span className="text-gray-300 text-sm">--</span>
-                      )}
+                      <TechFitScoreCell prospect={account} />
                     </td>
                     <td className="p-4">
-                      {account.icpSalesPriority ? (() => {
-                        const p = getIcpPriorityDisplay(account.icpSalesPriority)
-                        return p ? (
-                          <span className={`text-xs font-medium ${p.color}`}>
-                            {p.label.split(" · ")[0]}
-                          </span>
-                        ) : (
-                          <span className="text-gray-300 text-sm">--</span>
-                        )
-                      })() : (
-                        <span className="text-gray-300 text-sm">--</span>
-                      )}
+                      <IcpScoreCell prospect={account} />
                     </td>
-                    <td className="p-4 text-xs text-muted-foreground">
-                      {account.intentSignal || "—"}
+                    <td className="p-4">
+                      <IcpTierCell prospect={account} />
+                    </td>
+                    <td className="p-4">
+                      <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium border
+                        ${account.clvRanking?.includes("A") ? "bg-green-50 text-green-700 border-green-200" :
+                          account.clvRanking?.includes("B") ? "bg-blue-50 text-blue-700 border-blue-200" :
+                          "bg-gray-50 text-gray-600 border-gray-200"}`}>
+                        {account.clvRanking?.split(" ")[0] || "—"}
+                      </span>
+                    </td>
+                    <td className="p-4">
+                      <IcpPriorityCell prospect={account} />
                     </td>
                   </tr>
                 ))
