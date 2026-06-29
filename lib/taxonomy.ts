@@ -143,6 +143,52 @@ export const getIndustriesForSubSectors = (subs: string[]) =>
       .flat()
   )
 
+export function resolveToCommercialSector(value: string): string | null {
+  if (!value) return null
+  const trimmed = value.trim()
+  const key = normalizeTaxonomyKey(trimmed)
+
+  for (const sector of INDUSTRIES) {
+    if (normalizeTaxonomyKey(sector) === key) return sector
+  }
+
+  for (const [sector, subs] of Object.entries(SECTOR_TAXONOMY)) {
+    for (const [sub, inds] of Object.entries(subs)) {
+      if (normalizeTaxonomyKey(sub) === key) return sector
+      if (inds.includes(trimmed)) return sector
+    }
+  }
+
+  const parent = findParentsForIndustry(trimmed)
+  if (parent?.sector) return parent.sector
+
+  for (const sector of INDUSTRIES) {
+    const sectorKey = normalizeTaxonomyKey(sector)
+    if (key.includes(sectorKey) || sectorKey.includes(key)) {
+      if (Math.min(sectorKey.length, key.length) >= 8) return sector
+    }
+  }
+
+  for (const [sector, subs] of Object.entries(SECTOR_TAXONOMY)) {
+    for (const sub of Object.keys(subs)) {
+      const subKey = normalizeTaxonomyKey(sub)
+      if (key.includes(subKey) || subKey.includes(key)) {
+        if (Math.min(subKey.length, key.length) >= 6) return sector
+      }
+    }
+  }
+
+  return "Professional Services"
+}
+
+function normalizeTaxonomyKey(value: string) {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[.,/]+/g, " ")
+    .replace(/\s+/g, " ")
+}
+
 export const expandSectorValuesToIndustries = (values: string[]) =>
   uniqueStrings(
     values.flatMap((value) =>

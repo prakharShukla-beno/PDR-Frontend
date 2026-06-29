@@ -11,8 +11,7 @@
 // ─────────────────────────────────────────────
 
 import { useEffect, useState } from "react"
-import { Loader2, Filter, Download } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { Loader2, Filter } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import {
@@ -88,19 +87,14 @@ export default function AuditLogPage() {
     <div className="p-6 space-y-6">
 
       {/* ── Header ── */}
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">
-            Compliance · BR-04
-          </p>
-          <h1 className="text-2xl font-bold">Audit Log & Activity</h1>
-          <p className="text-sm text-muted-foreground">
-            All system actions and user activities.
-          </p>
-        </div>
-        <Button variant="outline" className="gap-2">
-          <Download className="h-4 w-4" />Export Log
-        </Button>
+      <div>
+        <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">
+          Compliance · BR-04
+        </p>
+        <h1 className="text-2xl font-bold">Audit Log & Activity</h1>
+        <p className="text-sm text-muted-foreground">
+          All system actions and user activities.
+        </p>
       </div>
 
       {/* ── Filters ── */}
