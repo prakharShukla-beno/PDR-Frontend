@@ -40,6 +40,7 @@ import {
 }                                         from "@/components/ui/select"
 import { api }                            from "@/lib/api"
 import { formatEnrichmentError }          from "@/lib/responseUtils"
+import { getWebsiteUrl }                  from "@/lib/urlUtils"
 import type { Prospect, Interaction, InteractionType, InteractionOutcome } from "@/types"
 import { useAutoDismissMessage } from "@/hooks/useAutoDismissMessage"
 import { AutoDismissBanner } from "@/components/ui/auto-dismiss-banner"
@@ -509,7 +510,19 @@ export default function AccountDetailPage() {
                   })()}
                 </div>
                 <div className="flex items-center gap-2 text-muted-foreground mt-1">
-                  {prospect.website    && <span className="text-sm">{prospect.website}</span>}
+                  {(() => {
+                    const websiteUrl = getWebsiteUrl(prospect.website)
+                    return websiteUrl ? (
+                      <a
+                        href={websiteUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-teal-600 hover:text-teal-800 hover:underline transition-colors"
+                      >
+                        {prospect.website}
+                      </a>
+                    ) : null
+                  })()}
                   {prospect.hqLocationCity && <><span>·</span><span className="text-sm">{prospect.hqLocationCity}, {prospect.country}</span></>}
                 </div>
                 <div className="flex flex-wrap gap-2 mt-3">

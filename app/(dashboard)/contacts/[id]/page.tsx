@@ -32,6 +32,8 @@ import {
   SelectTrigger, SelectValue
 } from "@/components/ui/select"
 import { api, ApiError } from "@/lib/api"
+import { getLinkedInUrl } from "@/lib/urlUtils"
+import { getContactAccountId, getContactAccountName } from "@/lib/contactAccountUtils"
 import type { Contact, Campaign, Prospect } from "@/types"
 import { useAutoDismissMessage } from "@/hooks/useAutoDismissMessage"
 import { AutoDismissBanner } from "@/components/ui/auto-dismiss-banner"
@@ -195,14 +197,6 @@ export default function ContactDetailPage() {
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
   const getFullName = (c: Contact) => [c.firstName, c.lastName].filter(Boolean).join(" ") || "—"
-  const getAccountName = (c: Contact) =>
-    typeof c.accountId === "object" && c.accountId !== null
-      ? (c.accountId as Prospect).accountName
-      : "—"
-  const getAccountId = (c: Contact) =>
-    typeof c.accountId === "object" && c.accountId !== null
-      ? (c.accountId as Prospect)._id
-      : c.accountId as string
 
   // ─────────────────────────────────────────────────────────────────────────────
   if (isLoading) {
@@ -223,8 +217,8 @@ export default function ContactDetailPage() {
   }
 
   const fullName    = getFullName(contact)
-  const accountName = getAccountName(contact)
-  const accountId   = getAccountId(contact)
+  const accountName = getContactAccountName(contact)
+  const accountId   = getContactAccountId(contact)
   const initials    = [contact.firstName?.[0], contact.lastName?.[0]].filter(Boolean).join("").toUpperCase() || "?"
   const domainColor = contact.functionalDomain
     ? DOMAIN_COLORS[contact.functionalDomain] ?? "bg-gray-50 text-gray-700 border-gray-200"
@@ -262,11 +256,16 @@ export default function ContactDetailPage() {
                   <p className="text-muted-foreground mt-0.5">{contact.standardizedRoles}</p>
                 )}
                 {/* Account link */}
-                {accountName !== "—" && (
+                {accountName && accountId && (
                   <Link href={`/accounts/${accountId}`}
                     className="text-sm text-primary hover:underline mt-1 inline-flex items-center gap-1">
                     <Globe className="h-3 w-3" />{accountName}
                   </Link>
+                )}
+                {accountName && !accountId && (
+                  <p className="text-sm text-muted-foreground mt-1 inline-flex items-center gap-1">
+                    <Globe className="h-3 w-3" />{accountName}
+                  </p>
                 )}
                 {/* Domain badge */}
                 <div className="flex flex-wrap gap-2 mt-3">
@@ -292,9 +291,9 @@ export default function ContactDetailPage() {
                   <a href={`mailto:${contact.email}`}><Mail className="h-4 w-4" />Email</a>
                 </Button>
               )}
-              {contact.linkedIn && (
+              {getLinkedInUrl(contact.linkedIn) && (
                 <Button variant="outline" className="gap-2" asChild>
-                  <a href={contact.linkedIn} target="_blank" rel="noopener noreferrer">
+                  <a href={getLinkedInUrl(contact.linkedIn)!} target="_blank" rel="noopener noreferrer">
                     <Linkedin className="h-4 w-4" />LinkedIn
                   </a>
                 </Button>
@@ -390,12 +389,17 @@ export default function ContactDetailPage() {
                   <Linkedin className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
                   <div>
                     <p className="text-xs text-muted-foreground mb-1">LinkedIn</p>
-                    {contact.linkedIn
-                      ? <a href={contact.linkedIn} target="_blank" rel="noopener noreferrer"
+                    {(() => {
+                      const linkedInUrl = getLinkedInUrl(contact.linkedIn)
+                      return linkedInUrl ? (
+                        <a href={linkedInUrl} target="_blank" rel="noopener noreferrer"
                           className="text-primary hover:underline font-medium truncate block max-w-[200px]">
                           View Profile
                         </a>
-                      : <span className="text-muted-foreground">—</span>}
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )
+                    })()}
                   </div>
                 </div>
 
@@ -510,7 +514,7 @@ export default function ContactDetailPage() {
               <h2 className="font-semibold mb-4 flex items-center gap-2">
                 <Globe className="h-4 w-4 text-primary" />Account
               </h2>
-              {accountName !== "—" ? (
+              {accountName ? (
                 <div>
                   <p className="font-medium">{accountName}</p>
                   {typeof contact.accountId === "object" && contact.accountId !== null && (
@@ -523,11 +527,13 @@ export default function ContactDetailPage() {
                       )}
                     </div>
                   )}
-                  <Link href={`/accounts/${accountId}`}>
-                    <Button variant="outline" className="w-full mt-3 text-sm gap-2">
-                      <Globe className="h-4 w-4" />View Account
-                    </Button>
-                  </Link>
+                  {accountId && (
+                    <Link href={`/accounts/${accountId}`}>
+                      <Button variant="outline" className="w-full mt-3 text-sm gap-2">
+                        <Globe className="h-4 w-4" />View Account
+                      </Button>
+                    </Link>
+                  )}
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">No account is linked.</p>
