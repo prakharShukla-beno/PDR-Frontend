@@ -363,27 +363,9 @@ export default function SegmentDetailPage() {
           className="mt-3 flex items-center gap-2 text-xs px-3 py-2 rounded-lg"
         />
 
-        <div className="flex items-center gap-6 mt-4">
-          <div>
-            <p className="text-2xl font-bold text-primary">{segment.matchCount ?? 0}</p>
-            <p className="text-xs text-muted-foreground uppercase tracking-wide">Total Accounts</p>
-          </div>
-          <div className="flex flex-wrap gap-1">
-            {segment.filters?.industries?.map((ind: string) => (
-              <Badge key={ind} variant="secondary" className="text-xs">{ind}</Badge>
-            ))}
-            {segment.filters?.countries?.map((c: string) => (
-              <Badge key={c} variant="outline" className="text-xs">{c}</Badge>
-            ))}
-            {segment.filters?.salesPriorities?.map((sp: string) => (
-              <Badge key={sp} variant="outline" className="text-xs">{sp}</Badge>
-            ))}
-            {segment.filters?.minTechFitScore && (
-              <Badge variant="outline" className="text-xs">
-                Score ≥ {segment.filters.minTechFitScore}
-              </Badge>
-            )}
-          </div>
+        <div className="mt-4">
+          <p className="text-2xl font-bold text-primary">{segment.matchCount ?? 0}</p>
+          <p className="text-xs text-muted-foreground uppercase tracking-wide">Total Accounts</p>
         </div>
       </div>
 

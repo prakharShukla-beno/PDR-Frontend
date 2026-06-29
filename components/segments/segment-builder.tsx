@@ -7,7 +7,6 @@ import { ArrowLeft, Brain, Loader2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent } from "@/components/ui/card"
-import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { api, ApiError } from "@/lib/api"
 import { useAutoDismissMessage } from "@/hooks/useAutoDismissMessage"
@@ -29,7 +28,7 @@ import {
   type SegmentFilterState,
 } from "@/lib/segment-builder-constants"
 import { buildSegmentFilterQuery } from "@/lib/segment-filter-query"
-import { parseProspectListResponse } from "@/lib/segment-api-utils"
+import { parseProspectListResponse, fetchProspectsByIds, normalizeIdList } from "@/lib/segment-api-utils"
 
 interface SegmentBuilderProps {
   mode: "create" | "edit"
@@ -40,6 +39,7 @@ function SegmentBuilderContent({ mode, segmentId }: SegmentBuilderProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const fromIcpId = searchParams.get("from_icp")
+  const idsFromUrl = searchParams.get("ids")
   const { user, isLoading: authLoading } = useAuth()
   const canEdit = canEditContent(user?.role)
 
@@ -47,7 +47,6 @@ function SegmentBuilderContent({ mode, segmentId }: SegmentBuilderProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
-  const [isShared, setIsShared] = useState(false)
   const [icpName, setIcpName] = useState("")
   const [filters, setFilters] = useState<SegmentFilterState>(EMPTY_SEGMENT_FILTERS)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
@@ -229,15 +228,10 @@ function SegmentBuilderContent({ mode, segmentId }: SegmentBuilderProps) {
         if (!seg) return
         setName(seg.name || "")
         setDescription(seg.description || "")
-        setIsShared(!!seg.isShared)
 
         const ids: string[] = (seg.matchedAccountIds || []).map((id: string) => String(id))
         if (ids.length) {
-          const params = new URLSearchParams()
-          ids.forEach((id) => params.append("ids", id))
-          params.set("limit", String(ids.length))
-          const accRes = await api.get<any>(`/prospects?${params.toString()}`)
-          const { rows } = parseProspectListResponse(accRes)
+          const rows = await fetchProspectsByIds(ids, (url) => api.get<any>(url))
           const accounts = rows as SegmentAccount[]
           const uniqueIds = [...new Set(ids)]
           const uniqueAccounts = accounts.filter(
@@ -269,6 +263,51 @@ function SegmentBuilderContent({ mode, segmentId }: SegmentBuilderProps) {
       .catch(console.error)
       .finally(() => setIsLoadingSegment(false))
   }, [mode, segmentId])
+
+  // Pre-fill accounts when redirected from Accounts page (Add to Segment → Create new)
+  useEffect(() => {
+    if (mode !== "create") return
+
+    let ids: string[] = []
+    if (idsFromUrl) {
+      ids = normalizeIdList(idsFromUrl)
+    } else {
+      const raw = sessionStorage.getItem("segmentNewPrefillIds")
+      if (!raw) return
+      try {
+        ids = normalizeIdList(JSON.parse(raw))
+      } catch {
+        sessionStorage.removeItem("segmentNewPrefillIds")
+        return
+      }
+    }
+
+    if (!ids.length) return
+
+    let cancelled = false
+    const loadPrefill = async () => {
+      try {
+        const rows = await fetchProspectsByIds(ids, (url) => api.get<any>(url))
+        if (cancelled) return
+        const accounts = rows as SegmentAccount[]
+        const uniqueIds = [...new Set(ids.map(String))]
+        const uniqueAccounts = accounts.filter(
+          (a, i, arr) =>
+            arr.findIndex((x) => String(x._id) === String(a._id)) === i
+        )
+        setSelectedIds(uniqueIds)
+        setSelectedAccounts(uniqueAccounts)
+        sessionStorage.removeItem("segmentNewPrefillIds")
+      } catch (err) {
+        if (!cancelled) console.error("Prefill accounts error:", err)
+      }
+    }
+
+    loadPrefill()
+    return () => {
+      cancelled = true
+    }
+  }, [mode, idsFromUrl])
 
   // Load ICP filters when creating from ICP
   useEffect(() => {
@@ -309,7 +348,6 @@ function SegmentBuilderContent({ mode, segmentId }: SegmentBuilderProps) {
       const payload = {
         name: name.trim(),
         description: description.trim() || undefined,
-        isShared,
         prospectIds: selectedIds,
         filters: buildSavedFilters(filters),
       }
@@ -415,15 +453,6 @@ function SegmentBuilderContent({ mode, segmentId }: SegmentBuilderProps) {
                       onChange={(e) => setDescription(e.target.value)}
                     />
                   </div>
-                </div>
-                <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/20">
-                  <div>
-                    <p className="text-sm font-medium">Share with Team</p>
-                    <p className="text-xs text-muted-foreground">
-                      All team members can see this segment
-                    </p>
-                  </div>
-                  <Switch checked={isShared} onCheckedChange={setIsShared} />
                 </div>
               </CardContent>
             </Card>

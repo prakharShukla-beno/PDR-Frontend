@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import {
-  Search, Upload, Plus, X, SlidersHorizontal,
+  Search, Upload, Plus, X,
   ChevronLeft, ChevronRight, Loader2, Users, Sparkles, Layers
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -13,18 +13,17 @@ import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { api, fileApi, ApiError } from "@/lib/api"
 import { formatEnrichmentError } from "@/lib/responseUtils"
 import type { Contact, Prospect } from "@/types"
-import { FilterPanel, FilterState, EMPTY_FILTERS, buildFilterQuery, countActiveFilters } from "@/components/filters/FilterPanel"
 import { IcpImportPreviewModal } from "@/components/import/IcpImportPreviewModal"
 import { useAutoDismissMessage } from "@/hooks/useAutoDismissMessage"
 import { AutoDismissBanner } from "@/components/ui/auto-dismiss-banner"
 import { useConfirmDialog } from "@/hooks/useConfirmDialog"
 import { useAppAlert } from "@/hooks/useAppAlert"
+import { getContactAccountId, getContactAccountName } from "@/lib/contactAccountUtils"
 
 const FUNCTIONAL_DOMAINS = [
   "Corporate Strategy","Technology & Digital","Data & AI","Finance & Accounting",
@@ -58,9 +57,6 @@ export default function ContactsPage() {
   const [totalPages, setTotalPages]     = useState(1)
   const [isLoading, setIsLoading]       = useState(true)
   const [search, setSearch]             = useState("")
-  const [showFilters, setShowFilters]   = useState(false)
-  const [filters, setFilters]           = useState<FilterState>(EMPTY_FILTERS)
-  const [appliedFilters, setAppliedFilters] = useState<FilterState>(EMPTY_FILTERS)
   const [currentPage, setCurrentPage]   = useState(1)
   const [recordsPerPage, setRecordsPerPage] = useState(10)
   const [selectedIds, setSelectedIds]   = useState<string[]>([])
@@ -73,8 +69,6 @@ export default function ContactsPage() {
   const [accountSearch, setAccountSearch]   = useState("")
   const [accountOptions, setAccountOptions] = useState<Prospect[]>([])
   const [isSearchingAccounts, setIsSearchingAccounts] = useState(false)
-
-  const activeCount = countActiveFilters(appliedFilters)
 
   const emptyContact = {
     accountId: "", accountName: "", firstName: "", lastName: "",
@@ -89,16 +83,9 @@ export default function ContactsPage() {
   const fetchContacts = useCallback(async () => {
     setIsLoading(true)
     try {
-      const filterQuery = buildFilterQuery(appliedFilters, "contacts")
-      const hasFilters  = filterQuery.length > 0 || search
-
-      let url: string
-      if (hasFilters) {
-        url = `/search/contacts?search=${encodeURIComponent(search)}&page=${currentPage}&limit=${recordsPerPage}`
-        if (filterQuery) url += `&${filterQuery}`
-      } else {
-        url = `/contacts?page=${currentPage}&limit=${recordsPerPage}`
-      }
+      const url = search.trim()
+        ? `/search/contacts?search=${encodeURIComponent(search)}&page=${currentPage}&limit=${recordsPerPage}`
+        : `/contacts?page=${currentPage}&limit=${recordsPerPage}`
 
       const res = await api.get<any>(url)
       setContacts(res.data?.contacts || res.data || res.contacts || [])
@@ -109,10 +96,10 @@ export default function ContactsPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [currentPage, recordsPerPage, search, appliedFilters])
+  }, [currentPage, recordsPerPage, search])
 
   useEffect(() => { fetchContacts() }, [fetchContacts])
-  useEffect(() => { setCurrentPage(1) }, [search, appliedFilters, recordsPerPage])
+  useEffect(() => { setCurrentPage(1) }, [search, recordsPerPage])
 
   const uploadMsg = useAutoDismissMessage()
   const enrichMsg = useAutoDismissMessage()
@@ -139,27 +126,6 @@ export default function ContactsPage() {
     }, 300)
     return () => clearTimeout(timer)
   }, [accountSearch])
-
-  // ── Active filter chips ────────────────────────────────────────────────────
-  const getActiveChips = () => {
-    const chips: { label: string; onRemove: () => void }[] = []
-    const f = appliedFilters
-    const rem = (key: keyof FilterState, val: string) =>
-      setAppliedFilters(p => ({ ...p, [key]: (p[key] as string[]).filter(v => v !== val) }))
-
-    f.industryInclude.forEach(v => chips.push({ label: `Industry: ${v}`,      onRemove: () => rem("industryInclude", v) }))
-    f.industryExclude.forEach(v => chips.push({ label: `NOT Industry: ${v}`,  onRemove: () => rem("industryExclude", v) }))
-    f.countryInclude.forEach(v  => chips.push({ label: `Country: ${v}`,       onRemove: () => rem("countryInclude", v) }))
-    f.countryExclude.forEach(v  => chips.push({ label: `NOT Country: ${v}`,   onRemove: () => rem("countryExclude", v) }))
-    f.functionalDomainInclude.forEach(v => chips.push({ label: `Domain: ${v}`,     onRemove: () => rem("functionalDomainInclude", v) }))
-    f.functionalDomainExclude.forEach(v => chips.push({ label: `NOT Domain: ${v}`, onRemove: () => rem("functionalDomainExclude", v) }))
-    if (f.hasPhone   === true)  chips.push({ label: "Has Phone",    onRemove: () => setAppliedFilters(p => ({ ...p, hasPhone: null })) })
-    if (f.hasEmail   === true)  chips.push({ label: "Has Email",    onRemove: () => setAppliedFilters(p => ({ ...p, hasEmail: null })) })
-    if (f.hasLinkedIn=== true)  chips.push({ label: "Has LinkedIn", onRemove: () => setAppliedFilters(p => ({ ...p, hasLinkedIn: null })) })
-    if (f.isLinked   === true)  chips.push({ label: "Linked",       onRemove: () => setAppliedFilters(p => ({ ...p, isLinked: null })) })
-    if (f.isLinked   === false) chips.push({ label: "Unlinked",     onRemove: () => setAppliedFilters(p => ({ ...p, isLinked: null })) })
-    return chips
-  }
 
   const handleDelete = async () => {
     if (!selectedIds.length) return
@@ -319,7 +285,10 @@ export default function ContactsPage() {
 
       if (duplicates.length > 0) {
         uploadMsg.setMessage(`✅ ${summary}. ${duplicates.length} duplicates need review.`)
-        setTimeout(() => router.push("/duplicates"), 1200)
+        setTimeout(
+          () => router.push(`/duplicates?entityType=Contact&refresh=${Date.now()}`),
+          400
+        )
       } else {
         uploadMsg.setMessage(`✅ Import complete — ${summary}.`)
         setCurrentPage(1)
@@ -350,7 +319,6 @@ export default function ContactsPage() {
 
   const allPageSelected = contacts.length > 0 && contacts.every(c => selectedIds.includes(c._id))
   const hasSelection    = selectedIds.length > 0
-  const chips           = getActiveChips()
 
   const getPageNumbers = () => {
     const pages: (number | string)[] = []
@@ -365,10 +333,7 @@ export default function ContactsPage() {
     return pages
   }
 
-  const getFullName    = (c: Contact) => [c.firstName, c.lastName].filter(Boolean).join(" ") || "—"
-  const getAccountName = (c: Contact) =>
-    typeof c.accountId === "object" && c.accountId !== null
-      ? (c.accountId as Prospect).accountName : c.accountName || "—"
+  const getFullName = (c: Contact) => [c.firstName, c.lastName].filter(Boolean).join(" ") || "—"
 
   return (
     <div className="flex flex-col h-[calc(100vh-56px)]">
@@ -405,28 +370,7 @@ export default function ContactsPage() {
             <Input placeholder="Search by name, email, role..." className="pl-9 bg-white"
               value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
-          <Button variant="outline" className={`gap-2 bg-white ${activeCount > 0 ? "border-primary text-primary" : ""}`}
-            onClick={() => { setFilters(appliedFilters); setShowFilters(true) }}>
-            <SlidersHorizontal className="h-4 w-4" />Filters
-            {activeCount > 0 && <Badge className="bg-primary text-white text-xs h-4 w-4 p-0 flex items-center justify-center">{activeCount}</Badge>}
-          </Button>
-          {activeCount > 0 && (
-            <Button variant="ghost" size="sm" className="text-muted-foreground gap-1" onClick={() => setAppliedFilters(EMPTY_FILTERS)}>
-              <X className="h-3 w-3" />Clear all
-            </Button>
-          )}
         </div>
-
-        {chips.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {chips.map((chip, i) => (
-              <span key={i} className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 border border-primary/20 px-3 py-1 text-xs font-medium text-primary">
-                {chip.label}
-                <button onClick={chip.onRemove}><X className="h-3 w-3" /></button>
-              </span>
-            ))}
-          </div>
-        )}
       </div>
 
       <div className="flex-1 overflow-auto p-6 pt-4">
@@ -446,36 +390,33 @@ export default function ContactsPage() {
                 </th>
                 <th className="p-4 font-medium">Contact</th>
                 <th className="p-4 font-medium">Account</th>
-                <th className="p-4 font-medium">Domain</th>
+                <th className="p-4 font-medium">Functional Domain</th>
                 <th className="p-4 font-medium">Role</th>
                 <th className="p-4 font-medium">Email</th>
                 <th className="p-4 font-medium">Phone</th>
-                <th className="p-4 font-medium">Location</th>
-                <th className="p-4 font-medium">Source</th>
               </tr>
             </thead>
             <tbody className="divide-y">
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className="animate-pulse">
-                    {Array.from({ length: 9 }).map((_, j) => (
+                    {Array.from({ length: 7 }).map((_, j) => (
                       <td key={j} className="p-4"><div className="h-4 bg-muted rounded" /></td>
                     ))}
                   </tr>
                 ))
               ) : contacts.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="p-12 text-center">
+                  <td colSpan={7} className="p-12 text-center">
                     <div className="flex flex-col items-center gap-3 text-muted-foreground">
                       <Users className="h-10 w-10 opacity-30" />
-                      <p>{activeCount > 0 ? "No contacts match the filter criteria." : "No contacts available."}</p>
+                      <p>{search.trim() ? "No contacts match your search." : "No contacts available."}</p>
                     </div>
                   </td>
                 </tr>
               ) : (
                 contacts.map((contact) => {
                   const fullName    = getFullName(contact)
-                  const accountName = getAccountName(contact)
                   const initials    = [contact.firstName?.[0], contact.lastName?.[0]].filter(Boolean).join("").toUpperCase() || "?"
                   const domainColor = contact.functionalDomain
                     ? DOMAIN_COLORS[contact.functionalDomain] ?? "bg-gray-50 text-gray-700 border-gray-200" : ""
@@ -496,7 +437,24 @@ export default function ContactsPage() {
                           </div>
                         </Link>
                       </td>
-                      <td className="p-4 text-sm text-muted-foreground">{accountName}</td>
+                      <td className="p-4">
+                        {(() => {
+                          const accountId = getContactAccountId(contact)
+                          const accountName = getContactAccountName(contact)
+                          return accountId && accountName ? (
+                            <Link
+                              href={`/accounts/${accountId}`}
+                              className="text-teal-600 hover:text-teal-800 hover:underline font-medium text-sm transition-colors"
+                            >
+                              {accountName}
+                            </Link>
+                          ) : accountName ? (
+                            <span className="text-sm text-muted-foreground">{accountName}</span>
+                          ) : (
+                            <span className="text-gray-400 text-sm">—</span>
+                          )
+                        })()}
+                      </td>
                       <td className="p-4">
                         {contact.functionalDomain ? (
                           <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${domainColor}`}>
@@ -511,12 +469,6 @@ export default function ContactsPage() {
                         {contact.email ? <a href={`mailto:${contact.email}`} className="text-primary hover:underline">{contact.email}</a> : "—"}
                       </td>
                       <td className="p-4 text-sm text-muted-foreground">{contact.primaryPhone || contact.primaryMobNo || "—"}</td>
-                      <td className="p-4 text-sm text-muted-foreground">{[contact.city, contact.country].filter(Boolean).join(", ") || "—"}</td>
-                      <td className="p-4">
-                        <span className="inline-flex items-center rounded-md border bg-white px-2.5 py-1 text-xs font-medium capitalize">
-                          {contact.source || "manual"}
-                        </span>
-                      </td>
                     </tr>
                   )
                 })
@@ -719,15 +671,6 @@ export default function ContactsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <FilterPanel
-        isOpen={showFilters}
-        onClose={() => setShowFilters(false)}
-        filters={filters}
-        onChange={setFilters}
-        onApply={() => setAppliedFilters(filters)}
-        mode="contacts"
-      />
 
       <Dialog open={showAddModal} onOpenChange={(open) => {
         setShowAddModal(open)

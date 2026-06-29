@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { api, ApiError } from "@/lib/api"
+import { getLinkedInUrl } from "@/lib/urlUtils"
 import type { Campaign, Contact } from "@/types"
 import { useAutoDismissMessage } from "@/hooks/useAutoDismissMessage"
 import { AutoDismissBanner } from "@/components/ui/auto-dismiss-banner"
@@ -335,9 +336,16 @@ export default function CampaignDetailPage() {
                       </td>
                       <td className="p-4 text-xs text-muted-foreground">{contact.primaryPhone || contact.primaryMobNo || "—"}</td>
                       <td className="p-4">
-                        {contact.linkedIn
-                          ? <a href={contact.linkedIn} target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-700"><Linkedin className="h-4 w-4" /></a>
-                          : <span className="text-xs text-muted-foreground">—</span>}
+                        {(() => {
+                          const linkedInUrl = getLinkedInUrl(contact.linkedIn)
+                          return linkedInUrl ? (
+                            <a href={linkedInUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-700">
+                              <Linkedin className="h-4 w-4" />
+                            </a>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )
+                        })()}
                       </td>
                       <td className="p-4">
                         <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive"

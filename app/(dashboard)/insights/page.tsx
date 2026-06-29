@@ -20,6 +20,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { api } from "@/lib/api"
+import { expandSectorValuesToIndustries } from "@/lib/taxonomy"
 import { getIcpPriorityDisplay, getIcpScoreCircleClass } from "@/lib/scoreDisplay"
 import type { Prospect, DashboardSummary } from "@/types"
 
@@ -28,7 +29,7 @@ export default function InsightsPage() {
 
   const [topProspects, setTopProspects] = useState<Prospect[]>([])
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
-  const [byIndustry, setByIndustry] = useState<{ count: number; industry: string }[]>([])
+  const [byIndustry, setByIndustry] = useState<{ count: number; sector: string }[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
 
@@ -60,7 +61,7 @@ export default function InsightsPage() {
   }
 
   // Top industry by count for pattern detection
-  const topIndustry = byIndustry[0]?.industry ?? "your ICP"
+  const topIndustry = byIndustry[0]?.sector ?? "your ICP"
   const topIndustryCount = byIndustry[0]?.count ?? 0
 
   if (isLoading) {
@@ -271,14 +272,20 @@ export default function InsightsPage() {
               Industry Breakdown
             </h3>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              {byIndustry.slice(0, 8).map((item) => (
+              {byIndustry.filter((item) => item.count > 0).slice(0, 8).map((item) => (
                 <div
-                  key={item.industry}
+                  key={item.sector}
                   className="p-3 border rounded-lg hover:bg-muted/30 cursor-pointer transition-colors"
-                  onClick={() => router.push(`/accounts?industry=${encodeURIComponent(item.industry)}`)}
+                  onClick={() => {
+                    const params = new URLSearchParams()
+                    expandSectorValuesToIndustries([item.sector]).forEach((ind) =>
+                      params.append("industryInclude[]", ind)
+                    )
+                    router.push(`/accounts?${params.toString()}`)
+                  }}
                 >
                   <p className="text-2xl font-bold text-primary">{item.count}</p>
-                  <p className="text-xs text-muted-foreground truncate">{item.industry}</p>
+                  <p className="text-xs text-muted-foreground truncate">{item.sector}</p>
                   <div className="flex items-center gap-1 mt-1">
                     <ArrowUpRight className="h-3 w-3 text-muted-foreground" />
                     <span className="text-xs text-muted-foreground">View accounts</span>

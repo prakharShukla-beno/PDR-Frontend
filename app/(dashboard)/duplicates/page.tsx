@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, useCallback, useRef } from "react"
+import { useSearchParams, usePathname } from "next/navigation"
 import {
   Loader2, GitMerge, SkipForward, Copy, Trash2,
   ChevronLeft, ChevronRight, AlertTriangle,
@@ -51,6 +52,8 @@ const CONTACT_KEYS = ["email","firstName","lastName","primaryPhone","secondaryPh
 const ACCOUNT_KEYS = ["accountName","primaryIndustry","businessModel","country","hqLocationCity","noOfEmployees","annualRevenue","website"]
 
 const isContactDup = (dup: Duplicate) => {
+  if (dup.entityType === "Contact") return true
+  if (dup.entityType === "Prospect") return false
   const fields = new Set(dup.matchFields || [])
   if (fields.has("email") && !fields.has("accountName")) return true
   if (fields.has("accountName") && !fields.has("email")) return false
@@ -213,12 +216,19 @@ function DuplicateRow({
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function DuplicatesPage() {
+  const searchParams = useSearchParams()
+  const pathname = usePathname()
+  const refreshKey = searchParams.get("refresh")
+  const entityFromUrl = searchParams.get("entityType")
   const [duplicates,    setDuplicates]    = useState<Duplicate[]>([])
   const [isLoading,     setIsLoading]     = useState(true)
   const [total,         setTotal]         = useState(0)
   const [totalPages,    setTotalPages]    = useState(1)
   const [currentPage,   setCurrentPage]   = useState(1)
   const [statusFilter,  setStatusFilter]  = useState("pending")
+  const [entityFilter,  setEntityFilter]  = useState<"all" | "Prospect" | "Contact">("all")
+  const [accountCount,  setAccountCount]  = useState(0)
+  const [contactCount,  setContactCount]  = useState(0)
   const [actionId,      setActionId]      = useState<string | null>(null)
   const toastMsg = useAutoDismissMessage()
   const [selectedIds,   setSelectedIds]   = useState<string[]>([])
@@ -226,49 +236,94 @@ export default function DuplicatesPage() {
   const [fetchingAllIds,   setFetchingAllIds]   = useState(false) // ← loading state
   const [bulkLoading,   setBulkLoading]   = useState(false)
 
-  const pageRef   = useRef(currentPage)
-  const statusRef = useRef(statusFilter)
-  pageRef.current   = currentPage
-  statusRef.current = statusFilter
+  const pageRef       = useRef(currentPage)
+  const statusRef     = useRef(statusFilter)
+  const entityRef     = useRef(entityFilter)
+  pageRef.current     = currentPage
+  statusRef.current   = statusFilter
+  entityRef.current   = entityFilter
 
   const showToast = (msg: string) => toastMsg.setMessage(msg)
 
-  const fetchDuplicates = useCallback(async (page: number, status: string) => {
+  const fetchDuplicates = useCallback(async (
+    page: number,
+    status: string,
+    entity: "all" | "Prospect" | "Contact" = "all"
+  ) => {
     setIsLoading(true)
     setSelectedIds([])
     setAllPagesSelected(false)
     try {
+      const entityParam = entity !== "all" ? `&entityType=${entity}` : ""
       const res = await api.get<any>(
-        `/duplicates?status=${status}&page=${page}&limit=${LIMIT}`
+        `/duplicates?status=${status}&page=${page}&limit=${LIMIT}${entityParam}`
       )
       const raw = res.data?.data || res.data?.duplicates || res.data || []
       const valid = Array.isArray(raw)
-        ? raw.filter((d: any) => d?.prospectId1 != null)
+        ? raw.filter((d: any) => d?.prospectId1 != null || d?.newData)
         : []
+      const nextTotal = res.data?.pagination?.total || res.pagination?.total || 0
+      const nextAccounts = res.data?.counts?.accounts ?? res.counts?.accounts ?? 0
+      const nextContacts = res.data?.counts?.contacts ?? res.counts?.contacts ?? 0
       setDuplicates(valid)
-      setTotal(res.data?.pagination?.total || res.pagination?.total || 0)
+      setTotal(nextTotal)
       setTotalPages(res.data?.pagination?.totalPages || res.pagination?.totalPages || 1)
+      setAccountCount(nextAccounts)
+      setContactCount(nextContacts)
+      return { total: nextTotal, accounts: nextAccounts, contacts: nextContacts }
     } catch (err) {
       console.error("Duplicates fetch error:", err)
+      return { total: 0, accounts: 0, contacts: 0 }
     } finally {
       setIsLoading(false)
     }
   }, [])
 
   useEffect(() => {
-    fetchDuplicates(1, "pending")
+    const entity: "all" | "Prospect" | "Contact" =
+      entityFromUrl === "Contact" || entityFromUrl === "Prospect"
+        ? entityFromUrl
+        : "all"
+
+    setEntityFilter(entity)
+    setCurrentPage(1)
+
+    let cancelled = false
+
+    const load = async (attempt = 0) => {
+      if (cancelled) return
+      const result = await fetchDuplicates(1, "pending", entity)
+      const found =
+        (entity === "Prospect" && result.accounts > 0) ||
+        (entity === "Contact" && result.contacts > 0) ||
+        (entity === "all" && result.total > 0)
+
+      if (refreshKey && !found && attempt < 10) {
+        await new Promise((r) => setTimeout(r, 600))
+        if (!cancelled) await load(attempt + 1)
+      }
+    }
+
+    load()
+    return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [refreshKey, entityFromUrl, pathname])
 
   const handleStatusChange = (val: string) => {
     setStatusFilter(val)
     setCurrentPage(1)
-    fetchDuplicates(1, val)
+    fetchDuplicates(1, val, entityRef.current)
+  }
+
+  const handleEntityChange = (val: "all" | "Prospect" | "Contact") => {
+    setEntityFilter(val)
+    setCurrentPage(1)
+    fetchDuplicates(1, statusRef.current, val)
   }
 
   const handlePageChange = (newPage: number) => {
     setCurrentPage(newPage)
-    fetchDuplicates(newPage, statusRef.current)
+    fetchDuplicates(newPage, statusRef.current, entityRef.current)
   }
 
   // ── Select All on current page ────────────────────────────────────────────
@@ -325,7 +380,7 @@ export default function DuplicatesPage() {
         "keep-both": "Saved as new record", delete: "Deleted",
       }
       showToast(`✅ ${labels[action]} successfully`)
-      fetchDuplicates(pageRef.current, statusRef.current)
+      fetchDuplicates(pageRef.current, statusRef.current, entityRef.current)
     } catch (err: any) {
       showToast(`❌ Action failed — ${err?.message || "try again"}`)
     } finally {
@@ -342,7 +397,7 @@ export default function DuplicatesPage() {
       const success = result?.success ?? selectedIds.length
       const failed  = result?.failed  ?? 0
       showToast(`✅ Bulk ${action}: ${success} done${failed > 0 ? `, ${failed} failed` : ""}`)
-      fetchDuplicates(pageRef.current, statusRef.current)
+      fetchDuplicates(pageRef.current, statusRef.current, entityRef.current)
     } catch (err: any) {
       showToast(`❌ Bulk action failed — ${err?.message || "try again"}`)
     } finally {
@@ -383,7 +438,7 @@ export default function DuplicatesPage() {
           <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Admin</p>
           <h1 className="text-2xl font-bold">Duplicates</h1>
           <p className="text-sm text-muted-foreground">
-            {total} total · Page {currentPage} of {totalPages}
+            {total} shown · {accountCount} accounts · {contactCount} contacts · Page {currentPage} of {totalPages}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -399,6 +454,25 @@ export default function DuplicatesPage() {
             </SelectContent>
           </Select>
         </div>
+      </div>
+
+      {/* Entity type tabs */}
+      <div className="flex items-center gap-2">
+        {([
+          ["all", `All (${accountCount + contactCount})`],
+          ["Prospect", `Accounts (${accountCount})`],
+          ["Contact", `Contacts (${contactCount})`],
+        ] as const).map(([value, label]) => (
+          <Button
+            key={value}
+            size="sm"
+            variant={entityFilter === value ? "default" : "outline"}
+            className="h-8"
+            onClick={() => handleEntityChange(value)}
+          >
+            {label}
+          </Button>
+        ))}
       </div>
 
       {/* Info banner */}

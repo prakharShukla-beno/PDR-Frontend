@@ -19,7 +19,7 @@ import { useRouter } from "next/navigation"
 import {
   TrendingUp, Users, Sparkles, Copy,
   ArrowUpRight, Loader2, Upload,
-  BarChart3, Globe, Target
+  BarChart3, Globe, Target, Brain
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -27,7 +27,7 @@ import { Badge } from "@/components/ui/badge"
 import { api, getAccessToken } from "@/lib/apiClient"
 import { useAuth } from "@/context/AuthContext"
 import type { DashboardSummary, Prospect } from "@/types"
-import { findParentsForIndustry, expandSectorValuesToIndustries } from "@/lib/taxonomy"
+import { INDUSTRIES, expandSectorValuesToIndustries } from "@/lib/taxonomy"
 
 export default function DashboardPage() {
   const { user, isLoading: authLoading } = useAuth()
@@ -36,7 +36,7 @@ export default function DashboardPage() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [topProspects, setTopProspects] = useState<Prospect[]>([])
   const [campaigns, setCampaigns] = useState<any[]>([])
-  const [byIndustry, setByIndustry] = useState<{ count: number; industry: string }[]>([])
+  const [byIndustry, setByIndustry] = useState<{ count: number; sector: string }[]>([])
   const [byCountry, setByCountry] = useState<{ count: number; country: string }[]>([])
   const [byCLV, setByCLV] = useState<{ count: number; clvRanking: string }[]>([])
   const [icpStats, setIcpStats] = useState<{
@@ -98,20 +98,10 @@ export default function DashboardPage() {
     return "bg-gray-300"
   }
 
-  // ── Regroup leaf-level industries (e.g. "Fintech", "Banking") into their
-  // parent sector (e.g. "BFSI") so the dashboard shows all 11 sectors,
-  // matching the same parent→child taxonomy used in the Accounts filter panel.
-  const byIndustrySector = (() => {
-    const sectorCounts = new Map<string, number>()
-    byIndustry.forEach((item) => {
-      const parent = findParentsForIndustry(item.industry)
-      const sectorName = parent?.sector ?? item.industry // fallback if not mapped
-      sectorCounts.set(sectorName, (sectorCounts.get(sectorName) ?? 0) + item.count)
-    })
-    return Array.from(sectorCounts.entries())
-      .map(([sector, count]) => ({ sector, count }))
-      .sort((a, b) => b.count - a.count)
-  })()
+  const byIndustrySector = INDUSTRIES.map((sector) => ({
+    sector,
+    count: byIndustry.find((item) => item.sector === sector)?.count ?? 0,
+  })).sort((a, b) => b.count - a.count)
 
   const maxInd = Math.max(...byIndustrySector.map(i => i.count), 1)
   const maxCty = Math.max(...byCountry.map(c => c.count), 1)
@@ -144,9 +134,9 @@ export default function DashboardPage() {
           <p className="text-muted-foreground">Here&apos;s what&apos;s happening across your prospect workspace.</p>
         </div>
         <div className="flex gap-3">
-          {/* <Button variant="outline" onClick={() => router.push("/segments/icp-builder")}>
-            New Segment
-          </Button> */}
+          <Button variant="outline" className="gap-2" onClick={() => router.push("/segments/icp-builder")}>
+            <Brain className="h-4 w-4" />New ICP
+          </Button>
           <Button className="gap-2" onClick={() => router.push("/campaigns")}>
             <Sparkles className="h-4 w-4" />New Campaign
           </Button>
@@ -276,8 +266,8 @@ export default function DashboardPage() {
                   <Globe className="h-4 w-4 text-primary" />
                   <h3 className="font-semibold text-sm">By Country</h3>
                 </div>
-                <div className="space-y-2">
-                  {byCountry.slice(0, 5).map((item) => (
+                <div className="space-y-2 max-h-[330px] overflow-y-auto pr-1">
+                  {byCountry.map((item) => (
                     <div
                       key={item.country}
                       className="cursor-pointer group"

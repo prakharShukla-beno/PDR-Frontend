@@ -300,28 +300,6 @@ export default function SegmentsPage() {
                         </p>
                       </div>
 
-                      {/* Filter badges */}
-                      {seg.filters?.industries?.length > 0 && (
-                        <div className="flex items-center gap-1 flex-wrap">
-                          <Building2 className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                          {seg.filters.industries.slice(0, 3).map((ind: string) => (
-                            <Badge key={ind} variant="secondary" className="text-xs">{ind}</Badge>
-                          ))}
-                          {seg.filters.industries.length > 3 && (
-                            <Badge variant="outline" className="text-xs">
-                              +{seg.filters.industries.length - 3}
-                            </Badge>
-                          )}
-                        </div>
-                      )}
-
-                      {seg.filters?.countries?.length > 0 && (
-                        <p className="text-xs text-muted-foreground">
-                          {seg.filters.countries.slice(0, 3).join(", ")}
-                          {seg.filters.countries.length > 3 && ` +${seg.filters.countries.length - 3}`}
-                        </p>
-                      )}
-
                       {/* Last synced */}
                       <div className="flex items-center gap-1 text-xs text-muted-foreground">
                         <Clock className="h-3 w-3" />
