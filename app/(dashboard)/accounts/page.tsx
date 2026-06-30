@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback, Suspense } from "react"
+import { useEffect, useState, useCallback, Suspense, useRef } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"  // For reading URL params
@@ -19,7 +19,10 @@ import { fileApi, ApiError } from "@/lib/api"
 import { api, cancelImportJob } from "@/lib/apiClient"
 import { extractErrorMessage, readResponseBody, formatEnrichmentError } from "@/lib/responseUtils"
 import type { Prospect } from "@/types"
-import { FilterPanel, FilterState, EMPTY_FILTERS, buildFilterQuery, countActiveFilters } from "@/components/filters/FilterPanel"
+import {
+  FilterPanel, FilterState, EMPTY_FILTERS, buildFilterQuery, countActiveFilters,
+  hasUrlAccountFilters, parseAccountFiltersFromSearchParams,
+} from "@/components/filters/FilterPanel"
 import { IcpImportPreviewModal } from "@/components/import/IcpImportPreviewModal"
 import {
   ImportJobProgress,
@@ -58,8 +61,13 @@ function AccountsPageContent() {
   const [isLoading, setIsLoading]           = useState(true)
   const [search, setSearch]                 = useState("")
   const [showFilters, setShowFilters]       = useState(false)
-  const [filters, setFilters]               = useState<FilterState>(EMPTY_FILTERS)
-  const [appliedFilters, setAppliedFilters] = useState<FilterState>(EMPTY_FILTERS)
+  const [filters, setFilters]               = useState<FilterState>(() =>
+    parseAccountFiltersFromSearchParams(searchParams)
+  )
+  const [appliedFilters, setAppliedFilters] = useState<FilterState>(() =>
+    parseAccountFiltersFromSearchParams(searchParams)
+  )
+  const fetchGenRef = useRef(0)
   const [currentPage, setCurrentPage]       = useState(1)
   const [recordsPerPage, setRecordsPerPage] = useState(10)
   const [selectedIds, setSelectedIds]       = useState<string[]>([])
@@ -97,58 +105,31 @@ function AccountsPageContent() {
   })
   const [newTechStack, setNewTechStack] = useState<string[]>([])
 
-  // ── Load filters from URL params for segment links ──────────
-  // Update filters whenever URL params change
+  // Sync filter state when URL query changes (e.g. dashboard industry/country click)
   useEffect(() => {
     if (!searchParams) return
 
-    // Segment name — display in the header
     const name = searchParams.get("segmentName")
     if (name) setSegmentName(name)
 
-    // Check if a segment filter is present
-    const hasSegmentFilter =
-      searchParams.has("industryInclude[]") ||
-      searchParams.has("countryInclude[]") ||
-      searchParams.has("techFitScoreMin") ||
-      searchParams.has("employeesInclude[]") ||
-      searchParams.has("revenueInclude[]") ||
-      searchParams.has("intentSignalInclude[]") ||
-      searchParams.has("businessModelInclude[]")
-
-    if (!hasSegmentFilter) return
-
-    // Build FilterState from URL params
-    const newFilters: FilterState = {
-      ...EMPTY_FILTERS,
-      // Industries
-      industryInclude:      searchParams.getAll("industryInclude[]"),
-      // Countries
-      countryInclude:       searchParams.getAll("countryInclude[]"),
-      // Employees
-      employeesInclude:     searchParams.getAll("employeesInclude[]"),
-      // Revenue
-      revenueInclude:       searchParams.getAll("revenueInclude[]"),
-      // Intent signals
-      intentSignalInclude:  searchParams.getAll("intentSignalInclude[]"),
-      // Business models
-      businessModelInclude: searchParams.getAll("businessModelInclude[]"),
-      // Tech fit score
-      techFitScoreMin: searchParams.get("techFitScoreMin")
-        ? Number(searchParams.get("techFitScoreMin"))
-        : 0,
-      techFitScoreMax: 100,
+    if (hasUrlAccountFilters(searchParams)) {
+      const parsed = parseAccountFiltersFromSearchParams(searchParams)
+      setAppliedFilters(parsed)
+      setFilters(parsed)
+      setCurrentPage(1)
+      return
     }
 
-    // Apply filters
-    setAppliedFilters(newFilters)
-    setFilters(newFilters)
-    setCurrentPage(1)
+    // Plain /accounts — reset URL-driven filters
+    setSegmentName("")
+    setAppliedFilters(EMPTY_FILTERS)
+    setFilters(EMPTY_FILTERS)
   }, [searchParams])
 
   const activeCount = countActiveFilters(appliedFilters)
 
   const fetchProspects = useCallback(async () => {
+    const gen = ++fetchGenRef.current
     setIsLoading(true)
     try {
       const filterQuery = buildFilterQuery(appliedFilters, "accounts")
@@ -161,13 +142,15 @@ function AccountsPageContent() {
         url = `/prospects?page=${currentPage}&limit=${recordsPerPage}`
       }
       const res = await api.get<any>(url)
+      if (gen !== fetchGenRef.current) return
       setProspects(res.data?.prospects || res.data || res.prospects || [])
       setTotal(res.data?.pagination?.total || res.pagination?.total || 0)
       setTotalPages(res.data?.pagination?.totalPages || res.pagination?.totalPages || 1)
     } catch (err) {
+      if (gen !== fetchGenRef.current) return
       console.error("Prospects fetch error:", err)
     } finally {
-      setIsLoading(false)
+      if (gen === fetchGenRef.current) setIsLoading(false)
     }
   }, [currentPage, recordsPerPage, search, appliedFilters])
 
@@ -364,21 +347,22 @@ function AccountsPageContent() {
   const getActiveChips = () => {
     const chips: { label: string; onRemove: () => void }[] = []
     const f = appliedFilters
-    const rem = (key: keyof FilterState, val: string) =>
+    const rem = (key: keyof FilterState, val: string) => {
       setAppliedFilters(p => ({ ...p, [key]: (p[key] as string[]).filter(v => v !== val) }))
+      window.history.replaceState({}, "", "/accounts")
+    }
     f.industryInclude.forEach(v      => chips.push({ label: `Industry: ${v}`,      onRemove: () => rem("industryInclude", v) }))
     f.industryExclude.forEach(v      => chips.push({ label: `NOT Industry: ${v}`,  onRemove: () => rem("industryExclude", v) }))
     f.countryInclude.forEach(v       => chips.push({ label: `Country: ${v}`,       onRemove: () => rem("countryInclude", v) }))
     f.countryExclude.forEach(v       => chips.push({ label: `NOT Country: ${v}`,   onRemove: () => rem("countryExclude", v) }))
-    f.cityInclude.forEach(v          => chips.push({ label: `City: ${v}`,          onRemove: () => rem("cityInclude", v) }))
-    f.cityExclude.forEach(v          => chips.push({ label: `NOT City: ${v}`,      onRemove: () => rem("cityExclude", v) }))
+    f.icpTierInclude.forEach(v       => chips.push({ label: `Tier: ${v}`,          onRemove: () => rem("icpTierInclude", v) }))
     f.salesPriorityInclude.forEach(v => chips.push({ label: `Priority: ${v}`,      onRemove: () => rem("salesPriorityInclude", v) }))
+    f.icpScoreBandInclude.forEach(v  => chips.push({ label: `ICP Score: ${v}`,     onRemove: () => rem("icpScoreBandInclude", v) }))
+    f.techFitScoreBandInclude.forEach(v => chips.push({ label: `TechFit: ${v}`,     onRemove: () => rem("techFitScoreBandInclude", v) }))
     f.intentSignalInclude.forEach(v  => chips.push({ label: `Intent: ${v}`,        onRemove: () => rem("intentSignalInclude", v) }))
     f.clvRankingInclude.forEach(v    => chips.push({ label: `CLV: ${v}`,           onRemove: () => rem("clvRankingInclude", v) }))
     f.employeesInclude.forEach(v     => chips.push({ label: `Employees: ${v}`,     onRemove: () => rem("employeesInclude", v) }))
     f.revenueInclude.forEach(v       => chips.push({ label: `Revenue: ${v}`,       onRemove: () => rem("revenueInclude", v) }))
-    if (f.techFitScoreMin > 0 || f.techFitScoreMax < 100)
-      chips.push({ label: `Score: ${f.techFitScoreMin}-${f.techFitScoreMax}`, onRemove: () => setAppliedFilters(p => ({ ...p, techFitScoreMin: 0, techFitScoreMax: 100 })) })
     return chips
   }
 
@@ -1117,7 +1101,10 @@ function AccountsPageContent() {
         onClose={() => setShowFilters(false)}
         filters={filters}
         onChange={setFilters}
-        onApply={() => setAppliedFilters(filters)}
+        onApply={() => {
+          setAppliedFilters(filters)
+          window.history.replaceState({}, "", "/accounts")
+        }}
         mode="accounts"
       />
 
