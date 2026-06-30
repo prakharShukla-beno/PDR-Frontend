@@ -4,10 +4,21 @@ import { useState, useEffect } from "react"
 import { X, ChevronDown, ChevronUp, SlidersHorizontal, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Slider } from "@/components/ui/slider"
 import { Separator } from "@/components/ui/separator"
 import { api } from "@/lib/api"
-import { expandSectorValuesToIndustries, SECTOR_TAXONOMY } from "@/lib/taxonomy"
+import { expandSectorValuesToIndustries, SECTOR_TAXONOMY, collapseIndustryFiltersToSectors } from "@/lib/taxonomy"
+
+export const FILTER_TIER_OPTIONS = ["Tier A", "Tier B", "Tier C"] as const
+export const FILTER_PRIORITY_OPTIONS = ["P1", "P2", "P3", "P4"] as const
+export const FILTER_SCORE_BAND_OPTIONS = [">60", "30 - 59", "<30"] as const
+export const FILTER_CLV_TIER_OPTIONS = ["Tier A", "Tier B", "Tier C"] as const
+
+export const CLV_TIER_TO_DB: Record<string, string> = {
+  "Tier A": "Tier-A (Strategic)",
+  "Tier B": "Tier-B (Core)",
+  "Tier C": "Tier-C (Mass)",
+}
+
 // ─── Types ─────────────────────────────────────────────────────────────────────
 export interface FilterState {
   // Account filters
@@ -15,16 +26,17 @@ export interface FilterState {
   industryExclude:         string[]
   countryInclude:          string[]
   countryExclude:          string[]
-  cityInclude:             string[]
-  cityExclude:             string[]
   businessModelInclude:    string[]
   businessModelExclude:    string[]
   employeesInclude:        string[]
   employeesExclude:        string[]
   revenueInclude:          string[]
   revenueExclude:          string[]
+  icpTierInclude:          string[]
   salesPriorityInclude:    string[]
   salesPriorityExclude:    string[]
+  icpScoreBandInclude:     string[]
+  techFitScoreBandInclude: string[]
   clvRankingInclude:       string[]
   clvRankingExclude:       string[]
   intentSignalInclude:     string[]
@@ -37,9 +49,6 @@ export interface FilterState {
   infraRiskExclude:        string[]
   financialCapacityInclude:string[]
   financialCapacityExclude:string[]
-  // Range
-  techFitScoreMin:         number
-  techFitScoreMax:         number
   // Contact filters
   functionalDomainInclude: string[]
   functionalDomainExclude: string[]
@@ -54,19 +63,18 @@ export interface FilterState {
 export const EMPTY_FILTERS: FilterState = {
   industryInclude: [], industryExclude: [],
   countryInclude:  [], countryExclude:  [],
-  cityInclude:     [], cityExclude:     [],
   businessModelInclude:  [], businessModelExclude:  [],
   employeesInclude:      [], employeesExclude:      [],
   revenueInclude:        [], revenueExclude:        [],
+  icpTierInclude:        [],
   salesPriorityInclude:  [], salesPriorityExclude:  [],
+  icpScoreBandInclude:   [], techFitScoreBandInclude: [],
   clvRankingInclude:     [], clvRankingExclude:     [],
   intentSignalInclude:   [], intentSignalExclude:   [],
   historyTriggerInclude: [], historyTriggerExclude: [],
   techAdoptionInclude:   [], techAdoptionExclude:   [],
   infraRiskInclude:      [], infraRiskExclude:      [],
   financialCapacityInclude: [], financialCapacityExclude: [],
-  techFitScoreMin:  0,
-  techFitScoreMax:  100,
   functionalDomainInclude: [], functionalDomainExclude: [],
   contactCountryInclude:   [], contactCountryExclude:   [],
   hasEmail: null, hasPhone: null, hasLinkedIn: null, isLinked: null,
@@ -78,11 +86,12 @@ export const countActiveFilters = (f: FilterState): number => {
   const arrays = [
     f.industryInclude, f.industryExclude,
     f.countryInclude,  f.countryExclude,
-    f.cityInclude,     f.cityExclude,
     f.businessModelInclude,  f.businessModelExclude,
     f.employeesInclude,      f.employeesExclude,
     f.revenueInclude,        f.revenueExclude,
+    f.icpTierInclude,
     f.salesPriorityInclude,  f.salesPriorityExclude,
+    f.icpScoreBandInclude,    f.techFitScoreBandInclude,
     f.clvRankingInclude,     f.clvRankingExclude,
     f.intentSignalInclude,   f.intentSignalExclude,
     f.historyTriggerInclude, f.historyTriggerExclude,
@@ -93,7 +102,6 @@ export const countActiveFilters = (f: FilterState): number => {
     f.contactCountryInclude,   f.contactCountryExclude,
   ]
   arrays.forEach(arr => { count += arr.length })
-  if (f.techFitScoreMin > 0 || f.techFitScoreMax < 100) count++
   if (f.hasEmail   !== null) count++
   if (f.hasPhone   !== null) count++
   if (f.hasLinkedIn!== null) count++
@@ -114,18 +122,19 @@ export const buildFilterQuery = (f: FilterState, mode: "accounts" | "contacts" =
     add("industryExclude",          expandIndustryValues(f.industryExclude))
     add("countryInclude",           f.countryInclude)
     add("countryExclude",           f.countryExclude)
-    add("cityInclude",              f.cityInclude)
-    add("cityExclude",              f.cityExclude)
     add("businessModelInclude",     f.businessModelInclude)
     add("businessModelExclude",     f.businessModelExclude)
     add("employeesInclude",         f.employeesInclude)
     add("employeesExclude",         f.employeesExclude)
     add("revenueInclude",           f.revenueInclude)
     add("revenueExclude",           f.revenueExclude)
-    add("salesPriorityInclude",     f.salesPriorityInclude)
-    add("salesPriorityExclude",     f.salesPriorityExclude)
-    add("clvRankingInclude",        f.clvRankingInclude)
-    add("clvRankingExclude",        f.clvRankingExclude)
+    add("icpTierInclude",           f.icpTierInclude)
+    add("icpSalesPriorityInclude",  f.salesPriorityInclude)
+    add("icpSalesPriorityExclude",  f.salesPriorityExclude)
+    add("icpScoreBandInclude",      f.icpScoreBandInclude)
+    add("techFitScoreBandInclude",  f.techFitScoreBandInclude)
+    add("clvRankingInclude",        f.clvRankingInclude.map(v => CLV_TIER_TO_DB[v] || v))
+    add("clvRankingExclude",        f.clvRankingExclude.map(v => CLV_TIER_TO_DB[v] || v))
     add("intentSignalInclude",      f.intentSignalInclude)
     add("intentSignalExclude",      f.intentSignalExclude)
     add("historyTriggerInclude",    f.historyTriggerInclude)
@@ -136,8 +145,6 @@ export const buildFilterQuery = (f: FilterState, mode: "accounts" | "contacts" =
     add("infraRiskExclude",         f.infraRiskExclude)
     add("financialCapacityInclude", f.financialCapacityInclude)
     add("financialCapacityExclude", f.financialCapacityExclude)
-    if (f.techFitScoreMin > 0)   params.set("techFitScoreMin", f.techFitScoreMin.toString())
-    if (f.techFitScoreMax < 100) params.set("techFitScoreMax", f.techFitScoreMax.toString())
   } else {
     add("functionalDomainInclude",   f.functionalDomainInclude)
     add("functionalDomainExclude",   f.functionalDomainExclude)
@@ -162,6 +169,56 @@ export const buildFilterQuery = (f: FilterState, mode: "accounts" | "contacts" =
   }
 
   return params.toString()
+}
+
+const getMultiSearchParam = (
+  params: { getAll: (key: string) => string[] },
+  key: string
+) => {
+  const bracketed = params.getAll(`${key}[]`)
+  if (bracketed.length) return bracketed
+  return params.getAll(key)
+}
+
+const URL_FILTER_KEYS = [
+  "industryInclude",
+  "countryInclude",
+  "techFitScoreBandInclude",
+  "icpScoreBandInclude",
+  "employeesInclude",
+  "revenueInclude",
+  "intentSignalInclude",
+  "businessModelInclude",
+] as const
+
+export const hasUrlAccountFilters = (
+  params: { get: (key: string) => string | null; getAll: (key: string) => string[]; has?: (key: string) => boolean } | null
+) => {
+  if (!params) return false
+  return URL_FILTER_KEYS.some((key) => {
+    if (params.has?.(`${key}[]`) || params.has?.(key)) return true
+    return getMultiSearchParam(params, key).length > 0
+  })
+}
+
+export const parseAccountFiltersFromSearchParams = (
+  params: { get: (key: string) => string | null; getAll: (key: string) => string[] } | null
+): FilterState => {
+  if (!params || !hasUrlAccountFilters(params)) return { ...EMPTY_FILTERS }
+
+  const rawIndustries = getMultiSearchParam(params, "industryInclude")
+
+  return {
+    ...EMPTY_FILTERS,
+    industryInclude: collapseIndustryFiltersToSectors(rawIndustries),
+    countryInclude: getMultiSearchParam(params, "countryInclude"),
+    employeesInclude: getMultiSearchParam(params, "employeesInclude"),
+    revenueInclude: getMultiSearchParam(params, "revenueInclude"),
+    intentSignalInclude: getMultiSearchParam(params, "intentSignalInclude"),
+    businessModelInclude: getMultiSearchParam(params, "businessModelInclude"),
+    techFitScoreBandInclude: getMultiSearchParam(params, "techFitScoreBandInclude"),
+    icpScoreBandInclude: getMultiSearchParam(params, "icpScoreBandInclude"),
+  }
 }
 
 // ─── IncExcPicker Component ────────────────────────────────────────────────────
@@ -406,8 +463,10 @@ export function FilterPanel({ isOpen, onClose, filters, onChange, onApply, mode 
           businessModels:["B2B","B2C","D2C","E-Commerce","B2B2C","Marketplace"],
           employeeBands: ["1-50","51-200","201-1,000","1,001-5,000","5,000+"],
           revenueBands:  ["Seed <$1M","Early $1M-$10M","Growth $10M-$50M","Scale $50M-$100M","Mid-Market $100M-$500M","Enterprise $500M-$1B","Mega $1B+"],
-          salesPriorities:["P1 (Tier A+Active)","P2 (Tier B+Active)","P3 (Tier A+Cold)","P4 (Tier B+Cold)"],
-          clvRankings:   ["Tier-A (Strategic)","Tier-B (Core)","Tier-C (Mass)"],
+          salesPriorities:["P1","P2","P3","P4"],
+          clvRankings:   ["Tier A","Tier B","Tier C"],
+          icpTiers:      ["Tier A","Tier B","Tier C"],
+          scoreBands:    [">60","30 - 59","<30"],
           intentSignals: ["Hyper-Growth Mode","Cost Containment","Risk Mitigation","Modernization Mandate"],
           historyTriggers:["M&A Activity","Capital Event","Leadership Shakeup","Regulatory Action","Earnings Shock","Security Incident","Strategic Pivot","Job Postings"],
           techAdoptions: ["Innovator","Early Adopter","Mainstream","Laggard","Leapfrog"],
@@ -495,15 +554,6 @@ export function FilterPanel({ isOpen, onClose, filters, onChange, onApply, mode 
                     onRemove={(v, t) => removeFromList(t === "inc" ? "countryInclude" : "countryExclude", v)}
                   />
                   <IncExcPicker
-                    label="City"
-                    options={filterOptions.cities || []}
-                    included={filters.cityInclude}
-                    excluded={filters.cityExclude}
-                    onInclude={v => addToList("cityInclude", v)}
-                    onExclude={v => addToList("cityExclude", v)}
-                    onRemove={(v, t) => removeFromList(t === "inc" ? "cityInclude" : "cityExclude", v)}
-                  />
-                  <IncExcPicker
                     label="Business Model"
                     options={filterOptions.businessModels || []}
                     included={filters.businessModelInclude}
@@ -539,24 +589,68 @@ export function FilterPanel({ isOpen, onClose, filters, onChange, onApply, mode 
               <div>
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Sales Intelligence</p>
                 <div className="space-y-4">
-                  <IncExcPicker
-                    label="Sales Priority"
-                    options={filterOptions.salesPriorities || []}
-                    included={filters.salesPriorityInclude}
-                    excluded={filters.salesPriorityExclude}
-                    onInclude={v => addToList("salesPriorityInclude", v)}
-                    onExclude={v => addToList("salesPriorityExclude", v)}
-                    onRemove={(v, t) => removeFromList(t === "inc" ? "salesPriorityInclude" : "salesPriorityExclude", v)}
-                  />
-                  <IncExcPicker
-                    label="CLV Ranking"
-                    options={filterOptions.clvRankings || []}
-                    included={filters.clvRankingInclude}
-                    excluded={filters.clvRankingExclude}
-                    onInclude={v => addToList("clvRankingInclude", v)}
-                    onExclude={v => addToList("clvRankingExclude", v)}
-                    onRemove={(v, t) => removeFromList(t === "inc" ? "clvRankingInclude" : "clvRankingExclude", v)}
-                  />
+                  {mode === "accounts" && (
+                    <>
+                      <CheckboxListFilter
+                        label="Tier"
+                        options={[...FILTER_TIER_OPTIONS]}
+                        selected={filters.icpTierInclude}
+                        onChange={vals => update("icpTierInclude", vals)}
+                      />
+                      <IncExcPicker
+                        label="Sales Priority"
+                        options={[...FILTER_PRIORITY_OPTIONS]}
+                        included={filters.salesPriorityInclude}
+                        excluded={filters.salesPriorityExclude}
+                        onInclude={v => addToList("salesPriorityInclude", v)}
+                        onExclude={v => addToList("salesPriorityExclude", v)}
+                        onRemove={(v, t) => removeFromList(t === "inc" ? "salesPriorityInclude" : "salesPriorityExclude", v)}
+                      />
+                      <CheckboxListFilter
+                        label="ICP Score"
+                        options={[...FILTER_SCORE_BAND_OPTIONS]}
+                        selected={filters.icpScoreBandInclude}
+                        onChange={vals => update("icpScoreBandInclude", vals)}
+                      />
+                      <CheckboxListFilter
+                        label="TechFit Score"
+                        options={[...FILTER_SCORE_BAND_OPTIONS]}
+                        selected={filters.techFitScoreBandInclude}
+                        onChange={vals => update("techFitScoreBandInclude", vals)}
+                      />
+                      <IncExcPicker
+                        label="CLV Ranking"
+                        options={[...FILTER_CLV_TIER_OPTIONS]}
+                        included={filters.clvRankingInclude}
+                        excluded={filters.clvRankingExclude}
+                        onInclude={v => addToList("clvRankingInclude", v)}
+                        onExclude={v => addToList("clvRankingExclude", v)}
+                        onRemove={(v, t) => removeFromList(t === "inc" ? "clvRankingInclude" : "clvRankingExclude", v)}
+                      />
+                    </>
+                  )}
+                  {mode === "contacts" && (
+                    <>
+                      <IncExcPicker
+                        label="Sales Priority"
+                        options={filterOptions.salesPriorities || [...FILTER_PRIORITY_OPTIONS]}
+                        included={filters.salesPriorityInclude}
+                        excluded={filters.salesPriorityExclude}
+                        onInclude={v => addToList("salesPriorityInclude", v)}
+                        onExclude={v => addToList("salesPriorityExclude", v)}
+                        onRemove={(v, t) => removeFromList(t === "inc" ? "salesPriorityInclude" : "salesPriorityExclude", v)}
+                      />
+                      <IncExcPicker
+                        label="CLV Ranking"
+                        options={filterOptions.clvRankings || [...FILTER_CLV_TIER_OPTIONS]}
+                        included={filters.clvRankingInclude}
+                        excluded={filters.clvRankingExclude}
+                        onInclude={v => addToList("clvRankingInclude", v)}
+                        onExclude={v => addToList("clvRankingExclude", v)}
+                        onRemove={(v, t) => removeFromList(t === "inc" ? "clvRankingInclude" : "clvRankingExclude", v)}
+                      />
+                    </>
+                  )}
                   <IncExcPicker
                     label="Intent Signal"
                     options={filterOptions.intentSignals || []}
@@ -584,24 +678,6 @@ export function FilterPanel({ isOpen, onClose, filters, onChange, onApply, mode 
                     onExclude={v => addToList("financialCapacityExclude", v)}
                     onRemove={(v, t) => removeFromList(t === "inc" ? "financialCapacityInclude" : "financialCapacityExclude", v)}
                   />
-
-                  {/* TechFit Score Range */}
-                  {mode === "accounts" && (
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium">TechFit Score</span>
-                        <span className="text-xs text-muted-foreground">
-                          {filters.techFitScoreMin} — {filters.techFitScoreMax}
-                        </span>
-                      </div>
-                      <Slider
-                        min={0} max={100} step={5}
-                        value={[filters.techFitScoreMin, filters.techFitScoreMax]}
-                        onValueChange={([min, max]) => onChange({ ...filters, techFitScoreMin: min, techFitScoreMax: max })}
-                        className="w-full"
-                      />
-                    </div>
-                  )}
                 </div>
               </div>
 

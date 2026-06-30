@@ -6,16 +6,21 @@ import Link from "next/link"
 import {
   ArrowLeft, RefreshCw, Loader2,
   ChevronLeft, ChevronRight, Clock, Sparkles, CheckCircle2, X,
+  Search, SlidersHorizontal,
 } from "lucide-react"
 import { Button }   from "@/components/ui/button"
 import { Badge }    from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Input }    from "@/components/ui/input"
 import { api }      from "@/lib/api"
 import { formatEnrichmentError } from "@/lib/responseUtils"
 import { useAutoDismissMessage } from "@/hooks/useAutoDismissMessage"
 import { AutoDismissBanner } from "@/components/ui/auto-dismiss-banner"
 import { useConfirmDialog } from "@/hooks/useConfirmDialog"
 import { useAppAlert } from "@/hooks/useAppAlert"
+import {
+  FilterPanel, FilterState, EMPTY_FILTERS, buildFilterQuery, countActiveFilters,
+} from "@/components/filters/FilterPanel"
 import {
   TechFitScoreCell,
   IcpScoreCell,
@@ -38,6 +43,11 @@ export default function SegmentDetailPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [acLoading,   setAcLoading]   = useState(false)
   const LIMIT = 10
+
+  const [search, setSearch]                 = useState("")
+  const [showFilters, setShowFilters]       = useState(false)
+  const [filters, setFilters]               = useState<FilterState>(EMPTY_FILTERS)
+  const [appliedFilters, setAppliedFilters] = useState<FilterState>(EMPTY_FILTERS)
 
   const [isSyncing, setIsSyncing] = useState(false)
 
@@ -62,10 +72,18 @@ export default function SegmentDetailPage() {
     }
   }, [id])
 
+  const buildAccountsUrl = useCallback((page: number, limit: number) => {
+    const filterQuery = buildFilterQuery(appliedFilters, "accounts")
+    let url = `/segments/${id}/accounts?page=${page}&limit=${limit}`
+    if (search.trim()) url += `&search=${encodeURIComponent(search.trim())}`
+    if (filterQuery) url += `&${filterQuery}`
+    return url
+  }, [id, search, appliedFilters])
+
   const fetchAccounts = useCallback(async (page = 1) => {
     setAcLoading(true)
     try {
-      const res = await api.get<any>(`/segments/${id}/accounts?page=${page}&limit=${LIMIT}`)
+      const res = await api.get<any>(buildAccountsUrl(page, LIMIT))
       const data = res.data?.data ?? res.data
       setAccounts(data?.accounts || [])
       setTotal(data?.total || 0)
@@ -75,7 +93,7 @@ export default function SegmentDetailPage() {
     } finally {
       setAcLoading(false)
     }
-  }, [id])
+  }, [buildAccountsUrl])
 
   const syncMsg = useAutoDismissMessage()
   const enrichMsg = useAutoDismissMessage()
@@ -88,8 +106,17 @@ export default function SegmentDetailPage() {
 
   useEffect(() => {
     fetchSegment()
-    fetchAccounts(1)
-  }, [fetchSegment, fetchAccounts])
+  }, [fetchSegment])
+
+  useEffect(() => {
+    setCurrentPage(1)
+    setSelectedIds([])
+    setIsAllSelected(false)
+  }, [search, appliedFilters])
+
+  useEffect(() => {
+    fetchAccounts(currentPage)
+  }, [currentPage, fetchAccounts])
 
   // Re-fetch live scores when returning to this page (e.g. after enriching on Account detail)
   useEffect(() => {
@@ -157,7 +184,6 @@ export default function SegmentDetailPage() {
 
   const handlePageChange = (newPage: number) => {
     setCurrentPage(newPage)
-    fetchAccounts(newPage)
     setSelectedIds([])
     setIsAllSelected(false)
   }
@@ -199,7 +225,7 @@ export default function SegmentDetailPage() {
     let ids = selectedIds
     if (isAllSelected) {
       try {
-        const res = await api.get<any>(`/segments/${id}/accounts?page=1&limit=99999`)
+        const res = await api.get<any>(buildAccountsUrl(1, 99999))
         const data = res.data?.data ?? res.data
         ids = (data?.accounts || []).map((a: any) => a._id)
         if (!ids.length) ids = selectedIds
@@ -236,7 +262,7 @@ export default function SegmentDetailPage() {
     let ids = selectedIds
     if (isAllSelected) {
       try {
-        const res = await api.get<any>(`/segments/${id}/accounts?page=1&limit=99999`)
+        const res = await api.get<any>(buildAccountsUrl(1, 99999))
         const data = res.data?.data ?? res.data
         ids = (data?.accounts || []).map((a: any) => a._id)
         if (!ids.length) ids = selectedIds
@@ -263,6 +289,29 @@ export default function SegmentDetailPage() {
 
   const allPageSelected = accounts.length > 0 && accounts.every(a => selectedIds.includes(a._id))
   const hasSelection    = selectedIds.length > 0
+  const activeCount     = countActiveFilters(appliedFilters)
+
+  const getActiveChips = () => {
+    const chips: { label: string; onRemove: () => void }[] = []
+    const f = appliedFilters
+    const rem = (key: keyof FilterState, val: string) =>
+      setAppliedFilters(p => ({ ...p, [key]: (p[key] as string[]).filter(v => v !== val) }))
+    f.industryInclude.forEach(v      => chips.push({ label: `Industry: ${v}`,      onRemove: () => rem("industryInclude", v) }))
+    f.industryExclude.forEach(v      => chips.push({ label: `NOT Industry: ${v}`,  onRemove: () => rem("industryExclude", v) }))
+    f.countryInclude.forEach(v       => chips.push({ label: `Country: ${v}`,       onRemove: () => rem("countryInclude", v) }))
+    f.countryExclude.forEach(v       => chips.push({ label: `NOT Country: ${v}`,   onRemove: () => rem("countryExclude", v) }))
+    f.icpTierInclude.forEach(v       => chips.push({ label: `Tier: ${v}`,          onRemove: () => rem("icpTierInclude", v) }))
+    f.salesPriorityInclude.forEach(v => chips.push({ label: `Priority: ${v}`,      onRemove: () => rem("salesPriorityInclude", v) }))
+    f.icpScoreBandInclude.forEach(v  => chips.push({ label: `ICP Score: ${v}`,     onRemove: () => rem("icpScoreBandInclude", v) }))
+    f.techFitScoreBandInclude.forEach(v => chips.push({ label: `TechFit: ${v}`,     onRemove: () => rem("techFitScoreBandInclude", v) }))
+    f.intentSignalInclude.forEach(v  => chips.push({ label: `Intent: ${v}`,        onRemove: () => rem("intentSignalInclude", v) }))
+    f.clvRankingInclude.forEach(v    => chips.push({ label: `CLV: ${v}`,           onRemove: () => rem("clvRankingInclude", v) }))
+    f.employeesInclude.forEach(v     => chips.push({ label: `Employees: ${v}`,     onRemove: () => rem("employeesInclude", v) }))
+    f.revenueInclude.forEach(v       => chips.push({ label: `Revenue: ${v}`,       onRemove: () => rem("revenueInclude", v) }))
+    return chips
+  }
+
+  const chips = getActiveChips()
 
   const formatSyncTime = (dateStr?: string) => {
     if (!dateStr) return "Never synced"
@@ -363,9 +412,58 @@ export default function SegmentDetailPage() {
           className="mt-3 flex items-center gap-2 text-xs px-3 py-2 rounded-lg"
         />
 
-        <div className="mt-4">
-          <p className="text-2xl font-bold text-primary">{segment.matchCount ?? 0}</p>
-          <p className="text-xs text-muted-foreground uppercase tracking-wide">Total Accounts</p>
+        <div className="mt-4 flex flex-wrap items-end gap-4 justify-between">
+          <div className="flex flex-col gap-3 flex-1 min-w-[280px]">
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="relative flex-1 max-w-md min-w-[200px]">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search by name or domain..."
+                  className="pl-9 bg-white"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </div>
+              <Button
+                variant="outline"
+                className={`gap-2 bg-white ${activeCount > 0 ? "border-primary text-primary" : ""}`}
+                onClick={() => { setFilters(appliedFilters); setShowFilters(true) }}
+              >
+                <SlidersHorizontal className="h-4 w-4" />
+                Filters
+                {activeCount > 0 && (
+                  <Badge className="bg-primary text-white text-xs h-4 w-4 p-0 flex items-center justify-center">
+                    {activeCount}
+                  </Badge>
+                )}
+              </Button>
+              {activeCount > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground gap-1"
+                  onClick={() => setAppliedFilters(EMPTY_FILTERS)}
+                >
+                  <X className="h-3 w-3" />Clear all
+                </Button>
+              )}
+            </div>
+            {chips.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {chips.map((chip, i) => (
+                  <span key={i} className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 border border-primary/20 px-3 py-1 text-xs font-medium text-primary">
+                    {chip.label}
+                    <button onClick={chip.onRemove}><X className="h-3 w-3" /></button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="flex-shrink-0 text-right">
+            <p className="text-2xl font-bold text-primary">{total}</p>
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Total Accounts</p>
+          </div>
         </div>
       </div>
 
@@ -538,6 +636,15 @@ export default function SegmentDetailPage() {
 
       {ConfirmDialogHost}
       {AlertHost}
+
+      <FilterPanel
+        isOpen={showFilters}
+        onClose={() => setShowFilters(false)}
+        filters={filters}
+        onChange={setFilters}
+        onApply={() => setAppliedFilters(filters)}
+        mode="accounts"
+      />
     </div>
   )
 }

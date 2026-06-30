@@ -257,14 +257,14 @@ const getCountryViaRegion = (
 // Buyer Persona — functional domain × seniority → designations
 const BUYER_PERSONA_MAP: Record<string, Record<string, string[]>> = {
   "Corporate Strategy": {
-    "Executive (C-Suite / VP)": ["CEO", "President", "Chief Strategy Officer", "VP Corporate Development"],
+    "Executive (C-Suite / VP)": ["CEO", "President", "Chief Strategy Officer", "VP Corporate Development", "Founder", "Co-Founder"],
     "Management (Director / Manager)": ["Strategy Director", "Change Management Manager", "Chief of Staff"],
     "Senior Professional (IC)": ["Senior Strategy Analyst", "M&A Lead", "Transformation Specialist"],
     "Associate / Entry Level": ["Strategy Associate", "Junior Analyst", "PMO Coordinator"],
   },
   "Technology & Digital": {
     "Executive (C-Suite / VP)": ["CTO", "CIO", "VP of Engineering", "Chief Information Security Officer (CISO)"],
-    "Management (Director / Manager)": ["IT Director", "DevOps Manager", "Engineering Manager", "Helpdesk Manager"],
+    "Management (Director / Manager)": ["IT Director", "DevOps Manager", "Engineering Manager", "Helpdesk Manager", "Head of IT"],
     "Senior Professional (IC)": ["Enterprise Architect", "Senior Full Stack Dev", "Lead SecOps Engineer"],
     "Associate / Entry Level": ["Software Engineer I", "Cloud Support Associate", "IT Technician"],
   },

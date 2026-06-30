@@ -27,7 +27,7 @@ import { Badge } from "@/components/ui/badge"
 import { api, getAccessToken } from "@/lib/apiClient"
 import { useAuth } from "@/context/AuthContext"
 import type { DashboardSummary, Prospect } from "@/types"
-import { INDUSTRIES, expandSectorValuesToIndustries } from "@/lib/taxonomy"
+import { INDUSTRIES } from "@/lib/taxonomy"
 
 export default function DashboardPage() {
   const { user, isLoading: authLoading } = useAuth()
@@ -106,12 +106,10 @@ export default function DashboardPage() {
   const maxInd = Math.max(...byIndustrySector.map(i => i.count), 1)
   const maxCty = Math.max(...byCountry.map(c => c.count), 1)
 
-  // Click handler — expand sector into all its child industries before navigating,
-  // same as the Accounts filter panel does when a sector is selected.
+  // Click handler — pass commercial sector; FilterPanel + API expand to child industries
   const goToSectorAccounts = (sector: string) => {
-    const childIndustries = expandSectorValuesToIndustries([sector])
     const params = new URLSearchParams()
-    childIndustries.forEach((ind) => params.append("industryInclude[]", ind))
+    params.append("industryInclude[]", sector)
     router.push(`/accounts?${params.toString()}`)
   }
 

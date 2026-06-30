@@ -189,9 +189,36 @@ function normalizeTaxonomyKey(value: string) {
     .replace(/\s+/g, " ")
 }
 
+const INDUSTRY_ALIASES: Record<string, string[]> = {
+  "Social Security": ["Social Security (Financial Aspect)"],
+  "E-commerce": ["E-Commerce"],
+  "AI/ML": ["AI & ML"],
+  "Electricity/Thermal": ["Electricity, Thermal"],
+  "Hydro/Natural Gas": ["Hydro, Natural Gas"],
+}
+
 export const expandSectorValuesToIndustries = (values: string[]) =>
   uniqueStrings(
-    values.flatMap((value) =>
-      value in SECTOR_TAXONOMY ? getIndsInSector(value) : [value]
-    )
+    values.flatMap((value) => {
+      if (value in SECTOR_TAXONOMY) {
+        const mapped = getIndsInSector(value)
+        const subs = getSubsInSector(value)
+        const aliases = [...mapped, value].flatMap((v) => INDUSTRY_ALIASES[v] ?? [])
+        return [value, ...subs, ...mapped, ...aliases]
+      }
+      return [value, ...(INDUSTRY_ALIASES[value] ?? [])]
+    })
+  )
+
+/** Collapse expanded child/sub-sector labels back to commercial sectors for filter UI state */
+export const collapseIndustryFiltersToSectors = (values: string[]) =>
+  uniqueStrings(
+    values.map((value) => {
+      if (value in SECTOR_TAXONOMY) return value
+      const subParent = findParentSectorForSub(value)
+      if (subParent) return subParent
+      const indParent = findParentsForIndustry(value)
+      if (indParent?.sector) return indParent.sector
+      return value
+    })
   )
